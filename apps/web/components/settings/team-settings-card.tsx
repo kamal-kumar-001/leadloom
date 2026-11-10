@@ -10,7 +10,7 @@ export function TeamSettingsCard() {
 
   const formattedRole = role
     ? role.charAt(0).toUpperCase() + role.slice(1)
-    : 'Admin';
+    : 'Member';
 
   const initial = email ? email.charAt(0).toUpperCase() : 'U';
 

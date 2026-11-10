@@ -247,7 +247,7 @@
   - Add Key form using `FormField`, `isSubmitting` pending state, `type="password"` input with immediate state clearing on submit (secrets never exposed in toasts or logs), and notifications via `notify`.
   - Delete flow with `ConfirmDialog` alertdialog.
   - States: skeleton loading, empty state (`EmptyState` "No provider keys yet"), error banner with retry.
-  - Role gating via `useShellIdentity()`: only `owner`/`admin` see add/delete actions; other roles see read-only view.
+  - Role gating via `useShellIdentity()`: only `admin` sees add/delete actions (server-enforced admin check on POST/DELETE /vault/credentials); members see read-only view.
   - Mounted as a card in `apps/web/app/app/settings/page.tsx`.
 - Verified: `node scripts/check-design.mjs --strict`, `npx tsc --noEmit`, and `npm run build --workspace @leadloom/web` pass with 0 errors.
 - Visual inspection: dark and light screenshots at 1280px and 390px captured and verified.
@@ -262,4 +262,14 @@
   - `apps/web/app/app/validator/page.tsx`: Replaced hand-rolled active hypothesis container with `@leadloom/ui` `Card`. Preserved `Demo data` badge.
   - Connectors page untouched. Zero functionality added or modified.
 - Verified: `node scripts/check-design.mjs --strict`, `npx tsc --noEmit`, and `npm run build --workspace @leadloom/web` (18/18 routes compiled) pass cleanly with 0 violations.
+
+---
+
+### [2026-11-11T02:22:00+05:30] Team Beta | apps/web task 4 corrections pass | Non-Breaking
+- Verified compliance with Beta Task 4 corrections:
+  - Enforced `role === 'admin'` across settings provider keys and team settings card fallback (engine recognizes only `admin` and `member`, no `owner`).
+  - Confirmed server-enforced admin permission on `/vault/credentials` with plain-sentence 403 handling via `notify`.
+  - Confirmed strict no-optimistic posture: save and delete display pending states, only refetching after server response (zero phantom rows).
+  - Confirmed zero real provider calls or real keys: API keys are masked immediately (`sk-••••••••abcd`), never toasted or logged. Status badge displays "Saved", never "connected" or "verified".
+- Verified: `node scripts/check-design.mjs --strict`, `npx tsc --noEmit`, and `npm run build --workspace @leadloom/web` (18/18 routes) pass cleanly.
 
