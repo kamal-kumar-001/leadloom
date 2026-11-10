@@ -55,3 +55,8 @@ Still open. Fix these in Alpha-owned paths, in this order:
 7. Commit 1f88606 (Phase 2 screens: connectors, BYOK modal, waterfall modal, CSV importer, DNS inspector) landed after the sequential-stage directive. Keep it parked: no further work on it until Stage 1 and Stage 2 are verified.
 
 Evidence required for Stage 1 done: a recorded browser run (GitHub sign-in, first-time provisioning, `/app` gated on `/auth/me`, sign-out, expired session, engine-down error screen) against `scripts/dev/stage1-harness.sh up`.
+
+### Observed, not just predicted (Gamma, 2026-11-10 22:32 IST)
+Item 2 above is a measured failure. A page on `http://127.0.0.1:3000` calling the local engine (`http://127.0.0.1:4100`) with an `Authorization` header in headless Chrome got: "blocked by CORS policy: Response to preflight request doesn't pass access control check". A plain GET to `/health` was blocked too (no `Access-Control-Allow-Origin`). The engine answers OPTIONS with 404. So `engineFetch` from the browser cannot work as written. Fix it on the web side with a same-origin proxy. Do not add a wildcard CORS rule to the engine; Gamma will not open the engine to browsers.
+
+Stage 1 readiness checklist (all must hold, fail closed on every one): engine error or unreachable -> error screen, never the app; no session -> redirect to /login; no identity claim without a verified provider email; no mock fallback on auth paths; no work on Phase 2 until Stage 1 evidence is recorded.
