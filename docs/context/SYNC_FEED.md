@@ -192,3 +192,16 @@
 - Added --accent-hover and --on-accent tokens; primary Button uses them; removed per-page `text-white`/weave-hover overrides.
 - Added Card, StatCard, EmptyState to @leadloom/ui.
 - Beta: /app overview task is in docs/plan/DASHBOARD_BETA.md.
+
+---
+
+### [2026-11-11T00:36:00+05:30] Team Beta | apps/web /app overview + dashboard components | Non-Breaking
+- Replaced redirect in `apps/web/app/app/page.tsx` with live workspace overview dashboard powered by `engineFetch` same-origin proxy calls (`/api/engine/*`):
+  - `components/dashboard/dashboard-header.tsx`: Verified user email, workspace identity, and role badge from `GET /auth/me`.
+  - `components/dashboard/stat-cards-grid.tsx`: Real telemetry cards for connected providers (`GET /vault/credentials`), validator experiments (`GET /validator/experiments`), and outbound jobs (`GET /outbound/jobs`) using `@leadloom/ui`'s `StatCard`. Handled loading skeletons, inline error retry triggers, and honest count display (0 on empty, no invented numbers).
+  - `components/dashboard/getting-started-checklist.tsx`: Dynamic setup progress checklist for provider keys, mailboxes, and tables, checked only when verified by real engine data.
+  - `components/dashboard/empty-vault-card.tsx`: `@leadloom/ui` `EmptyState` displayed when zero provider keys are connected.
+- All styling strictly conforms to design tokens (`tokens.css`) with 0 hex/color overrides; primary buttons use `<Button variant="primary">` without color substitutions.
+- Verified: `npx tsc --noEmit` and `next build` pass cleanly across all routes.
+- Screenshot verified: 1280px and 390px in dark and light themes captured with headless Chromium and visually verified.
+
