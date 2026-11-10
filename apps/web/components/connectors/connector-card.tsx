@@ -79,7 +79,7 @@ export function ConnectorCard({
                 </h3>
                 {meta.isLocal && (
                   <Badge variant="matrix" className="text-[10px] px-1.5 py-0">
-                    $0 Self-Hosted
+                    Runs locally
                   </Badge>
                 )}
               </div>

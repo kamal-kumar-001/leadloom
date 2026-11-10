@@ -66,7 +66,7 @@ export function ArchitectureTabs() {
           Own your stack. Inspect every queue.
         </h2>
         <p className="mt-3 text-sm sm:text-base text-text-secondary">
-          No black boxes. Self-host on a single $5/mo VPS in 60 seconds with Docker Compose.
+          No black boxes. Inspect every queue and every provider call.
         </p>
       </div>
 

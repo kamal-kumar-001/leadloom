@@ -63,7 +63,7 @@ export function SavingsCalculator() {
           <div className="p-8 rounded-xl border border-signal-failed/20 bg-canvas-surface/40 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-semibold text-text-secondary">Closed SaaS (Clay / PumpGTM)</span>
+                <span className="text-sm font-semibold text-text-secondary">Credit-based platforms</span>
                 <span className="text-xs font-mono px-2 py-0.5 rounded bg-signal-failed/10 text-signal-failed border border-signal-failed/20">
                   500% Credit Markup
                 </span>
@@ -92,7 +92,7 @@ export function SavingsCalculator() {
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm font-semibold text-text-primary flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-signal-verified" />
-                  LeadLoom (Self-Hosted + BYOK)
+                  LeadLoom (your own keys)
                 </span>
                 <Badge variant="verified">100% Wholesale Cost</Badge>
               </div>

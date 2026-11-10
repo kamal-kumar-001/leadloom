@@ -20,12 +20,12 @@ export default function MarketingPage() {
 
   const faqs = [
     {
-      q: 'How does LeadLoom make money if the core software is free?',
-      a: 'The core engine is open-source and free forever for self-hosting. We monetize through managed Cloud Pro hosting, proxy network pools, and enterprise dedicated VPC support.',
+      q: 'How will LeadLoom be priced?',
+      a: 'LeadLoom is a hosted product. Pricing has not been announced yet. You always pay your data and email providers directly with your own keys.',
     },
     {
-      q: 'Is Bring-Your-Own-Key (BYOK) genuinely cheaper than buying Clay/PumpGTM credits?',
-      a: 'Yes. Incumbents charge a 400% to 1,000% markup on wholesale APIs. With LeadLoom, you connect your own Apollo, Hunter, or OpenAI keys and pay wholesale developer prices with zero markup.',
+      q: 'Why bring your own keys?',
+      a: 'You connect your own Apollo, Hunter, or OpenAI keys and pay each provider directly at their own price. Your total depends on the providers and the volume you use.',
     },
     {
       q: 'Can I really run the entire engine on a $5/month VPS?',
@@ -81,7 +81,7 @@ export default function MarketingPage() {
         <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-28 px-4 sm:px-6 max-w-6xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-12">
             <Badge variant="loom" className="mb-4">
-              🧵 Open-Core Signal Engine • Apache 2.0 / MIT Licensed
+              🧵 Signal-driven outbound • Bring your own keys
             </Badge>
 
             <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-text-primary leading-[1.1]">
@@ -92,7 +92,7 @@ export default function MarketingPage() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-text-secondary leading-relaxed max-w-2xl mx-auto">
-              The open-source alternative to Clay and PumpGTM. Plug in your own Apollo, Hunter, and OpenAI keys to run adaptive waterfalls, validate startup ideas, and sequence cold email at pure wholesale cost.
+              Plug in your own Apollo, Hunter, and OpenAI keys to run adaptive waterfalls, validate startup ideas, and sequence cold email.
             </p>
 
             {/* Magnetic CTA Group */}
@@ -180,13 +180,13 @@ export default function MarketingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Tier 1: Community Edition */}
+            {/* Tier 1: Starter */}
             <div className="p-8 rounded-xl border border-border-muted bg-canvas-surface/60 flex flex-col justify-between">
               <div>
-                <h3 className="text-xl font-bold text-text-primary">Community Edition</h3>
-                <p className="mt-1 text-xs text-text-muted">For developers, solo founders, and hackers</p>
+                <h3 className="text-xl font-bold text-text-primary">Starter</h3>
+                <p className="mt-1 text-xs text-text-muted">For solo founders and small teams</p>
                 <div className="mt-6 text-4xl font-bold font-mono text-text-primary">
-                  $0 <span className="text-sm font-normal text-text-muted">Forever</span>
+                  Pricing <span className="text-sm font-normal text-text-muted">to be announced</span>
                 </div>
                 <ul className="mt-6 space-y-3 text-xs text-text-secondary font-mono">
                   <li className="flex items-center gap-2">
@@ -202,13 +202,13 @@ export default function MarketingPage() {
                     <CheckCircle className="w-4 h-4 text-signal-verified" /> SMTP/IMAP mailbox pool rotation
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Single-command Docker Compose deploy
+                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Hosted for you, nothing to run
                   </li>
                 </ul>
               </div>
               <Link href="/workspace" className="mt-8">
                 <Button variant="outline" className="w-full">
-                  Deploy Self-Hosted ($0)
+                  Get started
                 </Button>
               </Link>
             </div>
@@ -226,7 +226,7 @@ export default function MarketingPage() {
                 </div>
                 <ul className="mt-6 space-y-3 text-xs text-text-secondary font-mono">
                   <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Everything in Community Edition
+                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Everything in Starter
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-signal-verified" /> Fully managed cloud infrastructure
@@ -306,10 +306,9 @@ export default function MarketingPage() {
         {/* Footer */}
         <footer className="border-t border-border-subtle py-8 text-center text-xs font-mono text-text-muted">
           <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <span>© 2026 LeadLoom Open-Core. Released under MIT / Apache 2.0.</span>
+            <span>© 2026 LeadLoom. All rights reserved.</span>
             <div className="flex items-center gap-6">
               <Link href="/workspace" className="hover:text-text-primary">Workspace</Link>
-              <a href="https://github.com/kamal-kumar-001/leadloom" className="hover:text-text-primary">GitHub</a>
               <a href="#architecture" className="hover:text-text-primary">Docker Monolith</a>
             </div>
           </div>

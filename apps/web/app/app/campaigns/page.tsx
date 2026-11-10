@@ -47,7 +47,7 @@ const MOCK_CAMPAIGN_STEPS: CampaignStep[] = [
     type: 'email',
     subject: 'Closing the loop on Kubernetes cost optimization',
     delayDays: 4,
-    bodySnippet: 'No worries if this isn\'t a priority right now. If your cloud bills spike this quarter, here is our open-core engine...',
+    bodySnippet: 'No worries if this isn\'t a priority right now. If your cloud bills spike this quarter, here is our data engine...',
   },
 ];
 

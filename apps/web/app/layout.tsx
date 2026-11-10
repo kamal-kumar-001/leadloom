@@ -4,7 +4,7 @@ import { Toaster } from 'sonner';
 import { ThemeProvider } from '@leadloom/ui';
 
 export const metadata: Metadata = {
-  title: 'LeadLoom — The Open-Core Signal-to-Revenue Engine',
+  title: 'LeadLoom — Signal-driven outbound with your own keys',
   description: 'Weave buying signals into qualified revenue at wholesale BYOK API cost.',
 };
 

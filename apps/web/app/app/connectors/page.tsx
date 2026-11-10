@@ -123,7 +123,7 @@ const ALL_CONNECTORS: ConnectorMeta[] = [
     id: ('ollama' as unknown as BYOKProvider),
     name: 'Ollama Local Model',
     category: 'Local AI',
-    description: '$0 self-hosted LLM inference running on your local machine with complete data privacy.',
+    description: 'LLM inference running on your own machine, so prompts stay local.',
     unitCostUSD: 0.0,
     hitRateEstimate: 0.91,
     icon: '🦙',

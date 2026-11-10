@@ -90,7 +90,7 @@ export function LoomViewDrawer() {
               <span className="text-brand-loom font-medium">{signal}</span> this week.
             </p>
             <p>
-              We built an open-core data engine that cuts out 500% SaaS markups on enrichment. Since you are expanding the platform team, thought this might save your engineers hours of manual prospecting.
+              We built a data engine that cuts out 500% SaaS markups on enrichment. Since you are expanding the platform team, thought this might save your engineers hours of manual prospecting.
             </p>
             <p>Would love your candid take if you have 3 minutes.</p>
             <p className="text-text-muted pt-2 border-t border-border-subtle">Best,<br/>Alex @ LeadLoom</p>
