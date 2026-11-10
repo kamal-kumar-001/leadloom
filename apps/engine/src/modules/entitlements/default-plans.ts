@@ -1,7 +1,7 @@
 import type { PlanDefinition } from '@leadloom/contracts';
 
 /**
- * PLACEHOLDER catalog. Prices are null on purpose: pricing is a product
+ * DEVELOPMENT FIXTURE catalog (plan names and caps are NOT approved commercial terms). Prices are null on purpose: pricing is a product
  * decision that has not been made. Edit this data (or load the same shape from
  * config) to change plans; enforcement code does not change.
  */

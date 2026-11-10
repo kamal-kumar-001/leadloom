@@ -14,3 +14,4 @@ Verification (Postgres 16.2 + pgvector throwaway fixtures, local, no lab data): 
 
 ## Later additive migrations
 `20261112_workspace_entitlements` adds two tables and touches nothing applied. Verified on fresh bootstrap and on a replica of the lab history (deploy applies only that migration; the three recorded checksums stay identical). It is NOT applied on the lab DB; a redeploy runs it via `migrate deploy` and still needs Kamal's approval.
+`20261113_audit_log` is likewise additive. On a replica of the lab history, deploy applied exactly 20261112 and 20261113 and the status reads up to date, with the three original checksums unchanged. Fresh install through bootstrap-fresh.sh gives 5 migrations.

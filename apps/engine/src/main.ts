@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { PrismaClient } from '@leadloom/database';
 import { verifySession } from './modules/auth/session';
+import type { ProvisioningService } from './modules/provisioning/provisioning.service';
 import type { EntitlementService } from './modules/entitlements/entitlements.service';
 import type { FeatureKey } from '@leadloom/contracts';
 import { verifyBridgeToken } from './modules/auth/nextauth-bridge';
@@ -36,6 +37,8 @@ export interface RuntimeServices {
  sessionKey: Buffer;
  /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
  nextAuthBridgeKey?: Buffer;
+ /** Optional: first sign-in provisioning (default off; needs the bridge key). */
+ provisioning?: Pick<ProvisioningService,'provision'>;
  userDirectory?: UserDirectory;
  unsubscribeKey?: Buffer;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
@@ -64,6 +67,22 @@ export async function createApplication(services?:RuntimeServices) {
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
   };
+  // First sign-in provisioning. Authenticated ONLY by a bridge token (verified
+  // email). The body can supply a display name and nothing else: workspace and
+  // role are always server-assigned (new workspace, admin of it alone).
+  if(services.provisioning&&services.nextAuthBridgeKey) {
+   fastify.post('/auth/provision',async(request:any,reply:any)=>{
+    let email:string;
+    try {
+     email=verifyBridgeToken(String(request.headers.authorization??'').replace(/^Bearer /,''),services.nextAuthBridgeKey!).email;
+    } catch {return reply.code(401).send({error:'Authentication required'});}
+    const name=typeof request.body?.name==='string'?request.body.name:null;
+    try {
+     const member=await services.provisioning!.provision(email,name);
+     return reply.code(member.created?201:200).send(member);
+    } catch {return reply.code(400).send({error:'Provisioning failed'});}
+   });
+  }
   /** Server-side plan gate; no-op unless entitlements are configured. Deny-by-default when enforced. */
   const allowed=async(reply:any,workspaceId:string,feature:FeatureKey)=>{
    if(!services.entitlements)return true;
@@ -195,7 +214,7 @@ export async function createApplication(services?:RuntimeServices) {
  // report per-route mount state so health checks show exactly what exists.
  // Every mounted mutation route still requires a session + write role, and
  // sessions can only be minted when the login issuer itself is mounted.
- fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false,routes:{entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted'}}));
+ fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false,routes:{provisioning:services?.provisioning&&services.nextAuthBridgeKey?'mounted:bridge-token-required':'unmounted',entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted'}}));
  fastify.get('/ready',async(_request:any,reply:any)=>reply.code(503).send({status:'not-ready',reason:'Database/auth/provider workers are not mounted'}));
  await app.init();
  return app;
@@ -224,6 +243,12 @@ if(require.main===module) {
     const bridge=process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET?Buffer.from(process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET,'base64'):undefined;
     if(!bridge||bridge.length<32)throw new Error('LEADLOOM_NEXTAUTH_BRIDGE_SECRET (base64, >=32 bytes) required when bridge enabled');
     services.nextAuthBridgeKey=bridge;
+   }
+   if(process.env.LEADLOOM_SELF_SIGNUP_ENABLED==='true') {
+    if(!services.nextAuthBridgeKey)throw new Error('LEADLOOM_SELF_SIGNUP_ENABLED requires the NextAuth bridge');
+    const {ProvisioningService}=await import('./modules/provisioning/provisioning.service.js');
+    const {PrismaProvisioningStore}=await import('./modules/provisioning/prisma-provisioning-store.js');
+    services.provisioning=new ProvisioningService(new PrismaProvisioningStore(prisma));
    }
    // Opt-in product APIs, default OFF in every environment. Each requires an
    // explicit env flag; providers still need per-workspace BYOK keys at call
