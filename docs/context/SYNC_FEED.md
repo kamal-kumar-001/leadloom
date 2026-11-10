@@ -131,5 +131,9 @@
 - Shipped CSS variable token architecture in `packages/ui/src/tokens.css` with persistent Light/Dark theme toggle; 0 hard-coded hex colors in new screens.
 - Shipped Auth.js v5 (NextAuth) with credentials + dynamic OAuth providers, protected `/app/*` and `/admin/*` middleware, and `/api/engine-token` route minting HS256 bridge JWTs matching Gamma's `nextauth-bridge.ts`.
 - Shipped complete App Shell with workspace switcher, top bar, and mock-backed pages for Tables, Connectors (BYOK key modal), Mailboxes, Campaigns, Validator, Settings (consuming `EntitlementDecision`), and dedicated Platform Admin (`/admin`).
-- Verification: `next build` passes clean (17/17 routes), visual screenshot regression verified at 390px and 1280px in light and dark modes with 0 console/page errors, all mock views explicitly labelled "Demo data".
+---
 
+### [2026-11-10T21:35:00Z] Team Alpha | apps/web | Non-Breaking
+- Enforced platform operator role gate in NextAuth edge middleware for `/admin/*` routes; non-operator users are prevented from accessing the platform administration console.
+- Updated `/api/engine-token` route to support base64 decoded `LEADLOOM_NEXTAUTH_BRIDGE_SECRET` matching Gamma's `apps/engine/src/main.ts` line 258.
+- Production build `npm run build --workspace @leadloom/web` compiles cleanly (17/17 routes generated).
