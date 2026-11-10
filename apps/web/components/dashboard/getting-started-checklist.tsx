@@ -70,7 +70,7 @@ export function GettingStartedChecklist({
               Get Started Checklist
             </h2>
             <Badge variant="subtle" className="text-[11px] font-mono">
-              {completedCount} of {trackedSteps.length} verified
+              {completedCount} of {trackedSteps.length} done
             </Badge>
           </div>
           <p className="text-xs text-text-secondary mt-1">
@@ -131,7 +131,7 @@ export function GettingStartedChecklist({
                   )}
                   {step.isComplete && (
                     <Badge variant="verified" className="text-[10px] py-0 px-1.5 font-mono">
-                      Verified
+                      Done
                     </Badge>
                   )}
                 </div>

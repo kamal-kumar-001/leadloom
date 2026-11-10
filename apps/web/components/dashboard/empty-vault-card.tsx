@@ -9,13 +9,13 @@ export function EmptyVaultCard() {
   return (
     <EmptyState
       icon={<Key className="w-8 h-8 text-brand-loom" />}
-      title="No enrichment providers connected"
-      description="Connect your Apollo, Hunter, Dropcontact, or other enrichment provider keys to resolve contacts at wholesale cost."
+      title="No provider keys saved"
+      description="Add your own enrichment provider keys in Settings. Saving a key does not verify it or connect a provider."
       action={
-        <Link href="/app/connectors">
+        <Link href="/app/settings">
           <Button variant="primary" size="sm">
             <Plus className="w-3.5 h-3.5 mr-1.5" />
-            <span>Connect First Provider</span>
+            <span>Add a Provider Key</span>
           </Button>
         </Link>
       }
