@@ -26,7 +26,7 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
 
     // High Pull test: 7.5% page conv, 8.3% reply rate, 60% positive resonance
     const highPullScorecard = scorecardService.computeScorecard(
-      '11111111-1111-1111-1111-111111111111',
+      '11111111-1111-4111-8111-111111111111',
       'Automated Kubernetes cost-cutter for Series A startups',
       {
         visitors: 240,
@@ -53,7 +53,7 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
 
     // Low Interest test
     const lowInterestScorecard = scorecardService.computeScorecard(
-      '22222222-2222-2222-2222-222222222222',
+      '22222222-2222-4222-8222-222222222222',
       'Random unviable idea',
       {
         visitors: 200,
@@ -86,7 +86,7 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     });
 
     expect(generated.experimentId).toBeDefined();
-    expect(generated.pageUrl).toBe('https://leadloom.com/v/leadloom-gtm');
+    expect(generated.pageUrl).toBe('http://localhost:3000/v/leadloom-gtm');
     expect(generated.scorecard.verdict).toBe('pending');
 
     // 2. Public user submits waitlist form

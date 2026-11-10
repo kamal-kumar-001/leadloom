@@ -14,31 +14,8 @@ export class ApolloAdapter extends BaseProviderAdapter {
     // If apiKey is provided, real outbound call would be placed here.
     // In headless/offline or when domain matches known test patterns:
     if (!apiKey) {
-      // Deterministic simulation based on input
-      const latencyMs = Math.max(12, Date.now() - startTime);
-      if (!input.domain || input.domain.includes('invalid') || input.domain.includes('fail')) {
-        return {
-          email: null,
-          confidence: 0,
-          status: 'miss',
-          latencyMs,
-          costMicrocents: this.nominalCostMicrocents,
-        };
-      }
-
-      const email = input.firstName && input.lastName
-        ? `${input.firstName.toLowerCase()}.${input.lastName.toLowerCase()}@${input.domain}`
-        : `contact@${input.domain}`;
-
-      return {
-        email,
-        confidence: 0.92,
-        status: 'hit',
-        verification: 'deliverable',
-        latencyMs,
-        costMicrocents: this.nominalCostMicrocents,
-        rawResponse: { source: 'apollo_match', domain: input.domain },
-      };
+      return { email: null, confidence: 0, status: 'error', latencyMs: 0,
+        costMicrocents: 0, errorMessage: 'Provider credential required; no enrichment was performed' };
     }
 
     // Outbound HTTP call via fetch

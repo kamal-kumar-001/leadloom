@@ -12,30 +12,8 @@ export class HunterAdapter extends BaseProviderAdapter {
     const startTime = Date.now();
 
     if (!apiKey) {
-      const latencyMs = Math.max(15, Date.now() - startTime);
-      if (!input.domain || input.domain.includes('hunter-fail')) {
-        return {
-          email: null,
-          confidence: 0,
-          status: 'miss',
-          latencyMs,
-          costMicrocents: this.nominalCostMicrocents,
-        };
-      }
-
-      const email = input.firstName && input.lastName
-        ? `${input.firstName[0].toLowerCase()}${input.lastName.toLowerCase()}@${input.domain}`
-        : `info@${input.domain}`;
-
-      return {
-        email,
-        confidence: 0.88,
-        status: 'hit',
-        verification: 'deliverable',
-        latencyMs,
-        costMicrocents: this.nominalCostMicrocents,
-        rawResponse: { source: 'hunter_finder', domain: input.domain },
-      };
+      return { email: null, confidence: 0, status: 'error', latencyMs: 0,
+        costMicrocents: 0, errorMessage: 'Provider credential required; no enrichment was performed' };
     }
 
     try {

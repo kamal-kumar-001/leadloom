@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   transpilePackages: ['@leadloom/contracts', '@leadloom/ui', '@leadloom/webgl-scenes'],
   webpack: (config) => {
     config.externals = [...(config.externals || [])];

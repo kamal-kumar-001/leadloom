@@ -12,30 +12,8 @@ export class DropcontactAdapter extends BaseProviderAdapter {
     const startTime = Date.now();
 
     if (!apiKey) {
-      const latencyMs = Math.max(25, Date.now() - startTime);
-      if (!input.domain || input.domain.includes('dc-fail')) {
-        return {
-          email: null,
-          confidence: 0,
-          status: 'miss',
-          latencyMs,
-          costMicrocents: this.nominalCostMicrocents,
-        };
-      }
-
-      const email = input.firstName && input.lastName
-        ? `${input.firstName.toLowerCase()}${input.lastName.toLowerCase()}@${input.domain}`
-        : `team@${input.domain}`;
-
-      return {
-        email,
-        confidence: 0.96,
-        status: 'hit',
-        verification: 'deliverable',
-        latencyMs,
-        costMicrocents: this.nominalCostMicrocents,
-        rawResponse: { source: 'dropcontact_enrich', domain: input.domain },
-      };
+      return { email: null, confidence: 0, status: 'error', latencyMs: 0,
+        costMicrocents: 0, errorMessage: 'Provider credential required; no enrichment was performed' };
     }
 
     try {

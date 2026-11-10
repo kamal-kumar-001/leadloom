@@ -1,18 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Badge } from '@leadloom/ui';
 import { CheckCircle2, ArrowRight, ShieldCheck, Sparkles, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function SmokeTestPage({ params }: { params: { slug: string } }) {
+export default function SmokeTestPage({ params }: { params: Promise<{ slug: string }> }) {
   const [email, setEmail] = useState('');
   const [showSurvey, setShowSurvey] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted] = useState(false);
+  const [previewNotice, setPreviewNotice] = useState(false);
   const [q1Response, setQ1Response] = useState('');
   const [q2Response, setQ2Response] = useState('4-10');
 
-  const slug = params.slug;
+  const [slug, setSlug] = useState('preview');
+  useEffect(() => { let mounted = true; params.then(value => { if (mounted) setSlug(value.slug); }); return () => { mounted = false; }; }, [params]);
 
   const handleInitialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,11 +27,9 @@ export default function SmokeTestPage({ params }: { params: { slug: string } }) 
 
   const handleFinalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setPreviewNotice(true);
+    toast.info('Preview only: your response was not saved.');
     setShowSurvey(false);
-    toast.success('You are on the priority early-access list!', {
-      description: 'The founding team will reach out with early prototype access.',
-    });
   };
 
   return (
@@ -44,7 +44,7 @@ export default function SmokeTestPage({ params }: { params: { slug: string } }) 
             Project {slug.replace(/-/g, ' ').toUpperCase()}
           </span>
         </div>
-        <Badge variant="matrix">Beta Prototype • Invitation Only</Badge>
+        <Badge variant="matrix">Demo preview • Not collecting signups</Badge>
       </header>
 
       {/* Main Smoke-Test Offer Hero */}
@@ -77,7 +77,8 @@ export default function SmokeTestPage({ params }: { params: { slug: string } }) 
           </span>
         </div>
 
-        {/* Fake-Door Waitlist Email Capture */}
+        {previewNotice && <p role="status" className="mt-6 text-sm text-brand-loom">Preview only: your response was not saved.</p>}
+        {/* Preview form; no server-side signup is claimed. */}
         {!submitted ? (
           <form onSubmit={handleInitialSubmit} className="mt-10 max-w-md mx-auto w-full flex flex-col sm:flex-row gap-3">
             <input
@@ -96,7 +97,7 @@ export default function SmokeTestPage({ params }: { params: { slug: string } }) 
           <div className="mt-10 p-6 rounded-xl border border-signal-verified/30 bg-signal-verified/10 max-w-md mx-auto animate-fade-in">
             <div className="flex items-center justify-center gap-2 text-signal-verified font-bold text-base">
               <CheckCircle2 className="w-5 h-5" />
-              <span>You&apos;re #18 on the Priority Waitlist!</span>
+              <span>Your response has been saved</span>
             </div>
             <p className="mt-2 text-xs font-mono text-text-secondary">
               We received your survey feedback. The founding team will reach out to schedule your 15-minute beta onboarding.

@@ -7,7 +7,9 @@ node_modules/
 .pnpm-store/
 .npm/
 .yarn/
-package-lock.json
+/packages/*/package-lock.json
+/apps/*/package-lock.json
+/workers/*/package-lock.json
 yarn.lock
 
 # Turborepo & Build Artifacts

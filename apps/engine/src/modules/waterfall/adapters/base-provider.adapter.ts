@@ -2,6 +2,8 @@ import { BYOKProvider, WaterfallStepStatus } from '@leadloom/contracts';
 
 export interface ProviderExecutionInput {
   domain: string;
+  /** Authenticated tenant scope. Person-level cache reuse is disabled without it. */
+  workspaceId?: string;
   firstName?: string;
   lastName?: string;
   companyName?: string;

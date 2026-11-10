@@ -4,6 +4,7 @@ import {
   WaterfallStepTrace,
   WaterfallStepStatus,
 } from '@leadloom/contracts';
+import { createHash } from 'node:crypto';
 import { BaseProviderAdapter, ProviderExecutionInput, ProviderExecutionOutput } from './adapters/base-provider.adapter';
 import { DomainCacheService } from './domain-cache.service';
 
@@ -40,6 +41,7 @@ export class DAGRunnerService {
     const adjList = new Map<string, string[]>();
 
     for (const node of nodes) {
+      if (nodeMap.has(node.id)) throw new Error(`Duplicate DAG node ID: ${node.id}`);
       nodeMap.set(node.id, node);
       inDegree.set(node.id, 0);
       adjList.set(node.id, []);
@@ -113,6 +115,12 @@ export class DAGRunnerService {
     apiKeys?: Partial<Record<BYOKProvider, string>>
   ): Promise<WaterfallCellPayload> {
     const sortedNodes = this.sortNodes(nodeConfigs);
+    // A domain identifies a company, not a person. Cache complete lookup identity
+    // inside the authenticated tenant. No tenant scope means no cache reuse.
+    const cacheScope = input.workspaceId ? createHash('sha256').update(JSON.stringify([
+      input.workspaceId, input.firstName?.trim().toLowerCase() ?? '', input.lastName?.trim().toLowerCase() ?? '',
+      input.companyName?.trim().toLowerCase() ?? '', input.title?.trim().toLowerCase() ?? '',
+    ])).digest('hex') : undefined;
     const trace: WaterfallStepTrace[] = [];
     let totalCostMicrocents = 0;
     let totalLatencyMs = 0;
@@ -152,7 +160,7 @@ export class DAGRunnerService {
       }
 
       // 1. Check FinOps 30-Day Domain Cache
-      const cached = this.domainCache.get<ProviderExecutionOutput>(node.provider, input.domain);
+      const cached = cacheScope ? this.domainCache.get<ProviderExecutionOutput>(node.provider, input.domain, cacheScope) : null;
       let output: ProviderExecutionOutput;
       let isCacheHit = false;
 
@@ -165,15 +173,24 @@ export class DAGRunnerService {
         };
       } else {
         const apiKey = apiKeys?.[node.provider];
-        output = await adapter.execute(input, apiKey);
+        try {
+          output = await adapter.execute(input, apiKey);
+        } catch {
+          // Do not expose raw provider errors which may contain credentials.
+          trace.push({ step: stepIndex, provider: node.provider, status: 'error', latency_ms: 0,
+            cost_microcents: 0, reason: 'Provider execution failed' });
+          continue;
+        }
 
         // Store successful/deliverable payload in 30-day domain cache
-        if (output.status === 'hit' && output.email) {
+        if (cacheScope && output.status === 'hit' && output.email) {
           this.domainCache.set(
             node.provider,
             input.domain,
             output,
-            output.costMicrocents
+            output.costMicrocents,
+            undefined,
+            cacheScope
           );
         }
       }
@@ -223,7 +240,7 @@ export class DAGRunnerService {
     }
 
     // If exhausted
-    const allRateLimited = trace.every(t => t.status === 'rate_limited');
+    const allRateLimited = trace.length > 0 && trace.every(t => t.status === 'rate_limited');
     if (allRateLimited) {
       return {
         value: null,

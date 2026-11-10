@@ -17,8 +17,8 @@ export function ThreadInspector() {
   const row = rowsById[inspectorRowId];
   if (!row) return null;
 
-  const companyName = String(row.cells['col-company'] || 'Target Account');
-  const domain = String(row.cells['col-domain'] || 'domain.com');
+  const companyName = String(row.cells['00000000-0000-4000-8000-000000000101'] || 'Target Account');
+  const domain = String(row.cells['00000000-0000-4000-8000-000000000102'] || 'domain.com');
 
   const mockScrapedMarkdown = `# ${companyName} (${domain})
 ## Product Overview

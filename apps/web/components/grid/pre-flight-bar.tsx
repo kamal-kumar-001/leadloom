@@ -21,15 +21,15 @@ export function PreFlightBar() {
 
   const handleRun = () => {
     runWaterfallForSelected();
-    toast.success(`Dispatched waterfall for ${selectedCount} rows`, {
-      description: `Estimated wholesale cost: $${estimatedCost} via BYOK keys.`,
+    toast.info(`Demo simulation for ${selectedCount} rows`, {
+      description: `Synthetic results only. No provider call or charge.`,
     });
   };
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4 rounded-full border border-border-muted bg-canvas-surface/90 px-6 py-3 shadow-2xl backdrop-blur-xl animate-fade-in select-none">
+    <div className="fixed bottom-3 left-3 right-3 md:left-auto md:right-6 z-40 flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-border-muted bg-canvas-surface/90 px-3 py-3 shadow-2xl backdrop-blur-xl animate-fade-in select-none">
       {/* Counters & Telemetry */}
-      <div className="flex items-center gap-4 border-r border-border-subtle pr-4 font-mono text-xs">
+      <div className="flex items-center gap-2 md:border-r border-border-subtle pr-4 font-mono text-xs">
         <span className="flex items-center gap-1.5 font-semibold text-text-primary">
           <span className="w-2 h-2 rounded-full bg-brand-loom animate-ping" />
           {selectedCount} Selected
@@ -47,7 +47,7 @@ export function PreFlightBar() {
 
         <span className="hidden md:flex items-center gap-1 text-text-muted">
           <ShieldCheck className="w-3.5 h-3.5 text-signal-verified" />
-          Early-Exit Guaranteed
+          Demo mode
         </span>
       </div>
 
@@ -55,7 +55,7 @@ export function PreFlightBar() {
       <div className="flex items-center gap-2">
         <Button size="sm" variant="primary" onClick={handleRun}>
           <Play className="w-3.5 h-3.5 fill-current" />
-          <span>Run Waterfall</span>
+          <span>Simulate Waterfall</span>
         </Button>
 
         <Button size="sm" variant="outline" onClick={() => toggleSequencer(true)}>

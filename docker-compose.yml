@@ -1,138 +1,141 @@
-version: '3.8'
-
-# LeadLoom — Single-VPS Ultra-Low-Cost Monolith Deployment
-# Target Host: 2 vCPU, 4GB RAM, 40GB NVMe SSD ($4-$6/mo on Hetzner / OVH / DigitalOcean)
-# Total RAM Allocation: ~3.4GB (Leaves 600MB + Swap for Host OS)
+# Default profile starts PostgreSQL + Redis only. Application services remain
+# behind `application` until Alpha/Beta provide runnable entrypoints/Dockerfiles.
+# See docker/README.md. This is preparation, not a production-ready deployment.
+x-common: &common
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
 
 services:
-  # 1. PostgreSQL 16 with pgvector extension (Relational + Dynamic JSONB + Embeddings)
   postgres:
+    <<: *common
     image: pgvector/pgvector:pg16
-    container_name: leadloom-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-leadloom}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadloom_secure_pass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a unique POSTGRES_PASSWORD in your local environment}
       POSTGRES_DB: ${POSTGRES_DB:-leadloom_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          memory: 512M
-    command: >
-      postgres
-      -c shared_buffers=256MB
-      -c work_mem=16MB
-      -c maintenance_work_mem=64MB
-      -c max_connections=60
-      -c random_page_cost=1.1
-      -c effective_cache_size=768MB
+    networks: [backend]
+    mem_limit: 1024m
+    cpus: 1.0
+    pids_limit: 100
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=50
+      - -c
+      - effective_cache_size=768MB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leadloom} -d ${POSTGRES_DB:-leadloom_db}"]
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
-  # 2. Redis 7 Alpine (Queues, Rate-Limit Token Bucket, 30-Day Domain Cache)
   redis:
+    <<: *common
     image: redis:7-alpine
-    container_name: leadloom-redis
-    restart: unless-stopped
-    command: redis-server --maxmemory 384mb --maxmemory-policy allkeys-lru --save "" --appendonly no
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 384M
-        reservations:
-          memory: 128M
+    # One Redis serves queues and cache: NEVER evict BullMQ keys. Cache writes
+    # must handle OOM and use bounded TTLs. AOF trades disk writes for recovery.
+    command: [redis-server, --maxmemory, 192mb, --maxmemory-policy, noeviction, --appendonly, 'yes', --appendfsync, everysec]
     volumes:
       - redis_data:/data
+    networks: [backend]
+    mem_limit: 320m
+    cpus: 0.5
+    pids_limit: 60
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [CMD, redis-cli, ping]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # 3. Core Engine & API (NestJS + BullMQ Queue Dispatcher + Vault Service)
+  # Intentionally opt-in: apps/engine currently exports libraries, not an API
+  # server. Do not supply a fake entrypoint that starts then exits successfully.
   api:
+    <<: *common
+    profiles: [application]
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
-    container_name: leadloom-api
-    restart: unless-stopped
+      dockerfile: docker/engine.Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-leadloom}:${POSTGRES_PASSWORD:-leadloom_secure_pass}@postgres:5432/${POSTGRES_DB:-leadloom_db}?schema=public
+      NODE_OPTIONS: --max-old-space-size=768
+      # Set an encoded DSN locally; do not interpolate a raw password into a URL.
+      DATABASE_URL: ${DATABASE_URL:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      LEADLOOM_MASTER_KEY: ${LEADLOOM_MASTER_KEY:-change_me_to_32_byte_hex_key_before_prod}
+      LEADLOOM_MASTER_KEY: ${LEADLOOM_MASTER_KEY:-}
+      LEADLOOM_MASTER_KEY_VERSION: ${LEADLOOM_MASTER_KEY_VERSION:-1}
       PORT: 4000
+      HOST: 0.0.0.0
+      LEADLOOM_SESSION_KEY: ${LEADLOOM_SESSION_KEY:-}
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          memory: 512M
-    ports:
-      - "4000:4000"
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [backend, egress]
+    ports: ['127.0.0.1:4000:4000']
+    mem_limit: 960m
+    cpus: 1.0
+    pids_limit: 100
 
-  # 4. Web Application (Next.js 14 Standalone Mode + Virtual Grid UI)
   web:
+    <<: *common
+    profiles: [application]
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
-    container_name: leadloom-web
-    restart: unless-stopped
+      dockerfile: docker/web.Dockerfile
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=384
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
       PORT: 3000
-    depends_on:
-      - api
-    deploy:
-      resources:
-        limits:
-          cpus: '0.75'
-          memory: 512M
-        reservations:
-          memory: 256M
-    ports:
-      - "3000:3000"
+    depends_on: [api]
+    networks: [egress]
+    ports: ['127.0.0.1:3000:3000']
+    mem_limit: 512m
+    cpus: 0.75
+    pids_limit: 100
 
-  # 5. Playwright Headless Scraping Worker (Resource-Fenced Browser Isolation)
   scraper-worker:
+    <<: *common
+    profiles: [scraper-unconfigured]
     build:
       context: .
-      dockerfile: apps/workers/Dockerfile.scraper
-    container_name: leadloom-scraper
-    restart: unless-stopped
+      dockerfile: docker/scraper.Dockerfile
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=256
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      DATABASE_URL: postgresql://${POSTGRES_USER:-leadloom}:${POSTGRES_PASSWORD:-leadloom_secure_pass}@postgres:5432/${POSTGRES_DB:-leadloom_db}
-      PLAYWRIGHT_CONCURRENCY: 2
+      DATABASE_URL: ${DATABASE_URL:-}
+      PLAYWRIGHT_CONCURRENCY: 1
     depends_on:
-      - redis
-      - postgres
-    deploy:
-      resources:
-        limits:
-          cpus: '0.75'
-          memory: 640M
-        reservations:
-          memory: 256M
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [backend, egress]
+    mem_limit: 640m
+    cpus: 0.75
+    pids_limit: 150
+    shm_size: 128m
+
+networks:
+  backend:
+    internal: true
+  egress: {}
 
 volumes:
   postgres_data:

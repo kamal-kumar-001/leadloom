@@ -4,7 +4,9 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Button, MagneticButton, Badge, SpotlightCard } from '@leadloom/ui';
 import { SmoothScrollProvider } from '../../components/marketing/smooth-scroll-provider';
-import { LivingLoomCanvas } from '../../components/marketing/3d/living-loom-canvas';
+import dynamic from 'next/dynamic';
+import { AmbientLoomFallback } from '../../components/marketing/3d/ambient-fallback';
+const LivingLoomCanvas = dynamic(() => import('../../components/marketing/3d/living-loom-canvas').then(m => m.LivingLoomCanvas), { ssr: false, loading: () => <AmbientLoomFallback /> });
 import { InteractiveHeroGrid } from '../../components/marketing/interactive-hero-grid';
 import { SavingsCalculator } from '../../components/marketing/savings-calculator';
 import { BentoGridSection } from '../../components/marketing/bento-grid';
@@ -57,13 +59,13 @@ export default function MarketingPage() {
 
             <div className="flex items-center gap-3">
               <a
-                href="https://github.com/leadloom/leadloom"
+                href="https://github.com/kamal-kumar-001/leadloom"
                 target="_blank"
                 rel="noreferrer"
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-muted text-xs font-mono text-text-muted hover:text-text-primary hover:border-brand-loom/40 transition-colors"
               >
                 <Star className="w-3.5 h-3.5 fill-current text-brand-loom" />
-                <span>3.8k Stars</span>
+                <span>Source code</span>
               </a>
               <Link href="/workspace">
                 <Button size="sm" variant="primary">
@@ -101,7 +103,7 @@ export default function MarketingPage() {
                   onMouseEnter={() => setHoveredCta('indigo')}
                 >
                   <Button size="lg" variant="primary" className="text-base px-8 py-3.5">
-                    <span>Launch Free Cloud Trial</span>
+                    <span>Open Demo Workspace</span>
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
@@ -110,11 +112,11 @@ export default function MarketingPage() {
               <MagneticButton>
                 <button
                   onMouseEnter={() => setHoveredCta('matrix')}
-                  onClick={() => navigator.clipboard.writeText('docker compose up -d leadloom')}
+                  onClick={() => navigator.clipboard.writeText('docker compose up -d')}
                   className="inline-flex items-center gap-2 rounded-md border border-border-muted bg-canvas-elevated px-6 py-3.5 text-sm font-mono text-text-secondary hover:text-brand-matrix hover:border-brand-matrix/40 transition-colors shadow-sm"
                 >
                   <Terminal className="w-4 h-4" />
-                  <span>$ docker compose up -d leadloom</span>
+                  <span>$ docker compose up -d</span>
                 </button>
               </MagneticButton>
             </div>
@@ -242,7 +244,7 @@ export default function MarketingPage() {
               </div>
               <Link href="/workspace" className="mt-8">
                 <Button variant="primary" className="w-full">
-                  Start 14-Day Free Trial
+                  Explore Demo Workspace
                 </Button>
               </Link>
             </SpotlightCard>
@@ -307,7 +309,7 @@ export default function MarketingPage() {
             <span>© 2026 LeadLoom Open-Core. Released under MIT / Apache 2.0.</span>
             <div className="flex items-center gap-6">
               <Link href="/workspace" className="hover:text-text-primary">Workspace</Link>
-              <a href="https://github.com/leadloom/leadloom" className="hover:text-text-primary">GitHub</a>
+              <a href="https://github.com/kamal-kumar-001/leadloom" className="hover:text-text-primary">GitHub</a>
               <a href="#architecture" className="hover:text-text-primary">Docker Monolith</a>
             </div>
           </div>

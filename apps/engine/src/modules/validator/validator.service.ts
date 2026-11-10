@@ -29,7 +29,7 @@ export class ValidatorService {
   private decomposer: HypothesisDecomposerService;
   private scorecard: ScorecardService;
 
-  constructor() {
+  constructor(private readonly publicOrigin = 'http://localhost:3000') {
     this.decomposer = new HypothesisDecomposerService();
     this.scorecard = new ScorecardService();
   }
@@ -41,6 +41,10 @@ export class ValidatorService {
     scorecard: ValidationScorecardResponse;
   } {
     const decomposed = this.decomposer.decompose(request);
+    const baseSlug = decomposed.slug;
+    if (request.preferredSlug && this.slugToId.has(baseSlug)) throw new Error('Requested page slug is already in use');
+    while (this.slugToId.has(decomposed.slug)) decomposed.slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
+    decomposed.smokePage.slug = decomposed.slug;
     const experimentId = crypto.randomUUID();
 
     const initialMetrics: ValidationScorecardMetrics = {
@@ -67,7 +71,7 @@ export class ValidatorService {
     this.experiments.set(experimentId, stored);
     this.slugToId.set(decomposed.slug, experimentId);
 
-    const pageUrl = `https://leadloom.com/v/${decomposed.slug}`;
+    const pageUrl = new URL(`/v/${decomposed.slug}`, this.publicOrigin).href;
     const initialScorecard = this.scorecard.computeScorecard(
       experimentId,
       request.rawHypothesis,
@@ -144,13 +148,16 @@ export class ValidatorService {
       throw new Error(`Experiment not found: ${experimentId}`);
     }
 
+    if (![outreachSent, replies, positiveReplies].every(n => Number.isInteger(n) && n >= 0) || replies > outreachSent || positiveReplies > replies) {
+      throw new Error('Invalid outreach metrics');
+    }
     exp.metrics.outreachSent = outreachSent;
     exp.metrics.replies = replies;
     exp.metrics.replyRate = outreachSent > 0 ? replies / outreachSent : 0;
     exp.metrics.positiveReplies = positiveReplies;
     exp.metrics.positiveResonanceRate = replies > 0 ? positiveReplies / replies : 0;
 
-    const pageUrl = `https://leadloom.com/v/${exp.decomposed.slug}`;
+    const pageUrl = new URL(`/v/${exp.decomposed.slug}`, this.publicOrigin).href;
     return this.scorecard.computeScorecard(
       experimentId,
       exp.hypothesis,
@@ -167,7 +174,7 @@ export class ValidatorService {
       throw new Error(`Experiment not found: ${experimentId}`);
     }
 
-    const pageUrl = `https://leadloom.com/v/${exp.decomposed.slug}`;
+    const pageUrl = new URL(`/v/${exp.decomposed.slug}`, this.publicOrigin).href;
     return this.scorecard.computeScorecard(
       experimentId,
       exp.hypothesis,

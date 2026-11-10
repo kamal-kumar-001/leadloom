@@ -1,0 +1,24 @@
+{
+  "name": "@leadloom/database",
+  "version": "0.1.0",
+  "description": "LeadLoom PostgreSQL schema, migrations, and Prisma client (Team Gamma)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@electric-sql/pglite-pgvector": "^0.0.17",
+    "@types/node": "^20.14.0",
+    "prisma": "^5.22.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

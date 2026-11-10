@@ -49,12 +49,12 @@ describe('DomainCacheService — 30-Day Domain-Level FinOps Deduplication', () =
     const configs = [{ id: 'n1', provider: 'apollo' as const, tier: 1 }];
 
     // First call: populates cache
-    const firstRun = await runner.executeRow({ domain: 'stripe.com' }, configs);
+    const firstRun = await runner.executeRow({ domain: 'stripe.com', workspaceId: 'synthetic-tenant' }, configs);
     expect(firstRun.telemetry?.cost_microcents).toBe(100);
     expect(mockApollo.callCount).toBe(1);
 
     // Second call with same domain: must resolve from cache with 0 microcents!
-    const secondRun = await runner.executeRow({ domain: 'https://www.stripe.com/' }, configs);
+    const secondRun = await runner.executeRow({ domain: 'https://www.stripe.com/', workspaceId: 'synthetic-tenant' }, configs);
     expect(secondRun.status).toBe('success');
     expect(secondRun.value).toBe('patrick@stripe.com');
     expect(secondRun.telemetry?.cost_microcents).toBe(0); // $0.00 external cost!

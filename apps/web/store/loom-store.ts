@@ -46,7 +46,7 @@ const MOCK_COMPANIES = [
 ];
 
 for (let i = 0; i < 50; i++) {
-  const id = `row-${i + 1}`;
+  const id = `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`;
   INITIAL_ROW_ORDER.push(id);
   const sample = MOCK_COMPANIES[i % MOCK_COMPANIES.length];
   
@@ -93,10 +93,10 @@ for (let i = 0; i < 50; i++) {
     tableId: MOCK_TABLE_METADATA.id,
     orderIndex: i,
     cells: {
-      'col-company': `${sample.name} ${i >= 10 ? `#${Math.floor(i / 10)}` : ''}`,
-      'col-domain': sample.domain,
-      'col-signal': sample.signal,
-      'col-waterfall': waterfallCell,
+      '00000000-0000-4000-8000-000000000101': `${sample.name} ${i >= 10 ? `#${Math.floor(i / 10)}` : ''}`,
+      '00000000-0000-4000-8000-000000000102': sample.domain,
+      '00000000-0000-4000-8000-000000000103': sample.signal,
+      '00000000-0000-4000-8000-000000000104': waterfallCell,
     },
   };
 }
@@ -105,8 +105,8 @@ export const useLoomStore = create<LoomState>((set, get) => ({
   table: MOCK_TABLE_METADATA,
   rowsById: INITIAL_ROWS_BY_ID,
   rowOrder: INITIAL_ROW_ORDER,
-  selectedRowIds: new Set(['row-1', 'row-2', 'row-3']),
-  activeCell: { rowId: 'row-1', colId: 'col-waterfall' },
+  selectedRowIds: new Set(['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000003']),
+  activeCell: { rowId: '00000000-0000-4000-8000-000000000001', colId: '00000000-0000-4000-8000-000000000104' },
   inspectorRowId: null,
   isSequencerOpen: false,
   preFlightEstimate: MOCK_PREFLIGHT_RESPONSE,
@@ -157,7 +157,7 @@ export const useLoomStore = create<LoomState>((set, get) => ({
     const { selectedRowIds } = get();
     selectedRowIds.forEach((id) => {
       // Set to running
-      get().updateCell(id, 'col-waterfall', {
+      get().updateCell(id, '00000000-0000-4000-8000-000000000104', {
         value: null,
         status: 'running',
         confidence: 0.5,
@@ -166,7 +166,7 @@ export const useLoomStore = create<LoomState>((set, get) => ({
 
       // Simulate cascade success
       setTimeout(() => {
-        get().updateCell(id, 'col-waterfall', {
+        get().updateCell(id, '00000000-0000-4000-8000-000000000104', {
           value: 'verified@loom-outreach.dev',
           status: 'success',
           confidence: 0.99,

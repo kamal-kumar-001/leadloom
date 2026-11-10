@@ -1,0 +1,397 @@
+// LeadLoom Core Schema — Epoch 20261110_init_v2 (v0.1.1-alpha)
+// Owner: Team Gamma. Registry: docs/context/PROJECT_STATE.md §3.
+// PostgreSQL 16 + pgvector (ADR-003). BYOK envelope fields per ADR-001.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ─── Tenancy & Auth ──────────────────────────────────────────────────────────
+
+model Workspace {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(255)
+  plan        String   @default("free") @db.VarChar(32)
+  isActive    Boolean  @default(true) @map("is_active")
+  preferences Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  users                 User[]
+  tables                Table[]
+  validationExperiments ValidationExperiment[]
+  byokCredentials       ByokCredential[]
+  campaigns             Campaign[]
+  mailboxes             Mailbox[]
+  suppressionList       SuppressionList[]
+
+  @@map("workspaces")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  email        String   @unique @db.VarChar(320)
+  name         String?  @db.VarChar(255)
+  passwordHash String?  @map("password_hash")
+  role         String   @default("member") @db.VarChar(16) // admin | member | read_only
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("users")
+}
+
+// ─── Reactive Data Canvas (Grid) ─────────────────────────────────────────────
+
+model Table {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  rowCount    Int      @default(0) @map("row_count")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  columns   Column[]
+  rows      Row[]
+  campaigns Campaign[]
+
+  @@unique([id, workspaceId])
+  @@index([workspaceId])
+  @@map("tables")
+}
+
+model Column {
+  id         String  @id @default(uuid()) @db.Uuid
+  tableId    String  @map("table_id") @db.Uuid
+  name       String  @db.VarChar(255)
+  type       String  @db.VarChar(32) // grid.contract ColumnTypeEnum
+  orderIndex Int     @map("order_index")
+  width      Int     @default(200)
+  isVisible  Boolean @default(true) @map("is_visible")
+  config     Json    @default("{}")
+
+  table Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  cells Cell[]
+
+  @@unique([id, tableId])
+  @@index([tableId])
+  @@map("columns")
+}
+
+model Row {
+  id         String @id @default(uuid()) @db.Uuid
+  tableId    String @map("table_id") @db.Uuid
+  orderIndex Int    @map("order_index")
+
+  table Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  cells Cell[]
+
+  @@unique([id, tableId])
+  @@index([tableId])
+  @@map("rows")
+}
+
+model Cell {
+  tableId   String   @map("table_id") @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
+  rowId     String   @map("row_id") @db.Uuid
+  columnId  String   @map("column_id") @db.Uuid
+  value     Json? // string | number | boolean | WaterfallCellPayload | null
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  row    Row    @relation(fields: [rowId, tableId], references: [id, tableId], onDelete: Cascade)
+  column Column @relation(fields: [columnId, tableId], references: [id, tableId], onDelete: Cascade)
+
+  @@unique([rowId, columnId])
+  @@map("cells")
+}
+
+// ─── Pre-Product Idea Validator (Epic 6) ─────────────────────────────────────
+
+model ValidationExperiment {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  hypothesis        String
+  verdict           String   @default("pending") @db.VarChar(32) // validation.contract ValidationVerdictEnum
+  verdictScore      Int?     @map("verdict_score")
+  actionableSummary String?  @map("actionable_summary")
+  icpSpec           Json?    @map("icp_spec")
+  sequenceSubject   String?  @map("sequence_subject")
+  sequenceBody      String?  @map("sequence_body")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  smokeTestPages SmokeTestPage[]
+
+  @@index([workspaceId])
+  @@map("validation_experiments")
+}
+
+model SmokeTestPage {
+  id              String   @id @default(uuid()) @db.Uuid
+  experimentId    String   @map("experiment_id") @db.Uuid
+  slug            String   @unique @db.VarChar(128)
+  title           String   @db.VarChar(255)
+  headline        String
+  subheadline     String
+  heroCtaText     String   @default("Request Early Access") @map("hero_cta_text") @db.VarChar(255)
+  surveyQuestions Json     @default("[]") @map("survey_questions")
+  customDomain    String?  @map("custom_domain") @db.VarChar(255)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  experiment    ValidationExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  waitlistLeads WaitlistLead[]
+
+  @@map("smoke_test_pages")
+}
+
+model WaitlistLead {
+  id              String   @id @default(uuid()) @db.Uuid
+  pageId          String   @map("page_id") @db.Uuid
+  email           String   @db.VarChar(320)
+  name            String?  @db.VarChar(255)
+  company         String?  @db.VarChar(255)
+  surveyResponses Json     @default("{}") @map("survey_responses")
+  referrer        String?  @db.VarChar(512)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  page SmokeTestPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId])
+  @@map("waitlist_leads")
+}
+
+// ─── BYOK Vault (ADR-001, Epic 8) ────────────────────────────────────────────
+// Envelope encryption: data encrypted with a random DEK, DEK wrapped by the
+// master KEK. Plaintext provider keys are NEVER stored.
+
+model ByokCredential {
+  maskedKey              String    @map("masked_key")
+  id                     String    @id @default(uuid()) @db.Uuid
+  workspaceId            String    @map("workspace_id") @db.Uuid
+  provider               String    @db.VarChar(32) // waterfall.contract BYOKProviderEnum
+  label                  String?   @db.VarChar(255)
+  encryptedKeyCiphertext Bytes     @map("encrypted_key_ciphertext") // AES-256-GCM output, base64/bytea
+  iv                     Bytes // 12-byte IV
+  authTag                Bytes     @map("auth_tag") // 16-byte GCM auth tag
+  wrappedDek             Bytes     @map("wrapped_dek")
+  dekIv                  Bytes     @map("dek_iv")
+  dekAuthTag             Bytes     @map("dek_auth_tag")
+  keyVersion             Int       @default(1) @map("key_version")
+  algorithm              String    @default("aes-256-gcm") @db.VarChar(32)
+  isValid                Boolean   @default(false) @map("is_valid")
+  quotaRemaining         Int?      @map("quota_remaining")
+  lastVerifiedAt         DateTime? @map("last_verified_at") @db.Timestamptz
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, provider])
+  @@map("byok_credentials")
+}
+
+// ─── FinOps Enrichment Cache (ADR-003 §2) ────────────────────────────────────
+// hash(provider + ":" + normalized_domain), 30-day TTL, cross-workspace reuse.
+
+model EnrichmentCache {
+  id        String                       @id @default(uuid()) @db.Uuid
+  cacheKey  String                       @unique @map("cache_key") @db.VarChar(255)
+  domain    String                       @db.VarChar(255)
+  provider  String                       @db.VarChar(32)
+  payload   Json
+  embedding Unsupported("vector(1536)")? // ICP clustering / account dedupe (ADR-003)
+  hitCount  Int                          @default(0) @map("hit_count")
+  expiresAt DateTime                     @map("expires_at") @db.Timestamptz
+  createdAt DateTime                     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([domain])
+  @@index([expiresAt])
+  @@map("enrichment_cache")
+}
+
+// ─── Outbound Sequencer & Deliverability (Epic 5) ────────────────────────────
+
+model Campaign {
+  nextDispatchAt   DateTime?            @map("next_dispatch_at") @db.Timestamptz
+  jobs             OutboundJob[]
+  dailyUsage       CampaignDailyUsage[]
+  id               String               @id @default(uuid()) @db.Uuid
+  workspaceId      String               @map("workspace_id") @db.Uuid
+  tableId          String?              @map("table_id") @db.Uuid
+  name             String               @db.VarChar(255)
+  status           String               @default("draft") @db.VarChar(32) // outbound.contract CampaignStatusEnum
+  steps            Json                 @default("[]") // CampaignStep[]
+  dailyLimitTotal  Int                  @default(50) @map("daily_limit_total")
+  scheduleTimezone String               @default("UTC") @map("schedule_timezone") @db.VarChar(64)
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  table       Table?            @relation(fields: [tableId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  events      OutreachEvent[]
+  mailboxPool CampaignMailbox[]
+
+  @@unique([id, workspaceId])
+  @@index([workspaceId])
+  @@map("campaigns")
+}
+
+model Mailbox {
+  nextDispatchAt        DateTime?           @map("next_dispatch_at") @db.Timestamptz
+  lastSentAt            DateTime?           @map("last_sent_at") @db.Timestamptz
+  dailyUsage            MailboxDailyUsage[]
+  id                    String              @id @default(uuid()) @db.Uuid
+  workspaceId           String              @map("workspace_id") @db.Uuid
+  email                 String              @db.VarChar(320)
+  smtpHost              String              @map("smtp_host") @db.VarChar(255)
+  smtpPort              Int                 @default(587) @map("smtp_port")
+  imapHost              String?             @map("imap_host") @db.VarChar(255)
+  imapPort              Int?                @default(993) @map("imap_port")
+  // OAuth2 tokens use the same ADR-001 envelope pattern as BYOK keys
+  encryptedAccessToken  Bytes?              @map("encrypted_access_token")
+  accessTokenIv         Bytes?              @map("access_token_iv")
+  accessTokenAuthTag    Bytes?              @map("access_token_auth_tag")
+  encryptedRefreshToken Bytes?              @map("encrypted_refresh_token")
+  refreshTokenIv        Bytes?              @map("refresh_token_iv")
+  refreshTokenAuthTag   Bytes?              @map("refresh_token_auth_tag")
+  wrappedAccessDek      Bytes?              @map("wrapped_access_dek")
+  accessDekIv           Bytes?              @map("access_dek_iv")
+  accessDekAuthTag      Bytes?              @map("access_dek_auth_tag")
+  wrappedRefreshDek     Bytes?              @map("wrapped_refresh_dek")
+  refreshDekIv          Bytes?              @map("refresh_dek_iv")
+  refreshDekAuthTag     Bytes?              @map("refresh_dek_auth_tag")
+  keyVersion            Int                 @default(1) @map("key_version")
+  tokenExpiresAt        DateTime?           @map("token_expires_at") @db.Timestamptz
+  // Deliverability health (outbound.contract MailboxHealthStatusSchema)
+  spfStatus             String              @default("unknown") @map("spf_status") @db.VarChar(16)
+  dkimStatus            String              @default("unknown") @map("dkim_status") @db.VarChar(16)
+  dmarcStatus           String              @default("unknown") @map("dmarc_status") @db.VarChar(16)
+  healthScore           Int                 @default(0) @map("health_score")
+  dailySendLimit        Int                 @default(50) @map("daily_send_limit")
+  sentToday             Int                 @default(0) @map("sent_today")
+  isPaused              Boolean             @default(false) @map("is_paused")
+  lastHealthCheckAt     DateTime?           @map("last_health_check_at") @db.Timestamptz
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  events    OutreachEvent[]
+
+  campaigns CampaignMailbox[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, email])
+  @@map("mailboxes")
+}
+
+// Join table required to persist CreateCampaignRequest.mailboxPoolIds.
+// Composite tenant FKs reject pools that mix workspaces.
+model CampaignMailbox {
+  campaignId  String   @map("campaign_id") @db.Uuid
+  mailboxId   String   @map("mailbox_id") @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  campaign    Campaign @relation(fields: [campaignId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  mailbox     Mailbox  @relation(fields: [mailboxId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@id([campaignId, mailboxId])
+  @@map("campaign_mailboxes")
+}
+
+model OutreachEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  campaignId     String?  @map("campaign_id") @db.Uuid
+  mailboxId      String?  @map("mailbox_id") @db.Uuid
+  type           String   @db.VarChar(32) // outbound.contract OutreachEventTypeEnum
+  leadEmail      String?  @map("lead_email") @db.VarChar(320)
+  classification String?  @db.VarChar(32) // ReplyClassificationEnum
+  confidence     Float?
+  messageId      String?  @map("message_id") @db.VarChar(512)
+  subject        String?
+  bodyText       String?  @map("body_text")
+  eventAt        DateTime @default(now()) @map("event_at") @db.Timestamptz
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  mailbox  Mailbox?  @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, eventAt])
+  @@index([mailboxId, eventAt])
+  @@map("outreach_events")
+}
+
+// ─── Compliance ──────────────────────────────────────────────────────────────
+// Opt-outs stored as SHA-256 hashes only; plaintext emails never persist.
+
+model SuppressionList {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  emailHash   String   @map("email_hash") @db.VarChar(64) // lowercase-SHA-256 hex
+  reason      String?  @db.VarChar(255)
+  source      String?  @db.VarChar(64)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, emailHash])
+  @@map("suppression_list")
+}
+
+// Durable dispatch reservation state. Queue payloads contain only job IDs.
+model OutboundJob {
+  id                String    @id @default(uuid()) @db.Uuid
+  workspaceId       String    @map("workspace_id") @db.Uuid
+  campaignId        String    @map("campaign_id") @db.Uuid
+  mailboxId         String?   @map("mailbox_id") @db.Uuid
+  recipientEmail    String    @map("recipient_email") @db.VarChar(320)
+  recipientHash     String    @map("recipient_hash") @db.VarChar(64)
+  idempotencyKey    String    @map("idempotency_key") @db.VarChar(255)
+  stepNumber        Int       @map("step_number")
+  status            String    @default("pending") @db.VarChar(32)
+  scheduledAt       DateTime  @map("scheduled_at") @db.Timestamptz
+  reservedAt        DateTime? @map("reserved_at") @db.Timestamptz
+  providerMessageId String?   @map("provider_message_id")
+  attempts          Int       @default(0)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  campaign          Campaign  @relation(fields: [campaignId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, campaignId, status, scheduledAt])
+  @@map("outbound_jobs")
+}
+
+model CampaignDailyUsage {
+  campaignId    String   @map("campaign_id") @db.Uuid
+  workspaceId   String   @map("workspace_id") @db.Uuid
+  day           String   @db.VarChar(10)
+  reservedCount Int      @default(0) @map("reserved_count")
+  campaign      Campaign @relation(fields: [campaignId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@id([campaignId, day])
+  @@map("campaign_daily_usage")
+}
+
+model MailboxDailyUsage {
+  mailboxId     String  @map("mailbox_id") @db.Uuid
+  workspaceId   String  @map("workspace_id") @db.Uuid
+  day           String  @db.VarChar(10)
+  reservedCount Int     @default(0) @map("reserved_count")
+  mailbox       Mailbox @relation(fields: [mailboxId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@id([mailboxId, day])
+  @@map("mailbox_daily_usage")
+}

@@ -16,11 +16,11 @@ export function LoomViewDrawer() {
   if (!isSequencerOpen) return null;
 
   const currentRow = activeCell ? rowsById[activeCell.rowId] : null;
-  const company = currentRow ? String(currentRow.cells['col-company'] || 'Acme Inc') : 'Target Account';
-  const domain = currentRow ? String(currentRow.cells['col-domain'] || 'acme.com') : 'acme.com';
-  const signal = currentRow ? String(currentRow.cells['col-signal'] || 'Hiring Engineers') : 'Signal Trigger';
+  const company = currentRow ? String(currentRow.cells['00000000-0000-4000-8000-000000000101'] || 'Acme Inc') : 'Target Account';
+  const domain = currentRow ? String(currentRow.cells['00000000-0000-4000-8000-000000000102'] || 'acme.com') : 'acme.com';
+  const signal = currentRow ? String(currentRow.cells['00000000-0000-4000-8000-000000000103'] || 'Hiring Engineers') : 'Signal Trigger';
   
-  const waterfallCell = currentRow?.cells['col-waterfall'] as any;
+  const waterfallCell = currentRow?.cells['00000000-0000-4000-8000-000000000104'] as any;
   const targetEmail = waterfallCell?.value || 'prospect@target.com';
 
   const handleDispatch = () => {

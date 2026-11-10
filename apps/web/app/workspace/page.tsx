@@ -29,7 +29,7 @@ export default function WorkspacePage() {
   return (
     <div className="flex flex-col h-screen bg-canvas overflow-hidden font-sans">
       {/* Top Application Bar */}
-      <header className="h-14 border-b border-border-subtle bg-canvas-surface/90 px-4 flex items-center justify-between shrink-0 select-none">
+      <header className="min-h-14 gap-3 flex-wrap py-3 border-b border-border-subtle bg-canvas-surface/90 px-4 flex items-center justify-between shrink-0 select-none">
         <div className="flex items-center gap-3">
           <Link href="/" className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-canvas-elevated transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -39,14 +39,14 @@ export default function WorkspacePage() {
               🧵
             </span>
             <span className="font-bold text-sm text-text-primary tracking-tight">LeadLoom</span>
-            <span className="text-text-muted text-xs">/</span>
-            <span className="text-xs font-medium text-text-secondary">{table.name}</span>
+            <span className="hidden md:inline text-text-muted text-xs">/</span>
+            <span className="hidden md:inline text-xs font-medium text-text-secondary">{table.name}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           <Badge variant="matrix" className="hidden sm:inline-flex">
-            <Key className="w-3 h-3 mr-1" /> BYOK: 4 Active Keys
+            <Key className="w-3 h-3 mr-1" /> Demo data • No keys connected
           </Badge>
 
           <Button
@@ -66,16 +66,17 @@ export default function WorkspacePage() {
             className="text-xs"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Run All Active</span>
+            <span>Simulate Selected</span>
           </Button>
         </div>
       </header>
 
+      <div className="sm:hidden px-4 py-1 text-[10px] font-mono text-text-muted">Demo data, no keys connected. Swipe toolbar and table sideways for more.</div>
       {/* Grid Filter / Action Toolbar */}
-      <div className="h-11 border-b border-border-subtle bg-canvas-elevated/30 px-4 flex items-center justify-between text-xs font-mono shrink-0 select-none">
-        <div className="flex items-center gap-2 text-text-muted">
+      <div className="min-h-11 py-2 gap-2 overflow-x-auto whitespace-nowrap min-w-0 border-b border-border-subtle bg-canvas-elevated/30 px-4 flex items-center justify-between text-xs font-mono shrink-0 select-none">
+        <div className="flex items-center gap-2 text-text-muted shrink-0">
           <button className="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-canvas-elevated text-text-secondary transition-colors">
-            <Filter className="w-3.5 h-3.5" /> Filter ({table.rowCount} Rows)
+            <Filter className="w-3.5 h-3.5" /> Filter (50 demo rows)
           </button>
           <button className="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-canvas-elevated text-text-secondary transition-colors">
             <ArrowUpDown className="w-3.5 h-3.5" /> Sort
@@ -85,7 +86,7 @@ export default function WorkspacePage() {
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button className="flex items-center gap-1 px-2.5 py-1 rounded bg-canvas-elevated border border-border-subtle text-brand-loom hover:bg-canvas-subtle transition-colors">
             <Plus className="w-3.5 h-3.5" /> Add Intent Signal
           </button>

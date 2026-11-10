@@ -31,6 +31,8 @@ export function LoomVirtualGrid() {
   // Keyboard navigation listener (Arrow keys move focus, Space opens inspector)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('input,textarea,select,button,[contenteditable="true"]')) return;
       if (!activeCell) return;
       const currentIndex = rowOrder.indexOf(activeCell.rowId);
       if (currentIndex === -1) return;
@@ -54,14 +56,16 @@ export function LoomVirtualGrid() {
   }, [activeCell, rowOrder, setActiveCell, setInspectorRowId]);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-canvas overflow-hidden">
+    <div className="flex-1 min-w-0 flex flex-col h-full bg-canvas overflow-hidden">
       {/* Table Virtual Container */}
       <div
         ref={parentRef}
+        aria-label="Lead table, scroll horizontally to see all columns" tabIndex={0}
         className="flex-1 overflow-auto border border-border-subtle bg-canvas-surface/80 rounded-lg shadow-inner relative"
       >
         {/* Sticky Table Header */}
-        <div className="sticky top-0 z-30 flex border-b border-border-subtle bg-canvas-elevated font-mono text-xs text-text-muted select-none">
+        <div style={{ minWidth: `${96 + table.columns.reduce((sum, col) => sum + col.width, 0)}px` }}
+        className="sticky top-0 z-30 flex border-b border-border-subtle bg-canvas-elevated font-mono text-xs text-text-muted select-none">
           <div className="w-12 py-2.5 px-3 flex items-center justify-center border-r border-border-subtle shrink-0">
             <input
               type="checkbox"
@@ -85,8 +89,8 @@ export function LoomVirtualGrid() {
         {/* Virtualized Rows Canvas */}
         <div
           style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            width: '100%',
+            height: `${rowVirtualizer.getTotalSize() + 112}px`,
+            width: `${96 + table.columns.reduce((sum, col) => sum + col.width, 0)}px`,
             position: 'relative',
           }}
         >
@@ -105,7 +109,7 @@ export function LoomVirtualGrid() {
                   position: 'absolute',
                   top: 0,
                   left: 0,
-                  width: '100%',
+                  width: `${96 + table.columns.reduce((sum, col) => sum + col.width, 0)}px`,
                   height: `${virtualRow.size}px`,
                   transform: `translateY(${virtualRow.start}px)`,
                 }}

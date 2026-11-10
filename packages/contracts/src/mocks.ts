@@ -4,14 +4,14 @@ import { ValidationScorecardResponse } from './validation.contract';
 import { MailboxHealthStatus } from './outbound.contract';
 
 export const MOCK_TABLE_METADATA: TableMetadata = {
-  id: '00000000-0000-0000-0000-000000000001',
-  workspaceId: '11111111-1111-1111-1111-111111111111',
+  id: '00000000-0000-4000-8000-000000000001',
+  workspaceId: '11111111-1111-4111-8111-111111111111',
   name: 'Series A DevOps & Infrastructure Targets',
   rowCount: 1420,
   columns: [
     {
-      id: 'col-company',
-      tableId: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-4000-8000-000000000101',
+      tableId: '00000000-0000-4000-8000-000000000001',
       name: 'Company',
       type: 'text',
       orderIndex: 0,
@@ -20,8 +20,8 @@ export const MOCK_TABLE_METADATA: TableMetadata = {
       config: {},
     },
     {
-      id: 'col-domain',
-      tableId: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-4000-8000-000000000102',
+      tableId: '00000000-0000-4000-8000-000000000001',
       name: 'Domain',
       type: 'url',
       orderIndex: 1,
@@ -30,8 +30,8 @@ export const MOCK_TABLE_METADATA: TableMetadata = {
       config: {},
     },
     {
-      id: 'col-signal',
-      tableId: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-4000-8000-000000000103',
+      tableId: '00000000-0000-4000-8000-000000000001',
       name: 'Trigger Signal',
       type: 'intent_signal',
       orderIndex: 2,
@@ -40,8 +40,8 @@ export const MOCK_TABLE_METADATA: TableMetadata = {
       config: { source: 'github_stars' },
     },
     {
-      id: 'col-waterfall',
-      tableId: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-4000-8000-000000000104',
+      tableId: '00000000-0000-4000-8000-000000000001',
       name: 'Email Waterfall (3)',
       type: 'waterfall',
       orderIndex: 3,
@@ -70,7 +70,7 @@ export const MOCK_PREFLIGHT_RESPONSE: PreFlightEstimateResponse = {
 };
 
 export const MOCK_VALIDATION_SCORECARD: ValidationScorecardResponse = {
-  experimentId: 'exp-k8s-cost-cutter',
+  experimentId: '22222222-2222-4222-8222-222222222222',
   hypothesis: 'Automated Kubernetes cost-cutter for Series A startups',
   verdict: 'high_pull',
   verdictScore: 84.5,
@@ -93,7 +93,7 @@ export const MOCK_VALIDATION_SCORECARD: ValidationScorecardResponse = {
 
 export const MOCK_MAILBOX_HEALTH: MailboxHealthStatus[] = [
   {
-    id: 'mbx-01',
+    id: '33333333-3333-4333-8333-333333333333',
     email: 'alex-outreach@loom.dev',
     spfStatus: 'verified',
     dkimStatus: 'verified',

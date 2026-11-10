@@ -2,21 +2,30 @@
   "name": "leadloom",
   "version": "0.1.0",
   "private": true,
-  "description": "LeadLoom — The Open-Core Signal-to-Revenue Engine",
+  "description": "LeadLoom \u2014 The Open-Core Signal-to-Revenue Engine",
   "workspaces": [
     "packages/*",
     "apps/*",
     "workers/*"
   ],
   "scripts": {
-    "build": "turbo run build || npm run --workspaces --if-present build",
+    "build": "npm run build --workspace @leadloom/contracts && npm run build --workspace @leadloom/database && npm run build --workspace @leadloom/engine && npm run build --workspace @leadloom/worker-scraper && npm run build --workspace @leadloom/web",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "test": "turbo run test || vitest run"
+    "test": "npm run build --workspace @leadloom/contracts && npm run build --workspace @leadloom/database && npm test --workspace @leadloom/contracts && npm test --workspace @leadloom/engine && npm test --workspace @leadloom/database && npm test --workspace @leadloom/worker-scraper"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.23",
+    "next": {
+      "postcss": "^8.5.23"
+    }
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

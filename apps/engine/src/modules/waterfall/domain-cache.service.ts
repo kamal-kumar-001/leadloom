@@ -33,11 +33,11 @@ export class DomainCacheService {
   /**
    * Generates deterministic SHA-256 hash: SHA256(provider + ":" + normalized_domain)
    */
-  public computeHash(provider: BYOKProvider, domain: string): string {
+  public computeHash(provider: BYOKProvider, domain: string, scope = "domain-only"): string {
     const normalized = this.normalizeDomain(domain);
     return crypto
       .createHash('sha256')
-      .update(`${provider}:${normalized}`)
+      .update(JSON.stringify([provider, normalized, scope]))
       .digest('hex');
   }
 
@@ -45,8 +45,8 @@ export class DomainCacheService {
    * Retrieves entry from cache if present and unexpired.
    * Increments hitCount on cache hit.
    */
-  public get<T>(provider: BYOKProvider, domain: string): CacheEntry<T> | null {
-    const hash = this.computeHash(provider, domain);
+  public get<T>(provider: BYOKProvider, domain: string, scope?: string): CacheEntry<T> | null {
+    const hash = this.computeHash(provider, domain, scope);
     const entry = this.cache.get(hash);
 
     if (!entry) {
@@ -60,7 +60,7 @@ export class DomainCacheService {
     }
 
     entry.hitCount += 1;
-    return entry as CacheEntry<T>;
+    return structuredClone(entry) as CacheEntry<T>;
   }
 
   /**
@@ -71,9 +71,10 @@ export class DomainCacheService {
     domain: string,
     payload: T,
     costSavedMicrocents: number,
-    ttlMs: number = this.defaultTtlMs
+    ttlMs: number = this.defaultTtlMs,
+    scope?: string
   ): CacheEntry<T> {
-    const hash = this.computeHash(provider, domain);
+    const hash = this.computeHash(provider, domain, scope);
     const normalized = this.normalizeDomain(domain);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlMs);
@@ -90,12 +91,13 @@ export class DomainCacheService {
       expiresAt,
     };
 
+    if (this.cache.size >= 10000 && !this.cache.has(hash)) this.cache.delete(this.cache.keys().next().value!);
     this.cache.set(hash, entry as CacheEntry);
-    return entry;
+    return structuredClone(entry);
   }
 
-  public has(provider: BYOKProvider, domain: string): boolean {
-    const hash = this.computeHash(provider, domain);
+  public has(provider: BYOKProvider, domain: string, scope?: string): boolean {
+    const hash = this.computeHash(provider, domain, scope);
     const entry = this.cache.get(hash);
     if (!entry) return false;
     if (new Date() > entry.expiresAt) {

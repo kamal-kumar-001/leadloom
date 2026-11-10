@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
@@ -18,6 +18,13 @@ export function SceneContent({ lightingState = 'indigo' }: SceneContentProps) {
   const { mouse } = useThree();
 
   const fibers = useMemo(() => generateLoomFibers(36, 3.2), []);
+
+  const fiberLines = useMemo(() => fibers.map(fiber => {
+    const geometry = new THREE.BufferGeometry().setFromPoints(fiber.curve.getPoints(40));
+    const material = new THREE.LineBasicMaterial({ color: lightingState === 'matrix' ? '#10B981' : fiber.color, transparent: true, opacity: 0.5 });
+    return new THREE.Line(geometry, material);
+  }), [fibers, lightingState]);
+  useEffect(() => () => { for (const line of fiberLines) { line.geometry.dispose(); line.material.dispose(); } }, [fiberLines]);
 
   const uniforms = useMemo(
     () => ({
@@ -75,19 +82,7 @@ export function SceneContent({ lightingState = 'indigo' }: SceneContentProps) {
       </mesh>
 
       {/* Fiber-Optic Splines converging into the Core */}
-      {fibers.map((fiber, index) => {
-        const points = fiber.curve.getPoints(40);
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        return (
-          <line key={index} geometry={geometry}>
-            <lineBasicMaterial
-              color={lightingState === 'matrix' ? '#10B981' : fiber.color}
-              transparent
-              opacity={0.5}
-            />
-          </line>
-        );
-      })}
+      {fiberLines.map((line, index) => <primitive key={index} object={line} />)}
     </group>
   );
 }
