@@ -44,6 +44,8 @@ model User {
   passwordHash String?  @map("password_hash")
   role         String   @default("member") @db.VarChar(16) // admin | member | read_only
   disabledAt   DateTime? @map("disabled_at") @db.Timestamptz // non-null = suspended
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz // null = email not verified (password sign-in blocked)
+  emailTokens  EmailToken[]
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -51,6 +53,21 @@ model User {
 
   @@index([workspaceId])
   @@map("users")
+}
+
+model EmailToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  kind      String    @db.VarChar(16) // verify | reset
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+  @@map("email_tokens")
 }
 
 // ─── Reactive Data Canvas (Grid) ─────────────────────────────────────────────

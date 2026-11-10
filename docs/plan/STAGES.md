@@ -27,7 +27,16 @@ Gamma (engine, auth, database, integration):
 - Needs a deployed-like run: engine and web together on a local or lab-test setup with fixture data. No production deploy.
 - `GET /auth/me` (bridge or session token) returns the engine's own userId, workspaceId and role, 401 otherwise. The web app uses it to gate `/app` and `/admin`.
 - Local harness: `scripts/dev/stage1-harness.sh up` (local database, throwaway secrets, bridge and sign-up on).
-- Open engine work for login: client IP passthrough for the per-IP limiter, a password path only if Kamal wants one, an email verification step only when a real mail sender is approved.
+- Login methods decided by Kamal: GitHub and email/password now, Google later (credentials not yet supplied).
+- Email/password is built in the engine behind `LEADLOOM_PASSWORD_AUTH_ENABLED` (default off; needs `LEADLOOM_PASSWORD_AUTH_BASE_URL`, a mail sender, DB migration `20261115_password_auth`). The engine checks the scrypt hash itself and issues its own session. It never claims a provider identity; the bridge stays Google/GitHub only.
+  - `POST /auth/register {email,password,name?}` -> 202 `check_your_email` always (no account listing). Creates an unverified admin of a new workspace, mails a one-time link.
+  - `POST /auth/verify-email {token}` -> 200 / 400. `POST /auth/login {email,password}` -> 200 `{token,expiresAt}`; 403 `email_not_verified` until verified; 401 on bad credentials; 429 when limited.
+  - `POST /auth/forgot-password {email}` -> 202 always; `POST /auth/reset-password {token,password}` -> 200 / 400. Tokens: 32 random bytes, only the SHA-256 is stored, single use, verify 24h, reset 1h. Password: 10 to 256 characters.
+  - The links point to web pages `/verify-email?token=` and `/reset-password?token=` that Alpha must build; they post the token to the engine.
+  - Alpha: Auth.js Credentials `authorize()` calls the engine `/auth/login` and keeps the engine session token for later engine calls (send it as `Authorization: Bearer`). Do not verify passwords in the web app. Show the engine's real errors, including "verify your email".
+  - Local harness now also turns this on with a file mail sink (`/tmp/leadloom-stage1-mail.jsonl`, dev only, refused when `NODE_ENV=production`): verification links land in that file, nothing is sent.
+  - Known limits: stateless sessions (12h) are not revoked by a password reset; no captcha; per-IP limiting sees the proxy address until IP passthrough exists. Real mail needs an approved sender (Resend key, domain, from-address): not configured, nothing has been sent.
+- Open engine work for login: client IP passthrough for the per-IP limiter.
 
 Beta: paused. Finish only what is already in flight and safe to stop (commit it if tests pass, otherwise leave uncommitted). No new files for stage 3.
 

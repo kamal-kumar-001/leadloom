@@ -12,6 +12,7 @@ import { verifyBridgeToken } from './modules/auth/nextauth-bridge';
 import { canWrite } from './modules/auth/rbac';
 import { issueSession } from './modules/auth/issuer';
 import { verifyPassword } from './modules/auth/password';
+import { PasswordAccountService, MailUnavailableError, SignupLimitedError as PwSignupLimitedError, InvalidTokenError, WeakPasswordError, InvalidCredentialsError, EmailNotVerifiedError, AccountInactiveError } from './modules/password-auth/password-account.service';
 import type { UserDirectory } from './modules/auth/user-directory';
 import { PrismaUserDirectory } from './modules/auth/user-directory';
 import { verifyUnsubscribeToken } from './modules/outbound/transport/unsubscribe';
@@ -46,6 +47,8 @@ export interface RuntimeServices {
  /** Optional: first sign-in provisioning (default off; needs the bridge key). */
  provisioning?: Pick<ProvisioningService,'provision'>;
  userDirectory?: UserDirectory;
+ /** Optional: email+password accounts with verified email (default off; main gates it behind LEADLOOM_PASSWORD_AUTH_ENABLED). */
+ passwordAccounts?: PasswordAccountService;
  unsubscribeKey?: Buffer;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
@@ -204,7 +207,7 @@ export async function createApplication(services?:RuntimeServices) {
   // directory is provided AND the issuer is explicitly enabled via env, so the
   // public deployment posture never changes silently. No other login method is
   // mounted; OAuth/magic-link methods plug into the UserDirectory port later.
-  if(services.userDirectory && process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true') {
+  if(services.userDirectory && !services.passwordAccounts && process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true') {
    const attempts=new Map<string,number[]>();
    const WINDOW_MS=5*60*1000,MAX_ATTEMPTS=5;
    const Login=z.object({email:z.string().email().max(320),password:z.string().min(1).max(256)}).strict();
@@ -227,6 +230,64 @@ export async function createApplication(services?:RuntimeServices) {
     if(!ok) return reply.code(401).send({error:'Invalid credentials'});
     const {token,claims}=issueSession({userId:user.id,workspaceId:user.workspaceId,role:user.role},services.sessionKey,12*60*60);
     return {token,expiresAt:new Date(claims.exp*1000).toISOString()};
+   });
+  }
+  if(services.passwordAccounts) {
+   const pw=services.passwordAccounts;
+   const ipLimiter=new SlidingWindowLimiter(20,5*60_000);      // per source address, all password routes
+   const emailLimiter=new SlidingWindowLimiter(5,15*60_000);   // per target email, sign-in only
+   const mailLimiter=new SlidingWindowLimiter(3,60*60_000);    // per target email, mail-sending routes
+   const Cred=z.object({email:z.string().email().max(320),password:z.string().min(1).max(256)}).strict();
+   const Reg=z.object({email:z.string().email().max(320),password:z.string().min(1).max(256),name:z.string().max(255).optional()}).strict();
+   const Tok=z.object({token:z.string().min(1).max(200)}).strict();
+   const Forgot=z.object({email:z.string().email().max(320)}).strict();
+   const Reset=z.object({token:z.string().min(1).max(200),password:z.string().min(1).max(256)}).strict();
+   const limited=(request:any,reply:any)=>{ if(!ipLimiter.take(String(request.ip??'unknown'))){reply.code(429).send({error:'Too many requests'});return true;} return false; };
+   const fail=(reply:any,e:unknown)=>{
+    if(e instanceof WeakPasswordError) return reply.code(400).send({error:e.message});
+    if(e instanceof InvalidTokenError) return reply.code(400).send({error:'This link is invalid or has expired'});
+    if(e instanceof PwSignupLimitedError) return reply.code(429).send({error:'Signups are temporarily limited'});
+    if(e instanceof MailUnavailableError) return reply.code(503).send({error:'Email sending is not available'});
+    return reply.code(400).send({error:'Invalid request'});
+   };
+   fastify.post('/auth/register',async(request:any,reply:any)=>{
+    if(limited(request,reply)) return reply;
+    const p=Reg.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
+    if(!mailLimiter.take(p.data.email.toLowerCase())) return reply.code(202).send({status:'check_your_email'}); // silent: no signal
+    try { await pw.register(p.data.email,p.data.password,p.data.name); } catch(e) { return fail(reply,e); }
+    return reply.code(202).send({status:'check_your_email'});
+   });
+   fastify.post('/auth/verify-email',async(request:any,reply:any)=>{
+    if(limited(request,reply)) return reply;
+    const p=Tok.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
+    try { await pw.verifyEmail(p.data.token); } catch(e) { return fail(reply,e); }
+    return {status:'verified'};
+   });
+   fastify.post('/auth/forgot-password',async(request:any,reply:any)=>{
+    if(limited(request,reply)) return reply;
+    const p=Forgot.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
+    if(mailLimiter.take(p.data.email.toLowerCase())) { try { await pw.forgotPassword(p.data.email); } catch(e) { return fail(reply,e); } }
+    return reply.code(202).send({status:'check_your_email'});
+   });
+   fastify.post('/auth/reset-password',async(request:any,reply:any)=>{
+    if(limited(request,reply)) return reply;
+    const p=Reset.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
+    try { await pw.resetPassword(p.data.token,p.data.password); } catch(e) { return fail(reply,e); }
+    return {status:'password_updated'};
+   });
+   fastify.post('/auth/login',async(request:any,reply:any)=>{
+    if(limited(request,reply)) return reply;
+    const p=Cred.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid login request'});
+    if(!emailLimiter.take(p.data.email.toLowerCase())) return reply.code(429).send({error:'Too many login attempts'});
+    try {
+     const id=await pw.authenticate(p.data.email,p.data.password);
+     const {token,claims}=issueSession(id,services.sessionKey,12*60*60);
+     return {token,expiresAt:new Date(claims.exp*1000).toISOString()};
+    } catch(e) {
+     if(e instanceof EmailNotVerifiedError) return reply.code(403).send({error:'Email not verified',code:'email_not_verified'});
+     if(e instanceof AccountInactiveError) return reply.code(403).send({error:'Account unavailable'});
+     return reply.code(401).send({error:'Invalid credentials'});
+    }
    });
   }
  }
@@ -271,6 +332,21 @@ if(require.main===module) {
     const {PrismaProvisioningStore}=await import('./modules/provisioning/prisma-provisioning-store.js');
     const creationLimiter=new SlidingWindowLimiter(Number(process.env.LEADLOOM_SIGNUP_HOURLY_CAP??20),3_600_000);
     services.provisioning=new ProvisioningService(new PrismaProvisioningStore(prisma),()=>creationLimiter.take('new-accounts'));
+   }
+   if(process.env.LEADLOOM_PASSWORD_AUTH_ENABLED==='true') {
+    const baseUrl=process.env.LEADLOOM_PASSWORD_AUTH_BASE_URL;
+    if(!baseUrl||!/^https?:\/\//.test(baseUrl))throw new Error('LEADLOOM_PASSWORD_AUTH_BASE_URL (web origin) required when password auth is enabled');
+    const {createTransactionalEmail}=await import('./modules/email/transactional.js');
+    let mailer=createTransactionalEmail(process.env,(u,i)=>fetch(u,i as any) as any);
+    const sinkFile=process.env.LEADLOOM_DEV_MAIL_SINK_FILE;
+    if(sinkFile) {
+     if(process.env.NODE_ENV==='production')throw new Error('LEADLOOM_DEV_MAIL_SINK_FILE is not allowed in production');
+     const {FileDevMailSink}=await import('./modules/email/dev-sink.js');
+     mailer=new FileDevMailSink(sinkFile);
+    }
+    const {PrismaPasswordStore}=await import('./modules/password-auth/prisma-password-store.js');
+    const signupCap=new SlidingWindowLimiter(Number(process.env.LEADLOOM_SIGNUP_HOURLY_CAP??20),3_600_000);
+    services.passwordAccounts=new PasswordAccountService(new PrismaPasswordStore(prisma),mailer,{baseUrl,creationGate:()=>signupCap.take('new-password-accounts')});
    }
    // Opt-in product APIs, default OFF in every environment. Each requires an
    // explicit env flag; providers still need per-workspace BYOK keys at call

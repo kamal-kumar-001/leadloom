@@ -2,6 +2,8 @@
 # Stage 1 (login) local harness. DEV ONLY: throwaway secrets, local database, loopback only.
 # Starts the engine with the NextAuth bridge and self sign-up ON, entitlements OFF.
 # Usage: DATABASE_URL=postgresql://... sh scripts/dev/stage1-harness.sh [up|env|down]
+# Also turns password auth ON with a LOCAL FILE mail sink (/tmp/leadloom-stage1-mail.jsonl, mode 600):
+# verification/reset links land in that file, no mail is ever sent.
 # Never writes .env, never deploys, never calls a provider, never sends mail.
 set -eu
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -24,6 +26,9 @@ case "$cmd" in
     set -a; . "$ENVF"; set +a
     export DATABASE_URL PORT="${PORT:-4100}" HOST=127.0.0.1
     export LEADLOOM_NEXTAUTH_BRIDGE_ENABLED=true LEADLOOM_SELF_SIGNUP_ENABLED=true
+    export LEADLOOM_PASSWORD_AUTH_ENABLED=true LEADLOOM_PASSWORD_AUTH_BASE_URL="${STAGE1_WEB_ORIGIN:-http://localhost:3000}"
+    export LEADLOOM_DEV_MAIL_SINK_FILE="${STAGE1_MAIL_FILE:-/tmp/leadloom-stage1-mail.jsonl}" NODE_ENV=development
+    ( umask 077; : > "$LEADLOOM_DEV_MAIL_SINK_FILE" )
     (cd "$ROOT/packages/database" && {
       if echo "select 1 from users limit 1" | npx prisma db execute --stdin --schema prisma/schema.prisma >/dev/null 2>&1; then
         npx prisma migrate deploy --schema prisma/schema.prisma >/dev/null
