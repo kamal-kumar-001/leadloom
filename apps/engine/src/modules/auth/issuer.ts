@@ -11,6 +11,8 @@ export interface IssuedIdentity {
   userId: string;
   workspaceId: string;
   role: Role;
+  /** Current users.session_version; omitted means 0. */
+  sessionVersion?: number;
 }
 
 export function issueSession(
@@ -29,6 +31,7 @@ export function issueSession(
     role: identity.role,
     exp: Math.floor(now / 1000) + ttlSeconds,
     iat: Math.floor(now / 1000),
+    ver: identity.sessionVersion ?? 0,
   };
   const body = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
   const signature = createHmac('sha256', key).update(body).digest().toString('base64url');

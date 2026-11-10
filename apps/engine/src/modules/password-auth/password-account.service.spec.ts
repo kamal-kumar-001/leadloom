@@ -13,13 +13,13 @@ class MemStore implements PasswordAccountStore {
   async createPasswordAccount(i: any) {
     if ([...this.users.values()].some(u => u.email === i.email)) return null;
     const id = 'u' + (this.users.size + 1);
-    this.users.set(id, { id, email: i.email, workspaceId: 'w' + id, role: 'admin', passwordHash: i.passwordHash, verified: false, active: true });
+    this.users.set(id, { id, email: i.email, workspaceId: 'w' + id, role: 'admin', sessionVersion: 0, passwordHash: i.passwordHash, verified: false, active: true });
     return { userId: id };
   }
   async putToken(i: any) { this.tokens = this.tokens.filter(t => !(t.userId === i.userId && t.kind === i.kind && !t.used)); this.tokens.push({ userId: i.userId, kind: i.kind, hash: i.tokenHash, exp: i.expiresAt, used: false }); }
   async consumeToken(h: string, kind: any) { const t = this.tokens.find(x => x.hash === h && x.kind === kind && !x.used && x.exp.getTime() > Date.now()); if (!t) return null; t.used = true; return t.userId; }
   async markVerified(id: string) { this.users.get(id)!.verified = true; }
-  async setPassword(id: string, h: string) { const u = this.users.get(id)!; u.passwordHash = h; u.verified = true; }
+  async setPassword(id: string, h: string) { const u = this.users.get(id)!; u.passwordHash = h; u.verified = true; u.sessionVersion++; }
   async claimByProvider(e: string) { const u = [...this.users.values()].find(x => x.email === e && !x.verified); if (u) { u.verified = true; u.passwordHash = null; } }
   async audit(a: string) { this.audits.push(a); }
 }
@@ -123,7 +123,7 @@ describe('PasswordAccountService', () => {
   });
   it('accounts without a password (provider-only users) cannot password sign in', async () => {
     const { s, svc } = mk();
-    s.users.set('g', { id: 'g', email: 'g@example.com', workspaceId: 'w', role: 'admin', passwordHash: null, verified: true, active: true });
+    s.users.set('g', { id: 'g', email: 'g@example.com', workspaceId: 'w', role: 'admin', sessionVersion: 0, passwordHash: null, verified: true, active: true });
     await expect(svc.authenticate('g@example.com', PW)).rejects.toBeInstanceOf(InvalidCredentialsError);
   });
   it('a provider-proven email takes over an unverified password account and drops the planted password', async () => {
@@ -131,5 +131,14 @@ describe('PasswordAccountService', () => {
     await svc.register('v@example.com', PW); // attacker pre-registers the victim address
     await svc.claimByProvider('V@Example.com'); // victim later signs in with a verified provider
     await expect(svc.authenticate('v@example.com', PW)).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+  it('reset bumps the session version so tokens issued under the old one can be refused', async () => {
+    const { m, svc } = mk();
+    await svc.register('a@example.com', PW); await svc.verifyEmail(tokenOf(m.sent[0]));
+    const before = await svc.authenticate('a@example.com', PW);
+    await svc.forgotPassword('a@example.com');
+    await svc.resetPassword(tokenOf(m.sent[1]), 'brand new password');
+    const after = await svc.authenticate('a@example.com', 'brand new password');
+    expect(after.sessionVersion).toBe(before.sessionVersion + 1);
   });
 });

@@ -73,7 +73,7 @@ export async function createApplication(services?:RuntimeServices) {
      if(!member) throw new Error('No membership');
      claims={sub:member.id,workspaceId:member.workspaceId,role:member.role,exp:proven.exp};
     }
-    if(services.accessGuard&&!await services.accessGuard.isActive(claims.sub,claims.workspaceId,engineSession?{iat:(claims as any).iat}:undefined)) {reply.code(401).send({error:'Authentication required'});return null;}
+    if(services.accessGuard&&!await services.accessGuard.isActive(claims.sub,claims.workspaceId,engineSession?{ver:(claims as any).ver}:undefined)) {reply.code(401).send({error:'Authentication required'});return null;}
     if(write && !canWrite(claims)) {reply.code(403).send({error:'Read-only workspace role'});return null;}
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}

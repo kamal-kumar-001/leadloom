@@ -12,7 +12,7 @@ export class InvalidCredentialsError extends Error { constructor() { super('Inva
 export class EmailNotVerifiedError extends Error { constructor() { super('Email not verified'); } }
 export class AccountInactiveError extends Error { constructor() { super('Account unavailable'); } }
 
-export interface PasswordUser { id: string; workspaceId: string; role: Role; passwordHash: string | null; verified: boolean; active: boolean }
+export interface PasswordUser { id: string; workspaceId: string; role: Role; sessionVersion: number; passwordHash: string | null; verified: boolean; active: boolean }
 
 /** Persistence port. Token consumption must be atomic and single-use. */
 export interface PasswordAccountStore {
@@ -126,13 +126,13 @@ export class PasswordAccountService {
   }
 
   /** Verifies the stored hash. Unverified, suspended or unknown accounts never get an identity. */
-  async authenticate(emailIn: string, password: string): Promise<{ userId: string; workspaceId: string; role: Role }> {
+  async authenticate(emailIn: string, password: string): Promise<{ userId: string; workspaceId: string; role: Role; sessionVersion: number }> {
     const email = normEmail(emailIn);
     const u = await this.store.findByEmail(email);
     if (!u || !u.passwordHash) { await verifyPassword(password, DUMMY_HASH); throw new InvalidCredentialsError(); }
     if (!(await verifyPassword(password, u.passwordHash))) throw new InvalidCredentialsError();
     if (!u.verified) throw new EmailNotVerifiedError();
     if (!u.active) throw new AccountInactiveError();
-    return { userId: u.id, workspaceId: u.workspaceId, role: u.role };
+    return { userId: u.id, workspaceId: u.workspaceId, role: u.role, sessionVersion: u.sessionVersion };
   }
 }
