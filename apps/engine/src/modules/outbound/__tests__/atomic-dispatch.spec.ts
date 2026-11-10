@@ -12,7 +12,7 @@ const enqueue=(key='lead-1',email='synthetic@example.invalid',date=now)=>repo.en
 const claim=()=>repo.claim({workspaceId,campaignId,mailboxId,now,nextDispatchAt:new Date(now.getTime()+45000)});
 beforeEach(async()=>{
   pg=new PGlite({extensions:{vector}});
-  for(const migration of ['20261110_init_v2','20261110_integrity']) await pg.exec(readFileSync(`../../packages/database/prisma/migrations/${migration}/migration.sql`,'utf8'));
+  for(const migration of ['20261110_1_init_v2','20261110_2_integrity']) await pg.exec(readFileSync(`../../packages/database/prisma/migrations/${migration}/migration.sql`,'utf8'));
   const database:TransactionalDatabase={...connection(pg),transaction:operation=>pg.transaction(tx=>operation(connection(tx)))};
   now=new Date('2026-11-10T08:00:00Z'); workspaceId=randomUUID(); campaignId=randomUUID(); mailboxId=randomUUID();
   repo=new AtomicDispatchRepository(database,()=>now);
