@@ -30,13 +30,14 @@ case "$cmd" in
       else
         sh scripts/bootstrap-fresh.sh >/dev/null
       fi; })
-    (cd "$ROOT/apps/engine" && nohup npx tsx src/main.ts > /tmp/leadloom-stage1-engine.log 2>&1 & echo $! > "$PIDF")
+    if node -e "require('net').connect($PORT,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"; then echo "refusing: port $PORT already in use (run: sh $0 down)" >&2; exit 2; fi
+    (cd "$ROOT/apps/engine" && setsid nohup npx tsx src/main.ts > /tmp/leadloom-stage1-engine.log 2>&1 & echo $! > "$PIDF")
     for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
       if node -e "fetch('http://127.0.0.1:$PORT/health').then(r=>r.json()).then(j=>{console.log(JSON.stringify(j));process.exit(0)}).catch(()=>process.exit(1))"; then exit 0; fi
       sleep 2
     done
     echo "engine did not come up; see /tmp/leadloom-stage1-engine.log" >&2; exit 1;;
   down)
-    [ -f "$PIDF" ] && kill "$(cat "$PIDF")" 2>/dev/null || true; rm -f "$PIDF"; echo stopped;;
+    [ -f "$PIDF" ] && { P="$(cat "$PIDF")"; kill -- -"$P" 2>/dev/null || pkill -P "$P" 2>/dev/null || true; kill "$P" 2>/dev/null || true; }; rm -f "$PIDF"; echo stopped;;
   *) echo "usage: $0 [up|env|down]" >&2; exit 2;;
 esac
