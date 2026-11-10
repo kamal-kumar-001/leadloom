@@ -13,3 +13,5 @@ Goal: a working dashboard shell, not more marketing polish.
 6. Read `docs/plan/FOUNDATIONS.md`. Two dashboards: user (`/app/*`) and admin (`/app/settings/*` for tenant admins, `/admin/*` for platform admins, separate layout). Import `EntitlementDecision` from `packages/contracts` and render it; never compute plan access in the UI. Never send a role, workspace or user id from the browser as authority: the engine derives them from its own tables.
 
 Done means: `next build` passes, light and dark screenshots at 390px and 1280px, no console errors.
+
+7. Public copy: remove competitor and reference-product names from `apps/web/app/layout.tsx` metadata, `apps/web/app/(marketing)/page.tsx` and `apps/web/components/marketing/savings-calculator.tsx`. Keep a comparison claim only if it can be verified from public sources; otherwise reword it generically ("hosted GTM platforms"). Do not describe the live site as updated until a release ships.
