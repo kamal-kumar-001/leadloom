@@ -26,8 +26,8 @@ case "$cmd" in
     set -a; . "$ENVF"; set +a
     export DATABASE_URL PORT="${PORT:-4100}" HOST=127.0.0.1
     export LEADLOOM_NEXTAUTH_BRIDGE_ENABLED=true LEADLOOM_SELF_SIGNUP_ENABLED=true
-    export LEADLOOM_PASSWORD_AUTH_ENABLED=true LEADLOOM_PASSWORD_AUTH_BASE_URL="${STAGE1_WEB_ORIGIN:-http://localhost:3000}"
-    export LEADLOOM_DEV_MAIL_SINK_FILE="${STAGE1_MAIL_FILE:-/tmp/leadloom-stage1-mail.jsonl}" NODE_ENV=development
+    export LEADLOOM_PASSWORD_AUTH_ENABLED=true
+    export LEADLOOM_DEV_MAIL_SINK_FILE="${STAGE1_MAIL_FILE:-/tmp/leadloom-stage1-mail.jsonl}" NODE_ENV=development LEADLOOM_OTP_RESEND_COOLDOWN_SECONDS="${STAGE1_OTP_COOLDOWN:-3}"
     ( umask 077; : > "$LEADLOOM_DEV_MAIL_SINK_FILE" )
     (cd "$ROOT/packages/database" && {
       if echo "select 1 from users limit 1" | npx prisma db execute --stdin --schema prisma/schema.prisma >/dev/null 2>&1; then

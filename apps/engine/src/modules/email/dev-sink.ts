@@ -11,7 +11,7 @@ export class FileDevMailSink implements TransactionalEmail {
     if (process.env.NODE_ENV === 'production') throw new Error('Dev mail sink is not allowed in production');
   }
   async send(m: TransactionalMessage): Promise<SendResult> {
-    appendFileSync(this.path, JSON.stringify({ at: new Date().toISOString(), kind: m.kind, to: m.to, subject: m.subject, text: m.text }) + '\n', { mode: 0o600 });
+    appendFileSync(this.path, JSON.stringify({ at: new Date().toISOString(), kind: m.kind, to: m.to, subject: m.subject, text: m.text, htmlBytes: m.html?.length ?? 0 }) + '\n', { mode: 0o600 });
     return { sent: true, providerId: 'dev-sink' };
   }
 }

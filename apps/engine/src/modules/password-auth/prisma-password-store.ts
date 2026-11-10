@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { PasswordAccountStore, PasswordUser } from './password-account.service';
 import type { Role } from '../auth/rbac';
 
@@ -31,17 +31,45 @@ export class PrismaPasswordStore implements PasswordAccountStore {
     }
   }
 
-  async putToken(i: { userId: string; kind: 'verify' | 'reset'; tokenHash: string; expiresAt: Date }) {
-    await this.prisma.$transaction(async (tx: any) => {
-      await tx.$executeRawUnsafe(`DELETE FROM email_tokens WHERE user_id = $1::uuid AND kind = $2 AND used_at IS NULL`, i.userId, i.kind);
-      await tx.$executeRawUnsafe(`INSERT INTO email_tokens (user_id, kind, token_hash, expires_at) VALUES ($1::uuid, $2, $3, $4)`, i.userId, i.kind, i.tokenHash, i.expiresAt);
+  async replaceUnverifiedPassword(email: string, passwordHash: string) {
+    const rows: Array<{ id: string }> = await this.prisma.$queryRawUnsafe(
+      `UPDATE users SET password_hash = $2 WHERE email = $1 AND email_verified_at IS NULL AND disabled_at IS NULL RETURNING id::text AS id`, email, passwordHash);
+    return rows[0]?.id ?? null;
+  }
+
+  async putOtpUnlessRecent(i: { userId: string; purpose: 'signup' | 'reset'; codeHash: string; expiresAt: Date }, cooldownSeconds: number) {
+    return this.prisma.$transaction(async (tx: any) => {
+      // Serialize per account and purpose: concurrent resends queue here, so the cooldown check and the insert are one step.
+      await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, `${i.userId}:${i.purpose}`);
+      const recent: Array<{ n: number }> = await tx.$queryRawUnsafe(
+        `SELECT count(*)::int AS n FROM email_otps WHERE user_id = $1::uuid AND purpose = $2 AND created_at > now() - make_interval(secs => $3::int)`, i.userId, i.purpose, cooldownSeconds);
+      if ((recent[0]?.n ?? 0) > 0) return false;
+      await tx.$executeRawUnsafe(`DELETE FROM email_otps WHERE user_id = $1::uuid AND purpose = $2 AND consumed_at IS NULL`, i.userId, i.purpose);
+      await tx.$executeRawUnsafe(`INSERT INTO email_otps (user_id, purpose, code_hash, expires_at) VALUES ($1::uuid, $2, $3, $4)`, i.userId, i.purpose, i.codeHash, i.expiresAt);
+      return true;
     });
   }
 
-  async consumeToken(tokenHash: string, kind: 'verify' | 'reset') {
-    const rows: Array<{ user_id: string }> = await this.prisma.$queryRawUnsafe(
-      `UPDATE email_tokens SET used_at = now() WHERE token_hash = $1 AND kind = $2 AND used_at IS NULL AND expires_at > now() RETURNING user_id::text AS user_id`, tokenHash, kind);
-    return rows[0]?.user_id ?? null;
+  async discardOtp(userId: string, purpose: 'signup' | 'reset') {
+    await this.prisma.$executeRawUnsafe(`DELETE FROM email_otps WHERE user_id = $1::uuid AND purpose = $2 AND consumed_at IS NULL`, userId, purpose);
+  }
+
+  async checkOtp(userId: string, purpose: 'signup' | 'reset', candidateHash: string, maxAttempts: number) {
+    return this.prisma.$transaction(async (tx: any) => {
+      const rows: Array<{ id: string; code_hash: string; attempts: number }> = await tx.$queryRawUnsafe(
+        `SELECT id::text AS id, code_hash, attempts FROM email_otps
+          WHERE user_id = $1::uuid AND purpose = $2 AND consumed_at IS NULL AND expires_at > now()
+          ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, userId, purpose);
+      const o = rows[0];
+      if (!o || o.attempts >= maxAttempts) return false;
+      const a = Buffer.from(o.code_hash), b = Buffer.from(candidateHash);
+      if (a.length === b.length && timingSafeEqual(a, b)) {
+        await tx.$executeRawUnsafe(`UPDATE email_otps SET consumed_at = now() WHERE id = $1::uuid`, o.id);
+        return true;
+      }
+      await tx.$executeRawUnsafe(`UPDATE email_otps SET attempts = attempts + 1 WHERE id = $1::uuid`, o.id);
+      return false;
+    });
   }
 
   async markVerified(userId: string) {

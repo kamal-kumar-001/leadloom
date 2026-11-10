@@ -14,13 +14,19 @@ UPDATE users u SET email_verified_at = a.at
    AND a.target = u.id::text
    AND a.metadata ->> 'method' = 'verified_email';
 
-CREATE TABLE email_tokens (
+-- One-time codes for signup verification and password reset. Only an HMAC of the
+-- code is stored (keyed with a server secret), never the code. Purpose-bound,
+-- expiring, single-use, with a failed-attempt counter.
+CREATE TABLE email_otps (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  kind VARCHAR(16) NOT NULL CHECK (kind IN ('verify', 'reset')),
-  token_hash CHAR(64) NOT NULL UNIQUE,
+  purpose VARCHAR(16) NOT NULL CHECK (purpose IN ('signup', 'reset')),
+  code_hash CHAR(64) NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
   expires_at TIMESTAMPTZ NOT NULL,
-  used_at TIMESTAMPTZ,
+  consumed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX email_tokens_user_kind ON email_tokens (user_id, kind);
+CREATE INDEX email_otps_user_purpose ON email_otps (user_id, purpose, created_at DESC);
+-- At most one live code per account and purpose, enforced by the database.
+CREATE UNIQUE INDEX email_otps_one_live ON email_otps (user_id, purpose) WHERE consumed_at IS NULL;

@@ -1,12 +1,14 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHmac, randomInt } from 'node:crypto';
 import { hashPassword, verifyPassword } from '../auth/password';
 import type { Role } from '../auth/rbac';
 import { DisabledTransactionalEmail } from '../email/transactional';
 import type { TransactionalEmail } from '../email/transactional';
+import { renderOtpEmail, OTP_TTL_MINUTES } from '../email/otp-template';
+import type { OtpPurpose } from '../email/otp-template';
 
 export class MailUnavailableError extends Error { constructor() { super('Email sending is not configured'); } }
 export class SignupLimitedError extends Error { constructor() { super('Signup temporarily limited'); } }
-export class InvalidTokenError extends Error { constructor() { super('Invalid or expired link'); } }
+export class InvalidCodeError extends Error { constructor() { super('Invalid or expired code'); } }
 export class WeakPasswordError extends Error { constructor() { super('Password must be 10-256 characters and not contain your email'); } }
 export class InvalidCredentialsError extends Error { constructor() { super('Invalid credentials'); } }
 export class EmailNotVerifiedError extends Error { constructor() { super('Email not verified'); } }
@@ -14,16 +16,28 @@ export class AccountInactiveError extends Error { constructor() { super('Account
 
 export interface PasswordUser { id: string; workspaceId: string; role: Role; sessionVersion: number; passwordHash: string | null; verified: boolean; active: boolean }
 
-/** Persistence port. Token consumption must be atomic and single-use. */
+/** Persistence port. Code checking must be atomic, single-use and attempt-counted. */
 export interface PasswordAccountStore {
   findByEmail(email: string): Promise<PasswordUser | null>;
   /** Atomic: workspace + admin user + audit row, unverified. Null when the email already exists. */
   createPasswordAccount(input: { email: string; name: string | null; workspaceName: string; passwordHash: string }): Promise<{ userId: string } | null>;
-  /** Replaces any unused token of the same kind for the user. */
-  putToken(input: { userId: string; kind: 'verify' | 'reset'; tokenHash: string; expiresAt: Date }): Promise<void>;
-  /** Marks the token used and returns its user, only if unused and unexpired. */
-  consumeToken(tokenHash: string, kind: 'verify' | 'reset'): Promise<string | null>;
+  /** Unverified account only: replace its password (the mailbox owner proves the address next). Returns the user id, or null when none applies. */
+  replaceUnverifiedPassword(email: string, passwordHash: string): Promise<string | null>;
+  /**
+   * Atomically: unless a code of this purpose was created for the user within
+   * `cooldownSeconds`, supersede any unused code and store this one. Returns
+   * false (nothing stored) inside the cooldown. Concurrent calls store at most one.
+   */
+  putOtpUnlessRecent(input: { userId: string; purpose: OtpPurpose; codeHash: string; expiresAt: Date }, cooldownSeconds: number): Promise<boolean>;
+  /** Removes the unused code of this purpose (used when the mail could not be handed to the provider). */
+  discardOtp(userId: string, purpose: OtpPurpose): Promise<void>;
+  /**
+   * Checks the latest unused, unexpired code. A wrong guess counts an attempt;
+   * at `maxAttempts` the code is dead. A right guess consumes it. Atomic.
+   */
+  checkOtp(userId: string, purpose: OtpPurpose, candidateHash: string, maxAttempts: number): Promise<boolean>;
   markVerified(userId: string): Promise<void>;
+  /** Sets the password, verifies the address (the code proved the mailbox) and bumps session_version. */
   setPassword(userId: string, passwordHash: string): Promise<void>;
   /** A provider has proven this email: verify an unverified password account and drop its password (pre-registration takeover guard). */
   claimByProvider(email: string): Promise<void>;
@@ -32,8 +46,9 @@ export interface PasswordAccountStore {
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 const DUMMY_HASH = 'scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
-const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 const normEmail = (e: string) => e.trim().toLowerCase();
+export const MAX_OTP_ATTEMPTS = 5;
+export const RESEND_COOLDOWN_SECONDS = 60;
 
 export function checkPassword(password: string, email: string): void {
   if (typeof password !== 'string' || password.length < 10 || password.length > 256) throw new WeakPasswordError();
@@ -42,42 +57,49 @@ export function checkPassword(password: string, email: string): void {
 }
 
 export interface PasswordAccountConfig {
-  baseUrl: string; // public web app origin used in links, for example https://leadloom.dmpilot.org
-  verifyTtlMs?: number;
-  resetTtlMs?: number;
+  /** Server secret for keying code hashes. Derive it; never reuse the raw session key. */
+  otpKey: Buffer;
   /** Runs only when a NEW account would be created (signup abuse cap). */
   creationGate?: () => boolean;
+  /** Seconds before another code may be sent for the same account and purpose (default 60). */
+  resendCooldownSeconds?: number;
   now?: () => number;
 }
 
 /**
- * Email and password accounts. The engine verifies the password hash itself and
- * issues its own session: nothing here ever claims a provider identity, and the
- * NextAuth bridge stays provider-only. A password account cannot sign in until
- * the emailed link proves control of the address. Responses never reveal whether
- * an email already has an account.
+ * Email and password accounts with emailed one-time codes (signup verification
+ * and password reset share one purpose-bound code flow). The engine checks the
+ * password hash itself and issues its own session; nothing here claims a
+ * provider identity and the NextAuth bridge stays provider-only. A password
+ * account cannot sign in until a code proves the mailbox. Responses never reveal
+ * whether an email already has an account.
  */
 export class PasswordAccountService {
   constructor(
     private readonly store: PasswordAccountStore,
     private readonly mailer: TransactionalEmail,
     private readonly cfg: PasswordAccountConfig,
-  ) {}
+  ) {
+    if (cfg.otpKey.length < 32) throw new Error('OTP key must have at least 32 bytes');
+  }
 
   private now() { return (this.cfg.now ?? Date.now)(); }
   private mailReady() { return !(this.mailer instanceof DisabledTransactionalEmail); }
 
-  private async issue(userId: string, email: string, kind: 'verify' | 'reset'): Promise<void> {
-    const token = randomBytes(32).toString('base64url');
-    const ttl = kind === 'verify' ? (this.cfg.verifyTtlMs ?? 24 * 3600_000) : (this.cfg.resetTtlMs ?? 3600_000);
-    await this.store.putToken({ userId, kind, tokenHash: sha256(token), expiresAt: new Date(this.now() + ttl) });
-    const base = this.cfg.baseUrl.replace(/\/+$/, '');
-    const link = `${base}/${kind === 'verify' ? 'verify-email' : 'reset-password'}?token=${token}`;
-    const text = kind === 'verify'
-      ? `Confirm your email to finish creating your Leadloom account:\n\n${link}\n\nThe link works once and expires in 24 hours. If you did not sign up, ignore this email.`
-      : `Reset your Leadloom password:\n\n${link}\n\nThe link works once and expires in 1 hour. If you did not ask for this, ignore this email.`;
-    const res = await this.mailer.send({ kind: kind === 'verify' ? 'auth_verification' : 'password_reset', to: email, subject: kind === 'verify' ? 'Confirm your Leadloom email' : 'Reset your Leadloom password', text });
-    if (!res.sent) throw new MailUnavailableError();
+  /** HMAC bound to purpose and user, so a code for one purpose or account verifies nothing else. */
+  codeHash(userId: string, purpose: OtpPurpose, code: string): string {
+    return createHmac('sha256', this.cfg.otpKey).update(`${purpose}:${userId}:${code}`).digest('hex');
+  }
+
+  private async issue(userId: string, email: string, purpose: OtpPurpose): Promise<void> {
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const stored = await this.store.putOtpUnlessRecent(
+      { userId, purpose, codeHash: this.codeHash(userId, purpose, code), expiresAt: new Date(this.now() + OTP_TTL_MINUTES * 60_000) },
+      this.cfg.resendCooldownSeconds ?? RESEND_COOLDOWN_SECONDS);
+    if (!stored) return; // silent: a code was just sent
+    let sent = false;
+    try { sent = (await this.mailer.send(renderOtpEmail(purpose, code, email))).sent; } catch { sent = false; }
+    if (!sent) { await this.store.discardOtp(userId, purpose); throw new MailUnavailableError(); } // no dead code, no cooldown lock-out
   }
 
   /** Same outcome for new and existing emails so the response cannot be used to list accounts. */
@@ -86,25 +108,47 @@ export class PasswordAccountService {
     if (!EMAIL.test(email) || email.length > 320) throw new Error('Invalid email');
     checkPassword(password, email);
     if (!this.mailReady()) throw new MailUnavailableError(); // never create an account nobody can verify
+    const passwordHash = await hashPassword(password);
     const existing = await this.store.findByEmail(email);
-    if (existing) { await hashPassword(password); return; } // similar cost, no signal, no mail
+    if (existing) {
+      // Unverified: whoever proves the mailbox next owns it, so the latest password wins and a fresh code goes out.
+      // Verified: change nothing and send nothing.
+      if (!existing.verified && existing.active) {
+        const id = await this.store.replaceUnverifiedPassword(email, passwordHash);
+        if (id) await this.issue(id, email, 'signup');
+      }
+      return;
+    }
     if (this.cfg.creationGate && !this.cfg.creationGate()) throw new SignupLimitedError();
     const name = (nameIn ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 255) || null;
     const workspaceName = (name ? `${name}'s workspace` : `${email.split('@')[0]}'s workspace`).slice(0, 255);
-    const made = await this.store.createPasswordAccount({ email, name, workspaceName, passwordHash: await hashPassword(password) });
+    const made = await this.store.createPasswordAccount({ email, name, workspaceName, passwordHash });
     if (!made) return; // lost a race with another registration of the same email
-    await this.issue(made.userId, email, 'verify');
+    await this.issue(made.userId, email, 'signup');
   }
 
-  /** Call with an email proven by a verified provider (bridge token). */
-  async claimByProvider(emailIn: string): Promise<void> { await this.store.claimByProvider(normEmail(emailIn)); }
+  /** New signup code for an unverified account. Silent for anything else. */
+  async resendVerification(emailIn: string): Promise<void> {
+    const email = normEmail(emailIn);
+    if (!EMAIL.test(email)) return;
+    if (!this.mailReady()) throw new MailUnavailableError();
+    const u = await this.store.findByEmail(email);
+    if (!u || u.verified || !u.active) return;
+    await this.issue(u.id, email, 'signup');
+  }
 
-  async verifyEmail(token: string): Promise<void> {
-    if (typeof token !== 'string' || token.length < 20 || token.length > 200) throw new InvalidTokenError();
-    const userId = await this.store.consumeToken(sha256(token), 'verify');
-    if (!userId) throw new InvalidTokenError();
-    await this.store.markVerified(userId);
-    await this.store.audit('user.email_verified', userId);
+  private async checkCode(email: string, purpose: OtpPurpose, code: string): Promise<PasswordUser> {
+    const u = await this.store.findByEmail(email);
+    const c = typeof code === 'string' ? code.trim() : '';
+    if (!u || !u.active || !/^\d{6}$/.test(c)) throw new InvalidCodeError();
+    if (!(await this.store.checkOtp(u.id, purpose, this.codeHash(u.id, purpose, c), MAX_OTP_ATTEMPTS))) throw new InvalidCodeError();
+    return u;
+  }
+
+  async verifyEmail(emailIn: string, code: string): Promise<void> {
+    const u = await this.checkCode(normEmail(emailIn), 'signup', code);
+    await this.store.markVerified(u.id);
+    await this.store.audit('user.email_verified', u.id);
   }
 
   async forgotPassword(emailIn: string): Promise<void> {
@@ -112,18 +156,20 @@ export class PasswordAccountService {
     if (!EMAIL.test(email)) return;
     if (!this.mailReady()) throw new MailUnavailableError();
     const u = await this.store.findByEmail(email);
-    if (!u || !u.active) return; // no signal either way. Unverified accounts may reset: the link proves mailbox control.
+    if (!u || !u.active) return; // no signal either way. Unverified accounts may reset: the code proves mailbox control.
     await this.issue(u.id, email, 'reset');
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<void> {
-    if (typeof token !== 'string' || token.length < 20 || token.length > 200) throw new InvalidTokenError();
-    if (typeof newPassword !== 'string' || newPassword.length < 10 || newPassword.length > 256) throw new WeakPasswordError();
-    const userId = await this.store.consumeToken(sha256(token), 'reset');
-    if (!userId) throw new InvalidTokenError();
-    await this.store.setPassword(userId, await hashPassword(newPassword));
-    await this.store.audit('user.password_reset', userId);
+  async resetPassword(emailIn: string, code: string, newPassword: string): Promise<void> {
+    const email = normEmail(emailIn);
+    checkPassword(newPassword, email); // before the code is spent
+    const u = await this.checkCode(email, 'reset', code);
+    await this.store.setPassword(u.id, await hashPassword(newPassword));
+    await this.store.audit('user.password_reset', u.id);
   }
+
+  /** Provider-proven email (bridge): see store. */
+  async claimByProvider(emailIn: string): Promise<void> { await this.store.claimByProvider(normEmail(emailIn)); }
 
   /** Verifies the stored hash. Unverified, suspended or unknown accounts never get an identity. */
   async authenticate(emailIn: string, password: string): Promise<{ userId: string; workspaceId: string; role: Role; sessionVersion: number }> {
