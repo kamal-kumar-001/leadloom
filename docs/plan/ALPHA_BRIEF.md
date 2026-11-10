@@ -10,4 +10,6 @@ Goal: a working dashboard shell, not more marketing polish.
 3. App shell: sidebar, top bar, workspace switcher, empty states. Reuse components from Kamal's DMPilot and BakeryPOS repos (his own code) re-themed with LeadLoom tokens, and the grid-gradient background.
 4. Pages with mock data from `packages/contracts/mocks`: Tables (existing virtual grid), Connectors gallery plus key-entry form (posts to `/connectors`, not live yet), Mailboxes, Campaigns, Validator.
 5. Mark every mock-backed screen "Demo data". Do not mention any competitor or reference product.
+6. Read `docs/plan/FOUNDATIONS.md`. Two dashboards: user (`/app/*`) and admin (`/app/settings/*` for tenant admins, `/admin/*` for platform admins, separate layout). Import `EntitlementDecision` from `packages/contracts` and render it; never compute plan access in the UI. Never send a role, workspace or user id from the browser as authority: the engine derives them from its own tables.
+
 Done means: `next build` passes, light and dark screenshots at 390px and 1280px, no console errors.

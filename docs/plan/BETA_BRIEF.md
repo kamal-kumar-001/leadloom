@@ -8,4 +8,6 @@ Tasks:
 2. Implement from public docs: Apollo, Hunter, Dropcontact, PDL, ZeroBounce, NeverBounce, Serper, OpenAI, Anthropic, Ollama. One file each plus a vitest spec with recorded fixtures (no live calls in tests).
 3. Keys arrive only through the vault port; never log them.
 4. Report via `docs/context/SYNC_FEED.md`.
+5. Read `docs/plan/FOUNDATIONS.md`. Gate waterfall dispatch and enrichment credit use through `EntitlementService` (`apps/engine/src/modules/entitlements`), injected as a port; do not hard-code plan checks.
+
 Done: `npx vitest run` and `npx tsc --noEmit` pass in `apps/engine`.
