@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { createHmac } from 'node:crypto';
 import { PrismaClient } from '@leadloom/database';
 import { verifySession } from './modules/auth/session';
 import { PrismaAccessGuard } from './modules/auth/access-guard';
@@ -12,7 +13,7 @@ import { verifyBridgeToken } from './modules/auth/nextauth-bridge';
 import { canWrite } from './modules/auth/rbac';
 import { issueSession } from './modules/auth/issuer';
 import { verifyPassword } from './modules/auth/password';
-import { PasswordAccountService, MailUnavailableError, SignupLimitedError as PwSignupLimitedError, InvalidTokenError, WeakPasswordError, InvalidCredentialsError, EmailNotVerifiedError, AccountInactiveError } from './modules/password-auth/password-account.service';
+import { PasswordAccountService, MailUnavailableError, SignupLimitedError as PwSignupLimitedError, InvalidCodeError, WeakPasswordError, InvalidCredentialsError, EmailNotVerifiedError, AccountInactiveError } from './modules/password-auth/password-account.service';
 import type { UserDirectory } from './modules/auth/user-directory';
 import { PrismaUserDirectory } from './modules/auth/user-directory';
 import { verifyUnsubscribeToken } from './modules/outbound/transport/unsubscribe';
@@ -236,18 +237,19 @@ export async function createApplication(services?:RuntimeServices) {
   }
   if(services.passwordAccounts) {
    const pw=services.passwordAccounts;
-   const ipLimiter=new SlidingWindowLimiter(20,5*60_000);      // per source address, all password routes
+   const ipLimiter=new SlidingWindowLimiter(40,5*60_000);      // per source address, all password routes
    const emailLimiter=new SlidingWindowLimiter(5,15*60_000);   // per target email, sign-in only
-   const mailLimiter=new SlidingWindowLimiter(3,60*60_000);    // per target email, mail-sending routes
+   const mailLimiter=new SlidingWindowLimiter(6,60*60_000);    // per target email, mail-sending routes
    const Cred=z.object({email:z.string().email().max(320),password:z.string().min(1).max(256)}).strict();
    const Reg=z.object({email:z.string().email().max(320),password:z.string().min(1).max(256),name:z.string().max(255).optional()}).strict();
-   const Tok=z.object({token:z.string().min(1).max(200)}).strict();
+   const Verify=z.object({email:z.string().email().max(320),code:z.string().min(1).max(12)}).strict();
    const Forgot=z.object({email:z.string().email().max(320)}).strict();
-   const Reset=z.object({token:z.string().min(1).max(200),password:z.string().min(1).max(256)}).strict();
+   const Reset=z.object({email:z.string().email().max(320),code:z.string().min(1).max(12),password:z.string().min(1).max(256)}).strict();
+   const codeLimiter=new SlidingWindowLimiter(10,15*60_000);   // per target email, code checks (on top of 5 per code)
    const limited=(request:any,reply:any)=>{ if(!ipLimiter.take(String(request.ip??'unknown'))){reply.code(429).send({error:'Too many requests'});return true;} return false; };
    const fail=(reply:any,e:unknown)=>{
     if(e instanceof WeakPasswordError) return reply.code(400).send({error:e.message});
-    if(e instanceof InvalidTokenError) return reply.code(400).send({error:'This link is invalid or has expired'});
+    if(e instanceof InvalidCodeError) return reply.code(400).send({error:'This code is invalid or has expired'});
     if(e instanceof PwSignupLimitedError) return reply.code(429).send({error:'Signups are temporarily limited'});
     if(e instanceof MailUnavailableError) return reply.code(503).send({error:'Email sending is not available'});
     return reply.code(400).send({error:'Invalid request'});
@@ -255,26 +257,34 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.post('/auth/register',async(request:any,reply:any)=>{
     if(limited(request,reply)) return reply;
     const p=Reg.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
-    if(!mailLimiter.take(p.data.email.toLowerCase())) return reply.code(202).send({status:'check_your_email'}); // silent: no signal
+    if(!mailLimiter.take(p.data.email.toLowerCase())) return reply.code(202).send({status:'code_sent'}); // silent: no signal
     try { await pw.register(p.data.email,p.data.password,p.data.name); } catch(e) { return fail(reply,e); }
-    return reply.code(202).send({status:'check_your_email'});
+    return reply.code(202).send({status:'code_sent'});
+   });
+   fastify.post('/auth/resend-verification',async(request:any,reply:any)=>{
+    if(limited(request,reply)) return reply;
+    const p=Forgot.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
+    if(mailLimiter.take(p.data.email.toLowerCase())) { try { await pw.resendVerification(p.data.email); } catch(e) { return fail(reply,e); } }
+    return reply.code(202).send({status:'code_sent'});
    });
    fastify.post('/auth/verify-email',async(request:any,reply:any)=>{
     if(limited(request,reply)) return reply;
-    const p=Tok.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
-    try { await pw.verifyEmail(p.data.token); } catch(e) { return fail(reply,e); }
+    const p=Verify.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
+    if(!codeLimiter.take(p.data.email.toLowerCase())) return reply.code(429).send({error:'Too many attempts. Request a new code'});
+    try { await pw.verifyEmail(p.data.email,p.data.code); } catch(e) { return fail(reply,e); }
     return {status:'verified'};
    });
    fastify.post('/auth/forgot-password',async(request:any,reply:any)=>{
     if(limited(request,reply)) return reply;
     const p=Forgot.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
     if(mailLimiter.take(p.data.email.toLowerCase())) { try { await pw.forgotPassword(p.data.email); } catch(e) { return fail(reply,e); } }
-    return reply.code(202).send({status:'check_your_email'});
+    return reply.code(202).send({status:'code_sent'});
    });
    fastify.post('/auth/reset-password',async(request:any,reply:any)=>{
     if(limited(request,reply)) return reply;
     const p=Reset.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
-    try { await pw.resetPassword(p.data.token,p.data.password); } catch(e) { return fail(reply,e); }
+    if(!codeLimiter.take(p.data.email.toLowerCase())) return reply.code(429).send({error:'Too many attempts. Request a new code'});
+    try { await pw.resetPassword(p.data.email,p.data.code,p.data.password); } catch(e) { return fail(reply,e); }
     return {status:'password_updated'};
    });
    fastify.post('/auth/login',async(request:any,reply:any)=>{
@@ -336,8 +346,6 @@ if(require.main===module) {
     services.provisioning=new ProvisioningService(new PrismaProvisioningStore(prisma),()=>creationLimiter.take('new-accounts'));
    }
    if(process.env.LEADLOOM_PASSWORD_AUTH_ENABLED==='true') {
-    const baseUrl=process.env.LEADLOOM_PASSWORD_AUTH_BASE_URL;
-    if(!baseUrl||!/^https?:\/\//.test(baseUrl))throw new Error('LEADLOOM_PASSWORD_AUTH_BASE_URL (web origin) required when password auth is enabled');
     const {createTransactionalEmail}=await import('./modules/email/transactional.js');
     let mailer=createTransactionalEmail(process.env,(u,i)=>fetch(u,i as any) as any);
     const sinkFile=process.env.LEADLOOM_DEV_MAIL_SINK_FILE;
@@ -348,7 +356,7 @@ if(require.main===module) {
     }
     const {PrismaPasswordStore}=await import('./modules/password-auth/prisma-password-store.js');
     const signupCap=new SlidingWindowLimiter(Number(process.env.LEADLOOM_SIGNUP_HOURLY_CAP??20),3_600_000);
-    services.passwordAccounts=new PasswordAccountService(new PrismaPasswordStore(prisma),mailer,{baseUrl,creationGate:()=>signupCap.take('new-password-accounts')});
+    services.passwordAccounts=new PasswordAccountService(new PrismaPasswordStore(prisma),mailer,{resendCooldownSeconds:Math.max(1,Number(process.env.LEADLOOM_OTP_RESEND_COOLDOWN_SECONDS??60)),otpKey:createHmac('sha256',services.sessionKey).update('leadloom-otp-v1').digest(),creationGate:()=>signupCap.take('new-password-accounts')});
    }
    // Opt-in product APIs, default OFF in every environment. Each requires an
    // explicit env flag; providers still need per-workspace BYOK keys at call
