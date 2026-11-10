@@ -1,13 +1,13 @@
 # LeadLoom: Working-Product Plan (phases and teams)
 
-Direction from Kamal (2026-11-10 18:38): functionality first. Design polish comes later. Everything below keeps the main-only workflow. All new capability ships default-off behind flags. Nothing here implies a deploy, real provider calls, real sends or spend.
+Direction from Kamal (2026-11-10): functionality first. Design polish comes later. Everything below keeps the main-only workflow. All new capability ships default-off behind flags. Nothing here implies a deploy, real provider calls, real sends or spend.
 
 ## Ground rules
 - Branch: `main` only. Commits as Kamal. Pull before push. Never reset --hard, never overwrite `.env`.
 - Design uses CSS variables (tokens) only: no hard-coded colors in new code. Light and dark themes for the dashboard.
 - Demo content stays labelled demo. An incomplete API is never described as working.
 - Connector behavior is built from public docs and our own code. No copied proprietary code or assets, no access-control bypass. Reused code from Kamal's own DMPilot / BakeryPOS repos keeps its own license and his ownership.
-- The product reference is not named in the app or public docs.
+- No competitor or reference product is named in the app or public docs.
 
 ## Teams
 | Team | Who | Owns |
@@ -19,7 +19,7 @@ Direction from Kamal (2026-11-10 18:38): functionality first. Design polish come
 Contracts live in `packages/contracts`. A change there is announced in `docs/context/SYNC_FEED.md`.
 
 ## Phases
-**Phase 0: release hygiene (Gamma, done a5f2d5e).** Migration history compatible with the old recorded history and fresh DBs, verified on PG16 fixtures. Release condition: `migrate deploy` applies only `20261111_inbound_sync_ensure`. A redeploy needs Kamal's approval.
+**Phase 0: release hygiene (Gamma).** Existing history untouched (checksums byte-identical); fresh installs use `packages/database/scripts/bootstrap-fresh.sh` (see MIGRATIONS.md). A redeploy needs Kamal's approval.
 
 **Phase 1: auth and app shell.**
 - Alpha: NextAuth (Auth.js v5) in `apps/web`, credentials plus Google/GitHub providers behind env, session cookie, protected `/app/*` layout, theme tokens, light/dark toggle, sidebar shell reusing DMPilot/BakeryPOS components and the grid-gradient background in LeadLoom tokens.

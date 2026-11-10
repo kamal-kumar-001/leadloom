@@ -14,5 +14,3 @@ Method: public vendor API docs and open-source SDKs only. Each connector impleme
 | Notifications and hooks | Slack, generic signed webhooks (HMAC-SHA256) | OAuth2 / secret | Inbound HMAC endpoint not built yet |
 
 Not planned: scraping LinkedIn or any site whose terms forbid it; bypassing logins or captchas.
-
-Open item: the intended product Kamal described as "Power GTM" is unconfirmed (PRD names PumpGTM). The catalogue above is generic, so it does not depend on the answer. A feature-by-feature comparison is done once the product is confirmed, from public docs only.
