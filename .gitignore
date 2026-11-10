@@ -1,0 +1,70 @@
+# ==========================================
+# LeadLoom — Monorepo Git Ignore Specification
+# ==========================================
+
+# Dependencies & Package Managers
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+package-lock.json
+yarn.lock
+
+# Turborepo & Build Artifacts
+.turbo/
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+
+# Environment & Secrets (NEVER COMMIT CREDENTIALS)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Database & Local Storage Mounts
+postgres_data/
+redis_data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs & Runtime
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pids
+*.pid
+*.seed
+
+# Testing, Coverage & Playwright
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# OS Specific Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs & Editor Metadata (keep team config if needed)
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json

@@ -1,0 +1,139 @@
+version: '3.8'
+
+# LeadLoom — Single-VPS Ultra-Low-Cost Monolith Deployment
+# Target Host: 2 vCPU, 4GB RAM, 40GB NVMe SSD ($4-$6/mo on Hetzner / OVH / DigitalOcean)
+# Total RAM Allocation: ~3.4GB (Leaves 600MB + Swap for Host OS)
+
+services:
+  # 1. PostgreSQL 16 with pgvector extension (Relational + Dynamic JSONB + Embeddings)
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: leadloom-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-leadloom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadloom_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-leadloom_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          memory: 512M
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=60
+      -c random_page_cost=1.1
+      -c effective_cache_size=768MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leadloom} -d ${POSTGRES_DB:-leadloom_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis 7 Alpine (Queues, Rate-Limit Token Bucket, 30-Day Domain Cache)
+  redis:
+    image: redis:7-alpine
+    container_name: leadloom-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 384mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+        reservations:
+          memory: 128M
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. Core Engine & API (NestJS + BullMQ Queue Dispatcher + Vault Service)
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: leadloom-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-leadloom}:${POSTGRES_PASSWORD:-leadloom_secure_pass}@postgres:5432/${POSTGRES_DB:-leadloom_db}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LEADLOOM_MASTER_KEY: ${LEADLOOM_MASTER_KEY:-change_me_to_32_byte_hex_key_before_prod}
+      PORT: 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          memory: 512M
+    ports:
+      - "4000:4000"
+
+  # 4. Web Application (Next.js 14 Standalone Mode + Virtual Grid UI)
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: leadloom-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      PORT: 3000
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 512M
+        reservations:
+          memory: 256M
+    ports:
+      - "3000:3000"
+
+  # 5. Playwright Headless Scraping Worker (Resource-Fenced Browser Isolation)
+  scraper-worker:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile.scraper
+    container_name: leadloom-scraper
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DATABASE_URL: postgresql://${POSTGRES_USER:-leadloom}:${POSTGRES_PASSWORD:-leadloom_secure_pass}@postgres:5432/${POSTGRES_DB:-leadloom_db}
+      PLAYWRIGHT_CONCURRENCY: 2
+    depends_on:
+      - redis
+      - postgres
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 640M
+        reservations:
+          memory: 256M
+
+volumes:
+  postgres_data:
+  redis_data:

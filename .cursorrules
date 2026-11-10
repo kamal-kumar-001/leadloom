@@ -1,0 +1,16 @@
+# LeadLoom Cursor & Multi-Agent Orchestrator Rules
+
+You are working on LeadLoom in a 3-Team Monorepo topology (Turborepo, Next.js 14, NestJS, BullMQ, Redis, PostgreSQL + pgvector).
+
+## Core Governance & Anti-Context-Loss Directives
+1. **Identify Your Team Persona First:**
+   - Team Alpha: `apps/web/**`, `packages/ui/**`, `packages/webgl-scenes/**`
+   - Team Beta: `apps/engine/src/modules/{waterfall,signals,ai-researcher,validator}/**`, `workers/scraper/**`
+   - Team Gamma: `apps/engine/src/modules/{outbound,auth,vault}/**`, `packages/database/**`, `docker/**`
+2. **Never Violate Physical Directory Fencing:** Never edit files outside your assigned team directory. Propose cross-team changes via `packages/contracts`.
+3. **Zero-Context-Read Rule:** Never scan foreign team code. Read only the last 20 lines of `docs/context/SYNC_FEED.md` for cross-team updates.
+4. **Contract-First Development:** Consume deterministic mock fixtures from `packages/contracts/src/mocks.ts` so UI and backend work in parallel.
+5. **Security & FinOps Invariants:**
+   - BYOK keys: AES-256-GCM envelope encryption only.
+   - 3D WebGL assets: Draco-compressed, strictly $\le 500\text{KB}$ total bundle.
+   - Hosting footprint: Single 4GB VPS monolith running under 3.5GB RAM.
