@@ -66,7 +66,7 @@ function LoginForm() {
       }
 
       // Success: navigate to application dashboard
-      const callbackUrl = searchParams.get('callbackUrl') || '/app/tables';
+      const callbackUrl = searchParams.get('callbackUrl') || '/app';
       router.push(safeCallback(callbackUrl));
     } catch {
       setErrorMessage('Unable to connect to authentication service. Please check your connection.');
@@ -105,7 +105,7 @@ function LoginForm() {
       )}
 
       {/* OAuth Buttons */}
-      <OAuthButtons mode="signin" callbackUrl={searchParams.get('callbackUrl') || '/app/tables'} />
+      <OAuthButtons mode="signin" callbackUrl={searchParams.get('callbackUrl') || '/app'} />
 
       {methods.password && (
       <>

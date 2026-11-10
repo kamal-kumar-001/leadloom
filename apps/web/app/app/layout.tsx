@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppSidebar } from '../../components/shell/app-sidebar';
 import { AppTopbar } from '../../components/shell/app-topbar';
+import { IdentityProvider, type ShellIdentity } from '../../components/shell/identity';
 import { fetchAuthMe, provisionWorkspace } from '../../lib/engine-client';
 import { Badge, Button } from '@leadloom/ui';
 import { ShieldAlert, RefreshCw, AlertCircle } from 'lucide-react';
@@ -13,6 +14,7 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [identity, setIdentity] = useState<ShellIdentity>({ email: null, workspaceId: null, role: null });
   const [engineState, setEngineState] = useState<{
     status: 'checking' | 'verified' | 'provisioning' | 'error';
     error?: string;
@@ -26,6 +28,7 @@ export default function AppLayout({
         let me = await fetchAuthMe();
         if (!mounted) return;
         if (me.data?.userId) {
+          setIdentity((i) => ({ ...i, workspaceId: me.data!.workspaceId, role: me.data!.role }));
           setEngineState({ status: 'verified' });
           return;
         }
@@ -46,6 +49,7 @@ export default function AppLayout({
           me = await fetchAuthMe();
           if (!mounted) return;
           if (me.data?.userId) {
+            setIdentity((i) => ({ ...i, workspaceId: me.data!.workspaceId, role: me.data!.role }));
             setEngineState({ status: 'verified' });
             return;
           }
@@ -68,6 +72,10 @@ export default function AppLayout({
     }
 
     checkEngineIdentity();
+    fetch('/api/auth/session')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (mounted && j?.user?.email) setIdentity((i) => ({ ...i, email: j.user.email })); })
+      .catch(() => {});
     return () => {
       mounted = false;
     };
@@ -107,8 +115,8 @@ export default function AppLayout({
   }
 
   return (
+    <IdentityProvider value={identity}>
     <div className="flex h-screen bg-canvas overflow-hidden font-sans">
-      <div role="status" className="fixed bottom-2 right-2 z-50 rounded-md border border-brand-loom/30 bg-canvas-surface/90 px-2 py-1 text-[10px] font-mono text-text-muted select-none pointer-events-none">Sample workspace data - not live results</div>
       {/* Desktop Sidebar */}
       <div className="hidden md:flex">
         <AppSidebar />
@@ -135,5 +143,6 @@ export default function AppLayout({
         </main>
       </div>
     </div>
+    </IdentityProvider>
   );
 }

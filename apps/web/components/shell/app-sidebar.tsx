@@ -19,6 +19,7 @@ import {
   Cpu,
 } from 'lucide-react';
 import { WorkspaceSwitcher } from './workspace-switcher';
+import { useShellIdentity } from './identity';
 import { Badge } from '@leadloom/ui';
 
 interface NavItem {
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const identity = useShellIdentity();
 
   return (
     <aside className="w-64 bg-canvas-surface border-r border-border-subtle flex flex-col shrink-0 select-none h-screen">
@@ -125,11 +127,11 @@ export function AppSidebar() {
         <div className="flex items-center justify-between p-2 rounded-lg bg-canvas-surface border border-border-subtle">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 rounded-full bg-accent-loom/20 border border-brand-loom/30 flex items-center justify-center text-xs font-bold text-brand-loom">
-              K
+              {(identity.email || '?').charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-text-primary truncate">Kamal (Admin)</div>
-              <div className="text-[10px] text-text-muted truncate">demo@leadloom.dev</div>
+              <div className="text-xs font-semibold text-text-primary truncate">{identity.email || 'Signed in'}</div>
+              <div className="text-[10px] text-text-muted truncate">{identity.role || ''}</div>
             </div>
           </div>
           <button

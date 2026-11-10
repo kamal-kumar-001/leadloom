@@ -30,7 +30,7 @@ export function useAuthMethods(): AuthMethods {
 }
 
 /** Only same-site paths are accepted as a post-login destination (no open redirect). */
-export function safeCallback(raw: string | null | undefined, fallback = '/app/tables'): string {
+export function safeCallback(raw: string | null | undefined, fallback = '/app'): string {
   if (!raw) return fallback;
   try {
     if (raw.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/\\')) return raw;

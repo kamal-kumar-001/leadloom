@@ -23,17 +23,9 @@ export default function AppPage() {
     error: null,
   });
 
-  const [experimentsState, setExperimentsState] = useState<CardState<number>>({
-    data: null,
-    isLoading: true,
-    error: null,
-  });
-
-  const [jobsState, setJobsState] = useState<CardState<number>>({
-    data: null,
-    isLoading: true,
-    error: null,
-  });
+  // The engine exposes no list endpoint for these yet (only POST), so no count is shown.
+  const experimentsState: CardState<number> = { data: null, isLoading: false, error: null, unavailable: true };
+  const jobsState: CardState<number> = { data: null, isLoading: false, error: null, unavailable: true };
 
   const loadUserInfo = useCallback(async () => {
     setUserLoading(true);
@@ -91,64 +83,10 @@ export default function AppPage() {
     }
   }, []);
 
-  const loadExperiments = useCallback(async () => {
-    setExperimentsState({ data: null, isLoading: true, error: null });
-    try {
-      const res = await engineFetch<unknown[]>('/validator/experiments');
-      if (res.data) {
-        setExperimentsState({
-          data: Array.isArray(res.data) ? res.data.length : 0,
-          isLoading: false,
-          error: null,
-        });
-      } else {
-        setExperimentsState({
-          data: null,
-          isLoading: false,
-          error: res.error || 'Validator experiments unavailable',
-        });
-      }
-    } catch (err: unknown) {
-      setExperimentsState({
-        data: null,
-        isLoading: false,
-        error: err instanceof Error ? err.message : 'Failed to load experiments',
-      });
-    }
-  }, []);
-
-  const loadJobs = useCallback(async () => {
-    setJobsState({ data: null, isLoading: true, error: null });
-    try {
-      const res = await engineFetch<unknown[]>('/outbound/jobs');
-      if (res.data) {
-        setJobsState({
-          data: Array.isArray(res.data) ? res.data.length : 0,
-          isLoading: false,
-          error: null,
-        });
-      } else {
-        setJobsState({
-          data: null,
-          isLoading: false,
-          error: res.error || 'Outbound jobs unavailable',
-        });
-      }
-    } catch (err: unknown) {
-      setJobsState({
-        data: null,
-        isLoading: false,
-        error: err instanceof Error ? err.message : 'Failed to load jobs',
-      });
-    }
-  }, []);
-
   useEffect(() => {
     loadUserInfo();
     loadKeys();
-    loadExperiments();
-    loadJobs();
-  }, [loadUserInfo, loadKeys, loadExperiments, loadJobs]);
+  }, [loadUserInfo, loadKeys]);
 
   const hasProviderKeys = Boolean(keysState.data && keysState.data > 0);
 
@@ -168,8 +106,8 @@ export default function AppPage() {
         experimentsState={experimentsState}
         jobsState={jobsState}
         onRetryKeys={loadKeys}
-        onRetryExperiments={loadExperiments}
-        onRetryJobs={loadJobs}
+        onRetryExperiments={() => {}}
+        onRetryJobs={() => {}}
       />
 
       {/* 3. Getting Started Checklist */}

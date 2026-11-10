@@ -13,7 +13,7 @@ interface OAuthButtonsProps {
 
 export function OAuthButtons({
   mode = 'signin',
-  callbackUrl = '/app/tables',
+  callbackUrl = '/app',
   disabled = false,
 }: OAuthButtonsProps) {
   const [loadingProvider, setLoadingProvider] = useState<'google' | 'github' | null>(null);

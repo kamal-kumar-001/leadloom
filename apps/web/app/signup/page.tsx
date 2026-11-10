@@ -79,7 +79,7 @@ function SignupForm() {
       )}
 
       {/* Primary OAuth Actions */}
-      <OAuthButtons mode="signup" callbackUrl="/app/tables" />
+      <OAuthButtons mode="signup" callbackUrl="/app" />
 
       {methods.password && (
       <>

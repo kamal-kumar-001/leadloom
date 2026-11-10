@@ -9,6 +9,8 @@ export interface CardState<T = number> {
   data: T | null;
   isLoading: boolean;
   error: string | null;
+  /** The engine has no endpoint for this yet: show an honest label, never a number. */
+  unavailable?: boolean;
 }
 
 interface StatCardsGridProps {
@@ -21,6 +23,9 @@ interface StatCardsGridProps {
 }
 
 function renderValue(state: CardState<number>, onRetry: () => void) {
+  if (state.unavailable) {
+    return <span className="text-sm font-normal text-text-muted">Not available yet</span>;
+  }
   if (state.isLoading) {
     return <div className="h-7 w-12 rounded bg-canvas-elevated animate-pulse my-0.5" />;
   }
