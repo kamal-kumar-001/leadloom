@@ -2,7 +2,7 @@ import React from 'react';
 import { cn } from './utils';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'verified' | 'catchall' | 'failed' | 'loom' | 'matrix' | 'muted';
+  variant?: 'verified' | 'catchall' | 'failed' | 'loom' | 'matrix' | 'muted' | 'subtle';
   children: React.ReactNode;
 }
 
@@ -14,6 +14,7 @@ export function Badge({ className, variant = 'muted', children, ...props }: Badg
     loom: 'bg-brand-loom/10 text-brand-loom border-brand-loom/30',
     matrix: 'bg-brand-matrix/10 text-brand-matrix border-brand-matrix/30 font-mono',
     muted: 'bg-canvas-elevated text-text-muted border-border-subtle',
+    subtle: 'bg-canvas-elevated text-text-muted border-border-subtle',
   };
 
   return (

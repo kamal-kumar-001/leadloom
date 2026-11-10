@@ -23,6 +23,7 @@
     "gsap": "^3.12.5",
     "lucide-react": "^0.469.0",
     "next": "^15.5.29",
+    "next-auth": "^5.0.0-beta.32",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "sonner": "^2.0.0",
