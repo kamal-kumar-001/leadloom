@@ -14,4 +14,4 @@ Goal: a working dashboard shell, not more marketing polish.
 
 Done means: `next build` passes, light and dark screenshots at 390px and 1280px, no console errors.
 
-7. Public copy: remove competitor and reference-product names from `apps/web/app/layout.tsx` metadata, `apps/web/app/(marketing)/page.tsx` and `apps/web/components/marketing/savings-calculator.tsx`. Keep a comparison claim only if it can be verified from public sources; otherwise reword it generically ("hosted GTM platforms"). Do not describe the live site as updated until a release ships.
+7. Public copy: remove the reference-product name from `apps/web/app/layout.tsx` metadata, `apps/web/app/(marketing)/page.tsx` and `apps/web/components/marketing/savings-calculator.tsx`. Other comparison claims stay unless they cannot be verified from public sources; reword those generically. Do not describe the live site as updated until a release ships.
