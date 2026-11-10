@@ -185,3 +185,10 @@
 - Built Stage 1 email/password and 6-digit OTP verification/reset screens in `apps/web`: `components/auth/**` (shared `AuthCard`, `PasswordInput` with show/hide, `OtpInput`, `ResendCountdown` with 60s cooldown, `AuthAlert`, `OAuthButtons`), `app/login/page.tsx` (`signIn('credentials')` with generic credential errors & unverified routing), `app/signup/page.tsx`, `app/verify-email/page.tsx`, and `app/forgot-password/page.tsx` (request, 6-digit code, new password).
 - All screens use theme tokens (0 hardcoded colors) and call same-origin `/api/auth-flow/<action>`. `tsc --noEmit` and `next build` (19/19 routes) pass cleanly.
 
+
+---
+
+### [2026-11-11T00:20:00+05:30] Team Gamma | tokens, packages/ui, docs/plan/DASHBOARD_BETA.md | Non-Breaking
+- Added --accent-hover and --on-accent tokens; primary Button uses them; removed per-page `text-white`/weave-hover overrides.
+- Added Card, StatCard, EmptyState to @leadloom/ui.
+- Beta: /app overview task is in docs/plan/DASHBOARD_BETA.md.

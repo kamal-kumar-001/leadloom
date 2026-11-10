@@ -79,7 +79,7 @@ export default function MailboxesPage() {
             size="sm"
             variant="primary"
             onClick={() => handleConnectProvider('Microsoft 365')}
-            className="text-xs bg-brand-loom hover:bg-brand-weave text-white gap-1.5"
+            className="text-xs gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>+ Microsoft 365</span>

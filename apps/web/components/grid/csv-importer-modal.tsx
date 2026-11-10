@@ -268,7 +268,7 @@ export function CsvImporterModal({
                   type="submit"
                   variant="primary"
                   size="sm"
-                  className="bg-brand-loom hover:bg-brand-weave text-white gap-1.5"
+                  className=" gap-1.5"
                 >
                   Preview Mapping
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -323,7 +323,7 @@ export function CsvImporterModal({
                   variant="primary"
                   size="sm"
                   onClick={handleExecuteImport}
-                  className="bg-brand-loom hover:bg-brand-weave text-white gap-1.5"
+                  className=" gap-1.5"
                 >
                   <Database className="w-3.5 h-3.5" />
                   Import {rawRows.length} Rows

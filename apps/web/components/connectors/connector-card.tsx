@@ -168,7 +168,7 @@ export function ConnectorCard({
             variant="primary"
             size="sm"
             onClick={() => onConfigure(meta)}
-            className="w-full text-xs gap-1.5 h-8 bg-brand-loom hover:bg-brand-weave text-white"
+            className="w-full text-xs gap-1.5 h-8"
           >
             <Lock className="w-3.5 h-3.5" />
             Connect Vault Key

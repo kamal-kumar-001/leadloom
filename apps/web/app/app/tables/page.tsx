@@ -90,7 +90,7 @@ export default function TablesPage() {
             size="sm"
             variant="primary"
             onClick={() => runWaterfallForSelected()}
-            className="text-xs py-1.5 bg-brand-loom hover:bg-brand-weave text-white gap-1.5"
+            className="text-xs py-1.5 gap-1.5"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
             <span>Simulate Waterfall</span>

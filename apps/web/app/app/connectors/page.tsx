@@ -221,7 +221,7 @@ export default function ConnectorsPage() {
               onClick={() => setActiveCategory(cat)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
                 activeCategory === cat
-                  ? 'bg-brand-loom text-white'
+                  ? 'bg-brand-loom text-text-onAccent'
                   : 'bg-canvas-surface text-text-muted hover:text-text-primary border border-border-subtle'
               }`}
             >

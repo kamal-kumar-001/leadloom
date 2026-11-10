@@ -225,7 +225,7 @@ export function ByokVaultModal({
               variant="primary"
               size="sm"
               disabled={saving}
-              className="bg-brand-loom hover:bg-brand-weave text-white gap-1.5 px-4"
+              className=" gap-1.5 px-4"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               {saving ? 'Encrypting...' : 'Save to Vault'}

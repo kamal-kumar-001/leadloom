@@ -27,6 +27,7 @@ const config: Config = {
         brand: {
           loom: 'var(--accent-loom)',
           loomGlow: 'var(--accent-loom-glow)',
+          loomHover: 'var(--accent-hover)',
           weave: 'var(--accent-weave)',
           matrix: 'var(--accent-matrix)',
         },
@@ -41,6 +42,7 @@ const config: Config = {
           secondary: 'var(--text-secondary)',
           muted: 'var(--text-muted)',
           inverse: 'var(--text-inverse)',
+          onAccent: 'var(--on-accent)',
           mono: 'var(--text-mono)',
         },
       },

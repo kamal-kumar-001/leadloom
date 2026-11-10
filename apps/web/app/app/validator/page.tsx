@@ -58,7 +58,7 @@ export default function ValidatorPage() {
             size="sm"
             variant="primary"
             onClick={() => setIsModalOpen(true)}
-            className="text-xs bg-brand-loom hover:bg-brand-weave text-white gap-1.5"
+            className="text-xs gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New Hypothesis</span>
