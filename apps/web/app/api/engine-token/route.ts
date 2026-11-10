@@ -13,13 +13,23 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized: valid session required' }, { status: 401 });
   }
 
-  const rawSecret =
-    process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    'leadloom-insecure-dev-secret-key-at-least-32-chars-long-0123456789';
+  let key: Buffer;
+  if (process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET) {
+    // Engine in apps/engine/src/main.ts decodes this as base64
+    const b64Buf = Buffer.from(process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET, 'base64');
+    if (b64Buf.length >= 32) {
+      key = b64Buf;
+    } else {
+      key = Buffer.from(process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET, 'utf-8');
+    }
+  } else {
+    const rawSecret =
+      process.env.NEXTAUTH_SECRET ||
+      'leadloom-insecure-dev-secret-key-at-least-32-chars-long-0123456789';
+    key = Buffer.from(rawSecret, 'utf-8');
+  }
 
   // Ensure bridge secret has at least 32 bytes
-  let key = Buffer.from(rawSecret, 'utf-8');
   if (key.length < 32) {
     key = Buffer.concat([key, Buffer.alloc(32 - key.length, 0)]);
   }

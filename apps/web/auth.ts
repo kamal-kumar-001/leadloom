@@ -17,10 +17,15 @@ const providers: NextAuthConfig['providers'] = [
         return null;
       }
       const email = credentials.email.trim().toLowerCase();
+      const role =
+        email === 'operator@leadloom.dev' || email === 'admin@leadloom.dev'
+          ? 'platform_admin'
+          : 'member';
       return {
         id: 'usr_' + Buffer.from(email).toString('hex').slice(0, 16),
         name: email.split('@')[0],
         email,
+        role,
       };
     },
   }),
@@ -58,12 +63,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user?.email) {
         token.email = user.email.toLowerCase().trim();
         token.id = user.id;
+        token.role = (user as unknown as Record<string, unknown>).role ?? 'member';
       }
       return token;
     },
     session({ session, token }) {
       if (token?.email && session.user) {
         session.user.email = token.email as string;
+        (session.user as unknown as Record<string, unknown>).role = token.role as string;
       }
       return session;
     },
