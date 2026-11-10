@@ -137,3 +137,13 @@
 - Enforced platform operator role gate in NextAuth edge middleware for `/admin/*` routes; non-operator users are prevented from accessing the platform administration console.
 - Updated `/api/engine-token` route to support base64 decoded `LEADLOOM_NEXTAUTH_BRIDGE_SECRET` matching Gamma's `apps/engine/src/main.ts` line 258.
 - Production build `npm run build --workspace @leadloom/web` compiles cleanly (17/17 routes generated).
+
+---
+
+### [2026-11-10T22:00:00Z] Team Beta | packages/contracts & apps/engine waterfall | Non-Breaking
+- Sanitized `raw` payloads across Apollo, OpenAI, and Ollama connectors, replacing provider payloads with allowlisted non-personal metadata (model, status, tokens, duration) and added privacy tests verifying zero emails, prompts, or API keys in `raw`.
+- Created `ConnectorCredentialStore` write-only port and `InMemoryConnectorCredentialStore` under `modules/waterfall/credentials`: AES-256-GCM context-bound encryption sealed with per-workspace context AAD, failing closed if `LEADLOOM_CREDENTIAL_KEK` is unset or invalid. Masked status API never leaks plaintext credentials. Added unit tests for sealing, isolation, tampering, and key masking.
+- Created `packages/contracts/src/connector-catalog.contract.ts`: Zod schema for the 10 connectors (`id`, `label`, `capabilities`, `needsKey`, `localOnly`) and `buildConnectorCatalog()` builder for Team Alpha's connector hub.
+- Created `TestConnectionService` in `modules/waterfall/connectors`: returns `DISABLED` unless `LEADLOOM_CONNECTORS_LIVE_ENABLED=true` and workspace is entitled via `WaterfallEntitlementPort`. Tested using fake fetch (0 live calls).
+- All 33 engine test files (218 passed, 8 skipped) and `tsc --noEmit` pass cleanly.
+

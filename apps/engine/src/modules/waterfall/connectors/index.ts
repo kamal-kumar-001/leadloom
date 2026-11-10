@@ -11,3 +11,4 @@ export * from './serper.connector';
 export * from './openai.connector';
 export * from './anthropic.connector';
 export * from './ollama.connector';
+export * from './test-connection.service';

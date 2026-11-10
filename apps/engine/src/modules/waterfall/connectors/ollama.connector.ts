@@ -138,7 +138,11 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
           totalDuration: json.total_duration,
           evalCount: json.eval_count,
         },
-        raw: json as Record<string, unknown>,
+        raw: {
+          model: json.model ?? model,
+          totalDuration: json.total_duration,
+          evalCount: json.eval_count,
+        },
       };
     } catch (err) {
       return {

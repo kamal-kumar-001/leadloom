@@ -178,7 +178,18 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
               }
             : undefined,
         },
-        raw: json as Record<string, unknown>,
+        raw: {
+          id: json.id,
+          model: json.model ?? model,
+          finishReason: choice?.finish_reason,
+          usage: json.usage
+            ? {
+                promptTokens: json.usage.prompt_tokens ?? 0,
+                completionTokens: json.usage.completion_tokens ?? 0,
+                totalTokens: json.usage.total_tokens ?? 0,
+              }
+            : undefined,
+        },
       };
     } catch (err) {
       return {

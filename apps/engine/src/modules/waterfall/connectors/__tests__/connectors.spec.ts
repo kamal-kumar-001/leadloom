@@ -929,5 +929,103 @@ describe('Documented Vendor Fixtures & Endpoint Contracts', () => {
         usage: { input_tokens: 10, output_tokens: 20 },
       });
     });
+
+    it('Apollo: raw contains only allowlisted non-personal metadata, no email or key', async () => {
+      const apollo = new ApolloConnector();
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          person: {
+            first_name: 'Tim',
+            last_name: 'Cook',
+            email: testEmail,
+            email_status: 'verified',
+            organization: { name: 'Apple' },
+          },
+        }),
+      }));
+
+      const res = await apollo.run(
+        { email: testEmail, domain: 'apple.com' },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({
+        emailStatus: 'verified',
+        confidence: 0.95,
+      });
+    });
+
+    it('OpenAI: raw contains only allowlisted non-personal metadata, no prompt/email or key', async () => {
+      const openai = new OpenAiConnector();
+      const promptContent = `Target lead email is ${testEmail}`;
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'chatcmpl-999',
+          model: 'gpt-4o-mini',
+          choices: [{ message: { content: `Analysis of ${testEmail}` }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 15, completion_tokens: 25, total_tokens: 40 },
+        }),
+      }));
+
+      const res = await openai.run(
+        { messages: [{ role: 'user', content: promptContent }] },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({
+        id: 'chatcmpl-999',
+        model: 'gpt-4o-mini',
+        finishReason: 'stop',
+        usage: { promptTokens: 15, completionTokens: 25, totalTokens: 40 },
+      });
+    });
+
+    it('Ollama: raw contains only allowlisted non-personal metadata, no prompt or email', async () => {
+      const ollama = new OllamaConnector();
+      const promptContent = `Local prompt regarding ${testEmail}`;
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          model: 'llama3',
+          message: { content: `Local response with ${testEmail}` },
+          done: true,
+          total_duration: 123456,
+          eval_count: 42,
+        }),
+      }));
+
+      const res = await ollama.run(
+        { messages: [{ role: 'user', content: promptContent }] },
+        { fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(res.raw).toEqual({
+        model: 'llama3',
+        totalDuration: 123456,
+        evalCount: 42,
+      });
+    });
   });
 });

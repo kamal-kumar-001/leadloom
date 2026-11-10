@@ -169,7 +169,10 @@ export class ApolloConnector implements Connector<ApolloInput, ApolloPersonOutpu
             linkedinUrl: person?.linkedin_url,
             confidence: 0,
           },
-          raw: json as Record<string, unknown>,
+          raw: {
+            emailStatus: null,
+            confidence: 0,
+          },
         };
       }
 
@@ -193,7 +196,10 @@ export class ApolloConnector implements Connector<ApolloInput, ApolloPersonOutpu
           linkedinUrl: person.linkedin_url,
           confidence,
         },
-        raw: json as Record<string, unknown>,
+        raw: {
+          emailStatus,
+          confidence,
+        },
       };
     } catch (err) {
       return {

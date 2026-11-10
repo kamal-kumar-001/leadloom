@@ -5,3 +5,4 @@ export * from './vault.contract';
 export * from './grid.contract';
 export * from './mocks';
 export * from './entitlements.contract';
+export * from './connector-catalog.contract';
