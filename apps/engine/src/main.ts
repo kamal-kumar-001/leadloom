@@ -74,6 +74,12 @@ export async function createApplication(services?:RuntimeServices) {
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
   };
+  // Who am I: lets the web app gate /app and /admin on the engine's own answer.
+  // Identity, workspace and role come only from the engine's tables. Never accepts input.
+  fastify.get('/auth/me',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply);if(!session)return;
+   return {userId:session.sub,workspaceId:session.workspaceId,role:session.role};
+  });
   // First sign-in provisioning. Authenticated ONLY by a bridge token (verified
   // email). The body can supply a display name and nothing else: workspace and
   // role are always server-assigned (new workspace, admin of it alone).

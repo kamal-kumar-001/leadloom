@@ -25,6 +25,8 @@ Alpha (`apps/web`, `packages/ui`):
 Gamma (engine, auth, database, integration):
 - Bridge, provisioning, access guard, tenant isolation, rate limits: built and tested (see FOUNDATIONS.md and MIGRATIONS.md). Gamma verifies Alpha's work against the real engine in a browser and reports gaps.
 - Needs a deployed-like run: engine and web together on a local or lab-test setup with fixture data. No production deploy.
+- `GET /auth/me` (bridge or session token) returns the engine's own userId, workspaceId and role, 401 otherwise. The web app uses it to gate `/app` and `/admin`.
+- Local harness: `scripts/dev/stage1-harness.sh up` (local database, throwaway secrets, bridge and sign-up on).
 - Open engine work for login: client IP passthrough for the per-IP limiter, a password path only if Kamal wants one, an email verification step only when a real mail sender is approved.
 
 Beta: paused. Finish only what is already in flight and safe to stop (commit it if tests pass, otherwise leave uncommitted). No new files for stage 3.

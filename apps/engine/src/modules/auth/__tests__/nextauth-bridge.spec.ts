@@ -69,6 +69,13 @@ describe('bridge in runtime (default off, membership from server)', () => {
       expect((await get(on, rw)).statusCode).toBe(200);
       expect(seenWorkspaces).toEqual([wsA]);
       expect((await get(on, mintBridgeToken({ email: 'nobody@example.invalid' }, bridgeKey))).statusCode).toBe(401);
+      const me = (app: typeof on, tok: string) => app.getHttpAdapter().getInstance().inject({ method: 'GET', url: '/auth/me', headers: { authorization: 'Bearer ' + tok } });
+      const meOk = await me(on, rw);
+      expect(meOk.statusCode).toBe(200);
+      expect(JSON.parse(meOk.body)).toMatchObject({ workspaceId: wsA });
+      expect((await me(on, mintBridgeToken({ email: 'nobody@example.invalid' }, bridgeKey))).statusCode).toBe(401);
+      expect((await me(off, rw)).statusCode).toBe(401);
+      expect((await me(on, '')).statusCode).toBe(401);
       const ro = mintBridgeToken({ email: 'ro@example.invalid' }, bridgeKey);
       const res = await on.getHttpAdapter().getInstance().inject({ method: 'POST', url: '/vault/credentials', headers: { authorization: 'Bearer ' + ro }, payload: {} });
       expect(res.statusCode).toBe(403);
