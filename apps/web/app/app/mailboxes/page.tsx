@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { MOCK_MAILBOX_HEALTH } from '@leadloom/contracts';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
+import { fetchWorkspaceMailboxes, type WorkspaceMailboxRow } from '../../../lib/engine-client';
 import { notify } from '@/lib/notify';
 import {
   Mail,
@@ -13,42 +13,86 @@ import {
   RefreshCw,
   Clock,
   Send,
-  Zap,
   Sliders,
   Check,
-  ExternalLink,
+  HelpCircle,
+  XCircle,
 } from 'lucide-react';
 import { DnsInspectorModal } from '../../../components/mailboxes/dns-inspector-modal';
 
+function renderDnsChip(label: 'SPF' | 'DKIM' | 'DMARC', status: string) {
+  const s = (status || 'unknown').toLowerCase();
+  if (s === 'verified' || s === 'pass') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-signal-verified/15 text-signal-verified border border-signal-verified/30">
+        <Check className="w-3 h-3 stroke-[2.5]" />
+        <span>{label}: Verified</span>
+      </span>
+    );
+  }
+  if (s === 'failed' || s === 'fail') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-signal-failed/15 text-signal-failed border border-signal-failed/30">
+        <XCircle className="w-3 h-3 stroke-[2.5]" />
+        <span>{label}: Failed</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-canvas-elevated text-text-muted border border-border-subtle">
+      <HelpCircle className="w-3 h-3" />
+      <span>{label}: Unknown</span>
+    </span>
+  );
+}
+
 export default function MailboxesPage() {
-  const [mailboxes] = useState(MOCK_MAILBOX_HEALTH);
-  const [checking, setChecking] = useState(false);
+  const [mailboxes, setMailboxes] = useState<WorkspaceMailboxRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeDnsDomain, setActiveDnsDomain] = useState<string | null>(null);
 
-  const handleRunHealthCheck = async () => {
-    setChecking(true);
-    await new Promise((r) => setTimeout(r, 600));
-    notify.info('[Sample] Simulated DNS SPF/DKIM/DMARC health verification complete');
-    setChecking(false);
-  };
+  const loadMailboxes = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetchWorkspaceMailboxes();
+      if (res.data) {
+        setMailboxes(res.data);
+      } else {
+        setError(res.error || 'Failed to fetch workspace mailboxes');
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Engine connection error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMailboxes();
+  }, [loadMailboxes]);
 
   const handleConnectProvider = (providerName: string) => {
-    notify.info(`[Sample] Simulated OAuth2 bridge redirect to ${providerName} consent screen`);
+    notify.info(`OAuth2 bridge redirect to ${providerName} consent screen`);
   };
 
+  const totalSendLimit = mailboxes.reduce((acc, m) => acc + (m.dailySendLimit || 0), 0);
+  const totalSentToday = mailboxes.reduce((acc, m) => acc + (m.sentToday || 0), 0);
+  const activeCount = mailboxes.filter((m) => !m.isPaused).length;
+  const avgHealth =
+    mailboxes.length > 0
+      ? `${Math.round(mailboxes.reduce((acc, m) => acc + (m.healthScore || 0), 0) / mailboxes.length)}%`
+      : '—';
+
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-text-primary tracking-tight">
-              Outbound Mailbox Pool
-            </h1>
-            <Badge variant="matrix" className="font-mono text-xs">
-              Demo data
-            </Badge>
-          </div>
+          <h1 className="text-xl font-bold text-text-primary tracking-tight">
+            Outbound Mailbox Pool
+          </h1>
           <p className="text-xs text-text-secondary mt-1">
             Deliverability engine with jittered dispatch (45-180s) and RFC 8058 one-click unsubscribe.
           </p>
@@ -58,12 +102,12 @@ export default function MailboxesPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={handleRunHealthCheck}
-            disabled={checking}
-            className="text-xs"
+            onClick={loadMailboxes}
+            disabled={isLoading}
+            className="text-xs gap-1.5"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
-            <span>Verify DNS Records</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </Button>
 
           <Button
@@ -87,31 +131,32 @@ export default function MailboxesPage() {
         </div>
       </div>
 
-      {/* Overview Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      {/* Honest Overview Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="text-xs text-text-muted">Total Connected Senders</div>
-          <div className="text-2xl font-bold text-text-primary mt-1">{mailboxes.length}</div>
-          <div className="text-[11px] text-signal-verified mt-1 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" /> Warm-up cycle active
+          <div className="text-2xl font-bold text-text-primary mt-1">
+            {isLoading ? '—' : mailboxes.length}
+          </div>
+          <div className="text-[11px] text-text-muted mt-1">
+            {activeCount} active in sender pool
           </div>
         </Card>
 
         <Card className="p-4">
           <div className="text-xs text-text-muted">Aggregate Daily Quota</div>
           <div className="text-2xl font-bold text-text-primary mt-1">
-            {mailboxes.reduce((acc, m) => acc + m.sentToday, 0)} /{' '}
-            {mailboxes.reduce((acc, m) => acc + m.dailySendLimit, 0)}
+            {isLoading ? '—' : `${totalSentToday} / ${totalSendLimit}`}
           </div>
           <div className="text-[11px] text-text-muted mt-1">Safe volume threshold</div>
         </Card>
 
         <Card className="p-4">
           <div className="text-xs text-text-muted">Average Health Score</div>
-          <div className="text-2xl font-bold text-signal-verified mt-1">98%</div>
-          <div className="text-[11px] text-signal-verified mt-1 flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3" /> 100% DNS record alignment
+          <div className="text-2xl font-bold text-text-primary mt-1">
+            {isLoading ? '—' : avgHealth}
           </div>
+          <div className="text-[11px] text-text-muted mt-1">DNS record alignment</div>
         </Card>
 
         <Card className="p-4">
@@ -125,81 +170,108 @@ export default function MailboxesPage() {
 
       {/* Mailbox List */}
       <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-text-primary">Sender Health & Record Validation</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-text-primary">Sender Health & Record Validation</h2>
+          {!isLoading && !error && (
+            <span className="text-xs text-text-muted font-mono">
+              {mailboxes.length} {mailboxes.length === 1 ? 'mailbox' : 'mailboxes'}
+            </span>
+          )}
+        </div>
 
-        {mailboxes.length === 0 ? (
-          <EmptyState
-            icon={<Mail className="w-5 h-5 text-text-muted" />}
-            title="No mailboxes connected"
-            description="Connect Google Workspace or Microsoft 365 to start warming up outbound senders."
-            className="py-10"
-          />
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <Card key={i} className="p-5 animate-pulse space-y-3">
+                <div className="h-5 w-56 bg-canvas-elevated rounded" />
+                <div className="h-4 w-40 bg-canvas-elevated rounded" />
+              </Card>
+            ))}
+          </div>
+        ) : error ? (
+          <Card className="p-6 border-signal-failed/30 bg-signal-failed/5 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-signal-failed">Failed to load workspace mailboxes</p>
+              <p className="text-xs text-text-muted mt-0.5">{error}</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={loadMailboxes} className="text-xs">
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+              <span>Retry</span>
+            </Button>
+          </Card>
+        ) : mailboxes.length === 0 ? (
+          <Card className="p-8">
+            <EmptyState
+              icon={<Mail className="w-6 h-6 text-text-muted" />}
+              title="No mailboxes yet"
+              description="Connect an SMTP/OAuth sender to start outbound sequences."
+            />
+          </Card>
         ) : (
           mailboxes.map((m) => {
-            const domain = m.email.split('@')[1] || 'loom-outreach.dev';
+            const domain = m.email.split('@')[1] || 'leadloom.dev';
+            const quotaPercent = m.dailySendLimit > 0 ? Math.min(100, Math.round((m.sentToday / m.dailySendLimit) * 100)) : 0;
+
             return (
               <Card
                 key={m.id}
                 className="p-5 hover:border-border-muted transition-all shadow-sm"
               >
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-brand-loom/20 border border-brand-loom/30 flex items-center justify-center shrink-0">
-                    <Mail className="w-5 h-5 text-brand-loom" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-text-primary">{m.email}</span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-signal-verified/15 text-signal-verified">
-                        Health {m.healthScore}/100
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-canvas-elevated text-text-muted">
-                        Demo data
-                      </span>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-brand-loom/20 border border-brand-loom/30 flex items-center justify-center shrink-0">
+                      <Mail className="w-5 h-5 text-brand-loom" />
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs font-mono">
-                      <span className="flex items-center gap-1 text-signal-verified">
-                        <Check className="w-3 h-3" /> SPF: {m.spfStatus}
-                      </span>
-                      <span className="flex items-center gap-1 text-signal-verified">
-                        <Check className="w-3 h-3" /> DKIM: {m.dkimStatus}
-                      </span>
-                      <span className="flex items-center gap-1 text-signal-verified">
-                        <Check className="w-3 h-3" /> DMARC: {m.dmarcStatus}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quota Progress & DNS Inspect Action */}
-                <div className="flex items-center gap-4 lg:justify-end">
-                  <div className="text-right">
-                    <div className="text-xs text-text-muted font-mono">
-                      Sent today: <span className="font-semibold text-text-primary">{m.sentToday}</span> / {m.dailySendLimit}
-                    </div>
-                    <div className="w-36 h-2 rounded-full bg-canvas-elevated overflow-hidden mt-1.5 border border-border-subtle">
-                      <div
-                        className="h-full bg-signal-verified rounded-full"
-                        style={{ width: `${(m.sentToday / m.dailySendLimit) * 100}%` }}
-                      />
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-text-primary">{m.email}</span>
+                        <Badge variant={m.isPaused ? 'muted' : 'verified'} className="text-[10px] font-mono">
+                          {m.isPaused ? 'Paused' : 'Active'}
+                        </Badge>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-canvas-elevated text-text-secondary border border-border-subtle">
+                          Health: {m.healthScore > 0 ? `${m.healthScore}/100` : '—'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {renderDnsChip('SPF', m.spfStatus)}
+                        {renderDnsChip('DKIM', m.dkimStatus)}
+                        {renderDnsChip('DMARC', m.dmarcStatus)}
+                      </div>
+                      <p className="text-[11px] text-text-muted mt-2 font-mono">
+                        Last health check: {m.lastHealthCheckAt ? new Date(m.lastHealthCheckAt).toLocaleDateString() : 'Never checked'}
+                      </p>
                     </div>
                   </div>
 
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setActiveDnsDomain(domain)}
-                    className="text-xs py-1.5 gap-1.5"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-signal-verified" />
-                    <span>Inspect DNS</span>
-                  </Button>
+                  {/* Quota Progress & DNS Inspect Action */}
+                  <div className="flex items-center gap-4 lg:justify-end">
+                    <div className="text-right">
+                      <div className="text-xs text-text-muted font-mono">
+                        Sent today: <span className="font-semibold text-text-primary">{m.sentToday}</span> / {m.dailySendLimit}
+                      </div>
+                      <div className="w-36 h-2 rounded-full bg-canvas-elevated overflow-hidden mt-1.5 border border-border-subtle">
+                        <div
+                          className="h-full bg-signal-verified rounded-full"
+                          style={{ width: `${quotaPercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveDnsDomain(domain)}
+                      className="text-xs py-1.5 gap-1.5"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-signal-verified" />
+                      <span>Inspect DNS</span>
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          );
-        })
-      )}
+              </Card>
+            );
+          })
+        )}
       </div>
 
       {/* DNS Inspector Modal */}

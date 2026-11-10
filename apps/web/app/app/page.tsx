@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { engineFetch, fetchAuthMe } from '../../lib/engine-client';
-import type { MaskedBYOKCredential } from '@leadloom/contracts';
+import { fetchAuthMe, fetchWorkspaceSummary, type WorkspaceSummary } from '../../lib/engine-client';
 import {
   DashboardHeader,
   UserWorkspaceInfo,
@@ -17,15 +16,11 @@ export default function AppPage() {
   const [userLoading, setUserLoading] = useState(true);
   const [userError, setUserError] = useState<string | null>(null);
 
-  const [keysState, setKeysState] = useState<CardState<number>>({
+  const [summaryState, setSummaryState] = useState<CardState<WorkspaceSummary>>({
     data: null,
     isLoading: true,
     error: null,
   });
-
-  // The engine exposes no list endpoint for these yet (only POST), so no count is shown.
-  const experimentsState: CardState<number> = { data: null, isLoading: false, error: null, unavailable: true };
-  const jobsState: CardState<number> = { data: null, isLoading: false, error: null, unavailable: true };
 
   const loadUserInfo = useCallback(async () => {
     setUserLoading(true);
@@ -57,38 +52,40 @@ export default function AppPage() {
     }
   }, []);
 
-  const loadKeys = useCallback(async () => {
-    setKeysState({ data: null, isLoading: true, error: null });
+  const loadSummary = useCallback(async () => {
+    setSummaryState({ data: null, isLoading: true, error: null });
     try {
-      const res = await engineFetch<MaskedBYOKCredential[]>('/vault/credentials');
+      const res = await fetchWorkspaceSummary();
       if (res.data) {
-        setKeysState({
-          data: Array.isArray(res.data) ? res.data.length : 0,
+        setSummaryState({
+          data: res.data,
           isLoading: false,
           error: null,
         });
       } else {
-        setKeysState({
+        setSummaryState({
           data: null,
           isLoading: false,
-          error: res.error || 'Failed to fetch vault credentials',
+          error: res.error || 'Failed to fetch workspace summary',
         });
       }
     } catch (err: unknown) {
-      setKeysState({
+      setSummaryState({
         data: null,
         isLoading: false,
-        error: err instanceof Error ? err.message : 'Failed to connect to vault',
+        error: err instanceof Error ? err.message : 'Failed to connect to workspace summary',
       });
     }
   }, []);
 
   useEffect(() => {
     loadUserInfo();
-    loadKeys();
-  }, [loadUserInfo, loadKeys]);
+    loadSummary();
+  }, [loadUserInfo, loadSummary]);
 
-  const hasProviderKeys = Boolean(keysState.data && keysState.data > 0);
+  const hasProviderKeys = Boolean(summaryState.data && summaryState.data.providerKeys > 0);
+  const hasMailboxes = Boolean(summaryState.data && summaryState.data.mailboxes > 0);
+  const hasTables = Boolean(summaryState.data && summaryState.data.tables > 0);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 font-sans">
@@ -102,23 +99,19 @@ export default function AppPage() {
 
       {/* 2. Stat Cards Grid */}
       <StatCardsGrid
-        keysState={keysState}
-        experimentsState={experimentsState}
-        jobsState={jobsState}
-        onRetryKeys={loadKeys}
-        onRetryExperiments={() => {}}
-        onRetryJobs={() => {}}
+        summaryState={summaryState}
+        onRetry={loadSummary}
       />
 
       {/* 3. Getting Started Checklist */}
       <GettingStartedChecklist
         hasProviderKeys={hasProviderKeys}
-        hasMailboxes={false}
-        hasTables={false}
+        hasMailboxes={hasMailboxes}
+        hasTables={hasTables}
       />
 
       {/* 4. Empty State if no provider keys connected */}
-      {!keysState.isLoading && !keysState.error && keysState.data === 0 && (
+      {!summaryState.isLoading && !summaryState.error && summaryState.data?.providerKeys === 0 && (
         <EmptyVaultCard />
       )}
     </div>

@@ -270,6 +270,15 @@
   - Enforced `role === 'admin'` across settings provider keys and team settings card fallback (engine recognizes only `admin` and `member`, no `owner`).
   - Confirmed server-enforced admin permission on `/vault/credentials` with plain-sentence 403 handling via `notify`.
   - Confirmed strict no-optimistic posture: save and delete display pending states, only refetching after server response (zero phantom rows).
-  - Confirmed zero real provider calls or real keys: API keys are masked immediately (`sk-••••••••abcd`), never toasted or logged. Status badge displays "Saved", never "connected" or "verified".
-- Verified: `node scripts/check-design.mjs --strict`, `npx tsc --noEmit`, and `npm run build --workspace @leadloom/web` (18/18 routes) pass cleanly.
+---
+
+### [2026-11-11T03:36:00+05:30] Team Beta | apps/web real workspace read lists & count cards (Part A) | Non-Breaking
+- Wired real workspace data views from engine `/workspace/*` client (`fetchWorkspaceSummary`, `fetchWorkspaceTables`, `fetchWorkspaceMailboxes`, `fetchWorkspaceCampaigns`):
+  - `apps/web/app/app/page.tsx` & `components/dashboard/stat-cards-grid.tsx`: Render 6 real count cards from `WorkspaceSummary` (`tables`, `mailboxes`, `campaigns`, `suppressions`, `experiments`, `providerKeys`) with skeleton loading, retry button, and clear empty hints (`0 • No tables created yet`).
+  - `apps/web/components/dashboard/getting-started-checklist.tsx`: Wired real counts to `hasMailboxes` and `hasTables` alongside `hasProviderKeys`, marking all 3 steps as tracked.
+  - `apps/web/app/app/tables/page.tsx`: Shows real workspace tables list at top from `fetchWorkspaceTables` with row count and created date (or `EmptyState` "No tables yet"), with the interactive virtual grid retained below under a clearly marked "Sample preview" Card.
+  - `apps/web/app/app/mailboxes/page.tsx`: Replaced mock mailboxes with real list from `fetchWorkspaceMailboxes` with raw SPF/DKIM/DMARC status chips, health score, daily sent quota, and `EmptyState` ("No mailboxes yet"). Computed summary cards honestly from real list (0 fixtures remain on mailboxes).
+  - `apps/web/app/app/campaigns/page.tsx`: Shows real workspace campaigns list from `fetchWorkspaceCampaigns` with status, daily limits, timezone (or `EmptyState` "No campaigns yet"), keeping sequence steps below under a clearly marked "Sample preview" Card.
+- Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (clean), `npm run build --workspace @leadloom/web` (18/18 routes static/dynamic compiled).
+
 

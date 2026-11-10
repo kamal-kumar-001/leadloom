@@ -3,29 +3,34 @@
 import React from 'react';
 import Link from 'next/link';
 import { StatCard } from '@leadloom/ui';
-import { Key, FlaskConical, Send, RefreshCw, ChevronRight } from 'lucide-react';
+import {
+  Layers,
+  Mail,
+  Send,
+  ShieldAlert,
+  FlaskConical,
+  Key,
+  RefreshCw,
+  ChevronRight,
+} from 'lucide-react';
+import type { WorkspaceSummary } from '../../lib/engine-client';
 
-export interface CardState<T = number> {
+export interface CardState<T> {
   data: T | null;
   isLoading: boolean;
   error: string | null;
-  /** The engine has no endpoint for this yet: show an honest label, never a number. */
-  unavailable?: boolean;
 }
 
 interface StatCardsGridProps {
-  keysState: CardState<number>;
-  experimentsState: CardState<number>;
-  jobsState: CardState<number>;
-  onRetryKeys: () => void;
-  onRetryExperiments: () => void;
-  onRetryJobs: () => void;
+  summaryState: CardState<WorkspaceSummary>;
+  onRetry: () => void;
 }
 
-function renderValue(state: CardState<number>, onRetry: () => void) {
-  if (state.unavailable) {
-    return <span className="text-sm font-normal text-text-muted">Not available yet</span>;
-  }
+function renderValue(
+  state: CardState<WorkspaceSummary>,
+  field: keyof WorkspaceSummary,
+  onRetry: () => void
+) {
   if (state.isLoading) {
     return <div className="h-7 w-12 rounded bg-canvas-elevated animate-pulse my-0.5" />;
   }
@@ -50,76 +55,99 @@ function renderValue(state: CardState<number>, onRetry: () => void) {
     );
   }
 
-  const val = state.data ?? 0;
+  const val = state.data ? state.data[field] : 0;
   return <span>{val.toLocaleString()}</span>;
 }
 
-export function StatCardsGrid({
-  keysState,
-  experimentsState,
-  jobsState,
-  onRetryKeys,
-  onRetryExperiments,
-  onRetryJobs,
-}: StatCardsGridProps) {
+export function StatCardsGrid({ summaryState, onRetry }: StatCardsGridProps) {
+  const summary = summaryState.data;
+
+  const cards: {
+    key: keyof WorkspaceSummary;
+    label: string;
+    hint: string;
+    emptyHint: string;
+    href: string;
+    icon: React.ReactNode;
+  }[] = [
+    {
+      key: 'tables',
+      label: 'Tables',
+      hint: 'Persisted lead tables',
+      emptyHint: '0 • No tables created yet',
+      href: '/app/tables',
+      icon: <Layers className="w-4 h-4 text-brand-loom" />,
+    },
+    {
+      key: 'mailboxes',
+      label: 'Outbound Mailboxes',
+      hint: 'Active sender pool',
+      emptyHint: '0 • No mailboxes connected',
+      href: '/app/mailboxes',
+      icon: <Mail className="w-4 h-4 text-signal-verified" />,
+    },
+    {
+      key: 'campaigns',
+      label: 'Outbound Campaigns',
+      hint: 'Outbound sequences',
+      emptyHint: '0 • No campaigns created',
+      href: '/app/campaigns',
+      icon: <Send className="w-4 h-4 text-brand-matrix" />,
+    },
+    {
+      key: 'suppressions',
+      label: 'Suppressed Contacts',
+      hint: 'Suppressed recipient emails',
+      emptyHint: '0 • No suppressions recorded',
+      href: '/app/mailboxes',
+      icon: <ShieldAlert className="w-4 h-4 text-text-muted" />,
+    },
+    {
+      key: 'experiments',
+      label: 'Validator Experiments',
+      hint: 'Smoke-test landing pages',
+      emptyHint: '0 • No experiments created',
+      href: '/app/validator',
+      icon: <FlaskConical className="w-4 h-4 text-brand-weave" />,
+    },
+    {
+      key: 'providerKeys',
+      label: 'Connected Providers',
+      hint: 'Active BYOK credentials',
+      emptyHint: '0 • No keys saved in vault',
+      href: '/app/settings',
+      icon: <Key className="w-4 h-4 text-brand-loom" />,
+    },
+  ];
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {/* Provider Keys */}
-      <Link
-        href="/app/connectors"
-        className="block group rounded-xl transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom"
-      >
-        <StatCard
-          label="Connected Providers"
-          value={renderValue(keysState, onRetryKeys)}
-          hint="Active BYOK credentials"
-          icon={
-            <div className="flex items-center gap-1.5 text-text-muted group-hover:text-brand-loom transition-colors">
-              <Key className="w-4 h-4 text-brand-loom" />
-              <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          }
-          className="group-hover:border-border-muted transition-colors cursor-pointer"
-        />
-      </Link>
+      {cards.map((card) => {
+        const count = summary ? summary[card.key] : null;
+        const hintText =
+          count === 0 ? card.emptyHint : card.hint;
 
-      {/* Validator Experiments */}
-      <Link
-        href="/app/validator"
-        className="block group rounded-xl transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom"
-      >
-        <StatCard
-          label="Validator Experiments"
-          value={renderValue(experimentsState, onRetryExperiments)}
-          hint="Smoke-test landing pages"
-          icon={
-            <div className="flex items-center gap-1.5 text-text-muted group-hover:text-brand-weave transition-colors">
-              <FlaskConical className="w-4 h-4 text-brand-weave" />
-              <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          }
-          className="group-hover:border-border-muted transition-colors cursor-pointer"
-        />
-      </Link>
-
-      {/* Outbound Jobs */}
-      <Link
-        href="/app/campaigns"
-        className="block group rounded-xl transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom"
-      >
-        <StatCard
-          label="Outbound Jobs"
-          value={renderValue(jobsState, onRetryJobs)}
-          hint="Queued and sent steps"
-          icon={
-            <div className="flex items-center gap-1.5 text-text-muted group-hover:text-brand-matrix transition-colors">
-              <Send className="w-4 h-4 text-brand-matrix" />
-              <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          }
-          className="group-hover:border-border-muted transition-colors cursor-pointer"
-        />
-      </Link>
+        return (
+          <Link
+            key={card.key}
+            href={card.href}
+            className="block group rounded-xl transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom"
+          >
+            <StatCard
+              label={card.label}
+              value={renderValue(summaryState, card.key, onRetry)}
+              hint={hintText}
+              icon={
+                <div className="flex items-center gap-1.5 text-text-muted group-hover:text-brand-loom transition-colors">
+                  {card.icon}
+                  <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              }
+              className="group-hover:border-border-muted transition-colors cursor-pointer"
+            />
+          </Link>
+        );
+      })}
     </div>
   );
 }
