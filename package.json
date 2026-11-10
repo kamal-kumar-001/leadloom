@@ -1,0 +1,19 @@
+{
+  "name": "leadloom",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LeadLoom — The Open-Core Signal-to-Revenue Engine",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "workers/*"
+  ],
+  "scripts": {
+    "build": "npm run --workspaces --if-present build",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
