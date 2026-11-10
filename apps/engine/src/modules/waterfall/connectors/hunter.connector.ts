@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface HunterInput {
   domain?: string;
@@ -22,6 +27,12 @@ export interface HunterOutput {
   confidence: number;
 }
 
+const DEFAULT_BASE_URL = 'https://api.hunter.io';
+
+/**
+ * Hunter.io Email Finder Connector (fixture-tested, not live-verified)
+ * Official endpoint: GET https://api.hunter.io/v2/email-finder
+ */
 export class HunterConnector implements Connector<HunterInput, HunterOutput> {
   readonly id = 'hunter';
   readonly name = 'Hunter.io';
@@ -35,6 +46,7 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
     requestsPerMinute: 300,
     concurrency: 5,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: HunterInput,
@@ -62,18 +74,26 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
       };
     }
 
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
+
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
     const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const base = ctx.baseUrl ?? 'https://api.hunter.io';
-
     const params = new URLSearchParams();
-    if (input.domain) params.set('domain', input.domain);
-    if (input.company) params.set('company', input.company);
-    if (input.firstName) params.set('first_name', input.firstName);
-    if (input.lastName) params.set('last_name', input.lastName);
-    if (input.fullName) params.set('full_name', input.fullName);
+    if (input.domain) params.append('domain', input.domain);
+    if (input.company) params.append('company', input.company);
+    if (input.firstName) params.append('first_name', input.firstName);
+    if (input.lastName) params.append('last_name', input.lastName);
+    if (input.fullName) params.append('full_name', input.fullName);
 
-    const url = `${base}/v2/email-finder?${params.toString()}`;
+    const url = `${baseCheck.url}/v2/email-finder?${params.toString()}`;
 
     try {
       const response = await fetchImpl(url, {
@@ -127,7 +147,6 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
         return {
           success: true,
           latencyMs,
-          costMicrocents: 100,
           data: {
             email: null,
             score: 0,
@@ -138,20 +157,26 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
         };
       }
 
-      const score = data.score ?? 0;
-      const status = data.verification?.status as HunterOutput['verificationStatus'] ?? null;
+      const rawScore = data.score ?? 50;
+      const verificationStatus =
+        data.verification?.status === 'valid'
+          ? 'valid'
+          : data.verification?.status === 'accept_all'
+          ? 'accept_all'
+          : 'unknown';
+
+      const confidence = rawScore / 100;
 
       return {
         success: true,
         latencyMs,
-        costMicrocents: 100, // Nominal cost
         data: {
           email: data.email,
-          score,
-          verificationStatus: status,
+          score: rawScore,
+          verificationStatus,
           position: data.position,
-          company: data.company ?? input.company,
-          confidence: score / 100,
+          company: data.company,
+          confidence,
         },
         raw: json as Record<string, unknown>,
       };
@@ -161,7 +186,9 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: redactSecrets(err instanceof Error ? err.message : 'Unknown Hunter error', [
+            ctx.apiKey,
+          ]),
           retryable: true,
         },
       };

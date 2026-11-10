@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface ApolloInput {
   domain?: string;
@@ -24,6 +29,12 @@ export interface ApolloPersonOutput {
   confidence: number;
 }
 
+const DEFAULT_BASE_URL = 'https://api.apollo.io';
+
+/**
+ * Apollo.io People Match Connector (fixture-tested, not live-verified)
+ * Official endpoint: POST https://api.apollo.io/api/v1/people/match
+ */
 export class ApolloConnector implements Connector<ApolloInput, ApolloPersonOutput> {
   readonly id = 'apollo';
   readonly name = 'Apollo.io';
@@ -37,6 +48,7 @@ export class ApolloConnector implements Connector<ApolloInput, ApolloPersonOutpu
     requestsPerMinute: 600,
     concurrency: 10,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: ApolloInput,
@@ -64,9 +76,19 @@ export class ApolloConnector implements Connector<ApolloInput, ApolloPersonOutpu
       };
     }
 
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
+
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
     const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const url = ctx.baseUrl ? `${ctx.baseUrl}/v1/people/match` : 'https://api.apollo.io/v1/people/match';
+    const url = `${baseCheck.url}/api/v1/people/match`;
 
     try {
       const response = await fetchImpl(url, {
@@ -120,42 +142,49 @@ export class ApolloConnector implements Connector<ApolloInput, ApolloPersonOutpu
           first_name?: string;
           last_name?: string;
           title?: string;
-          organization?: { name?: string };
           linkedin_url?: string;
+          organization?: { name?: string };
         };
       };
 
       const person = json.person;
-      if (!person) {
+      if (!person || !person.email) {
         return {
           success: true,
           latencyMs,
-          costMicrocents: 100,
           data: {
             email: null,
             emailStatus: null,
+            firstName: person?.first_name,
+            lastName: person?.last_name,
+            title: person?.title,
+            organizationName: person?.organization?.name,
+            linkedinUrl: person?.linkedin_url,
             confidence: 0,
           },
           raw: json as Record<string, unknown>,
         };
       }
 
-      const email = person.email ?? null;
-      const isVerified = person.email_status === 'verified';
+      let emailStatus: ApolloPersonOutput['emailStatus'] = 'unknown';
+      if (person.email_status === 'verified') emailStatus = 'verified';
+      else if (person.email_status === 'extrapolated') emailStatus = 'extrapolated';
+      else if (person.email_status === 'catchall') emailStatus = 'catchall';
+
+      const confidence = emailStatus === 'verified' ? 0.95 : emailStatus === 'extrapolated' ? 0.7 : 0.4;
 
       return {
         success: true,
         latencyMs,
-        costMicrocents: 100, // Nominal ~$0.001
         data: {
-          email,
-          emailStatus: (person.email_status as ApolloPersonOutput['emailStatus']) ?? (email ? 'unknown' : null),
+          email: person.email,
+          emailStatus,
           firstName: person.first_name,
           lastName: person.last_name,
           title: person.title,
-          organizationName: person.organization?.name ?? input.organizationName,
+          organizationName: person.organization?.name,
           linkedinUrl: person.linkedin_url,
-          confidence: isVerified ? 0.95 : email ? 0.7 : 0,
+          confidence,
         },
         raw: json as Record<string, unknown>,
       };
@@ -165,7 +194,7 @@ export class ApolloConnector implements Connector<ApolloInput, ApolloPersonOutpu
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: redactSecrets(err instanceof Error ? err.message : 'Unknown network failure', [ctx.apiKey]),
           retryable: true,
         },
       };

@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface NeverBounceInput {
   email: string;
@@ -16,6 +21,12 @@ export interface NeverBounceOutput {
   confidence: number;
 }
 
+const DEFAULT_BASE_URL = 'https://api.neverbounce.com';
+
+/**
+ * NeverBounce Single Email Verification Connector (fixture-tested, not live-verified)
+ * Official endpoint: GET https://api.neverbounce.com/v4.2/single/check?key={key}&email={email}
+ */
 export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBounceOutput> {
   readonly id = 'neverbounce';
   readonly name = 'NeverBounce';
@@ -29,6 +40,7 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
     requestsPerMinute: 600,
     concurrency: 10,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: NeverBounceInput,
@@ -56,16 +68,24 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
       };
     }
 
-    const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const base = ctx.baseUrl ?? 'https://api.neverbounce.com';
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
 
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
+    const start = Date.now();
     const params = new URLSearchParams({
       key: ctx.apiKey,
       email: input.email,
     });
 
-    const url = `${base}/v4/single/check?${params.toString()}`;
+    const url = `${baseCheck.url}/v4.2/single/check?${params.toString()}`;
 
     try {
       const response = await fetchImpl(url, {
@@ -108,20 +128,47 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
         suggested_correction?: string;
       };
 
-      const result = (json.result?.toLowerCase() as NeverBounceOutput['result']) ?? 'unknown';
-      const confidence = result === 'valid' ? 1.0 : result === 'catchall' ? 0.6 : 0;
+      let result: NeverBounceOutput['result'] = 'unknown';
+      let confidence = 0.5;
+
+      switch (json.result) {
+        case 'valid':
+          result = 'valid';
+          confidence = 0.95;
+          break;
+        case 'invalid':
+          result = 'invalid';
+          confidence = 0.95;
+          break;
+        case 'disposable':
+          result = 'disposable';
+          confidence = 0.99;
+          break;
+        case 'catchall':
+          result = 'catchall';
+          confidence = 0.4;
+          break;
+        default:
+          result = 'unknown';
+          confidence = 0.3;
+      }
+
+      // Redact any possible key echoes in raw payload
+      const sanitizedRaw = JSON.parse(redactSecrets(JSON.stringify(json), [ctx.apiKey])) as Record<
+        string,
+        unknown
+      >;
 
       return {
         success: true,
         latencyMs,
-        costMicrocents: 80, // ~$0.0008
         data: {
           result,
           flags: json.flags ?? [],
-          suggestedCorrection: json.suggested_correction ?? null,
+          suggestedCorrection: json.suggested_correction || null,
           confidence,
         },
-        raw: json as Record<string, unknown>,
+        raw: sanitizedRaw,
       };
     } catch (err) {
       return {
@@ -129,7 +176,9 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: redactSecrets(err instanceof Error ? err.message : 'Unknown NeverBounce error', [
+            ctx.apiKey,
+          ]),
           retryable: true,
         },
       };

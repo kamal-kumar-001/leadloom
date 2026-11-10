@@ -104,3 +104,11 @@
 - Gated both bulk waterfall batch dispatch and single-row enrichment executions against plan features and monthly credit limits with structured `WaterfallEntitlementError`.
 - Added unit test suite `waterfall-entitlements.spec.ts` covering feature checks, credit limits, single-row consumption, unconfigured posture, and controller workspace delegation. All 28 engine test files (167 passed, 5 skipped) and `tsc --noEmit` pass cleanly.
 
+---
+
+### [2026-11-10T19:12:00Z] Team Beta | apps/engine/src/modules/waterfall/connectors | Non-Breaking
+- Fixed connector contracts from vendor owning docs: Apollo updated to POST `/api/v1/people/match`; Dropcontact modeled as async submit (`POST /v1/enrich/all`) plus fetch (`GET /v1/enrich/all/{id}`); NeverBounce updated to `/v4.2/single/check`.
+- Added security controls via `security.ts`: `validateAndResolveBaseUrl` strictly enforces HTTPS and vendor host matching (Ollama strictly restricted to loopback 127.0.0.1/localhost/::1, rejecting metadata and external IPs); `resolveFetch` fails closed with `NETWORK_DISABLED` unless test fetch is injected or `LEADLOOM_CONNECTORS_LIVE_ENABLED=true`; `redactSecrets` redacts API keys from query strings, error messages, and raw responses.
+- Labeled all 10 connectors `verification: 'fixture-tested'`, updated fixtures to documented vendor shapes, and added 20 unit tests in `connectors.spec.ts`. All 31 engine test files (182 passed, 8 skipped) and `tsc --noEmit` clean.
+
+

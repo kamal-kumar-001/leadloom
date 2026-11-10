@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface AnthropicMessage {
   role: 'user' | 'assistant';
@@ -28,6 +33,12 @@ export interface AnthropicOutput {
   };
 }
 
+const DEFAULT_BASE_URL = 'https://api.anthropic.com';
+
+/**
+ * Anthropic Messages Connector (fixture-tested, not live-verified)
+ * Official endpoint: POST https://api.anthropic.com/v1/messages
+ */
 export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOutput> {
   readonly id = 'anthropic';
   readonly name = 'Anthropic Claude';
@@ -41,6 +52,7 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
     requestsPerMinute: 300,
     concurrency: 5,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: AnthropicInput,
@@ -62,17 +74,26 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
         success: false,
         error: {
           code: 'INVALID_INPUT',
-          message: 'At least one message is required for Anthropic Claude request',
+          message: 'At least one message is required for Anthropic completion',
           retryable: false,
         },
       };
     }
 
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
+
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
     const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const url = ctx.baseUrl ? `${ctx.baseUrl}/v1/messages` : 'https://api.anthropic.com/v1/messages';
     const model = input.model ?? 'claude-3-5-sonnet-20241022';
-    const maxTokens = input.maxTokens ?? 1024;
+    const url = `${baseCheck.url}/v1/messages`;
 
     try {
       const response = await fetchImpl(url, {
@@ -84,9 +105,9 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
         },
         body: JSON.stringify({
           model,
-          max_tokens: maxTokens,
           messages: input.messages,
           system: input.system,
+          max_tokens: input.maxTokens ?? 1024,
           temperature: input.temperature,
         }),
       });
@@ -124,33 +145,25 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
         model?: string;
         content?: Array<{ type?: string; text?: string }>;
         stop_reason?: string;
-        usage?: {
-          input_tokens?: number;
-          output_tokens?: number;
-        };
+        usage?: { input_tokens?: number; output_tokens?: number };
       };
 
-      const text = json.content?.map((c) => c.text ?? '').join('') ?? '';
-      const usage = json.usage
-        ? {
-            inputTokens: json.usage.input_tokens ?? 0,
-            outputTokens: json.usage.output_tokens ?? 0,
-          }
-        : undefined;
-
-      const costMicrocents = usage
-        ? Math.round((usage.inputTokens * 300 + usage.outputTokens * 1500) / 100)
-        : 100;
+      const textBlock = json.content?.find((c) => c.type === 'text');
+      const text = textBlock?.text ?? '';
 
       return {
         success: true,
         latencyMs,
-        costMicrocents,
         data: {
           content: text,
           model: json.model ?? model,
           stopReason: json.stop_reason,
-          usage,
+          usage: json.usage
+            ? {
+                inputTokens: json.usage.input_tokens ?? 0,
+                outputTokens: json.usage.output_tokens ?? 0,
+              }
+            : undefined,
         },
         raw: json as Record<string, unknown>,
       };
@@ -160,7 +173,9 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: redactSecrets(err instanceof Error ? err.message : 'Unknown Anthropic error', [
+            ctx.apiKey,
+          ]),
           retryable: true,
         },
       };

@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface PdlInput {
   firstName?: string;
@@ -25,6 +30,12 @@ export interface PdlOutput {
   confidence: number;
 }
 
+const DEFAULT_BASE_URL = 'https://api.peopledatalabs.com';
+
+/**
+ * People Data Labs (PDL) Person Enrichment Connector (fixture-tested, not live-verified)
+ * Official endpoint: POST https://api.peopledatalabs.com/v5/person/enrich
+ */
 export class PdlConnector implements Connector<PdlInput, PdlOutput> {
   readonly id = 'pdl';
   readonly name = 'People Data Labs';
@@ -38,6 +49,7 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
     requestsPerMinute: 600,
     concurrency: 10,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: PdlInput,
@@ -59,34 +71,42 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
         success: false,
         error: {
           code: 'INVALID_INPUT',
-          message: 'PDL requires either email, linkedinUrl, or person name',
+          message: 'At least email, linkedinUrl, or person name must be provided for PDL search',
           retryable: false,
         },
       };
     }
 
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
+
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
     const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const base = ctx.baseUrl ?? 'https://api.peopledatalabs.com';
-
-    const params = new URLSearchParams();
-    if (input.email) params.set('email', input.email);
-    if (input.linkedinUrl) params.set('profile', input.linkedinUrl);
-    if (input.firstName) params.set('first_name', input.firstName);
-    if (input.lastName) params.set('last_name', input.lastName);
-    if (input.fullName) params.set('name', input.fullName);
-    if (input.company) params.set('company', input.company);
-    if (input.website) params.set('website', input.website);
-
-    const url = `${base}/v5/person/enrich?${params.toString()}`;
+    const url = `${baseCheck.url}/v5/person/enrich`;
 
     try {
       const response = await fetchImpl(url, {
-        method: 'GET',
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'X-Api-Key': ctx.apiKey,
-          Accept: 'application/json',
         },
+        body: JSON.stringify({
+          email: input.email,
+          profile: input.linkedinUrl,
+          first_name: input.firstName,
+          last_name: input.lastName,
+          name: input.fullName,
+          company: input.company,
+          website: input.website,
+        }),
       });
 
       const latencyMs = Date.now() - start;
@@ -108,7 +128,6 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
         return {
           success: true,
           latencyMs,
-          costMicrocents: 0,
           data: {
             fullName: null,
             workEmail: null,
@@ -118,6 +137,7 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
             linkedinUrl: null,
             confidence: 0,
           },
+          raw: { status: 404, message: 'Person not found' },
         };
       }
 
@@ -128,15 +148,18 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
           error: {
             code: 'PROVIDER_ERROR',
             status: response.status,
-            message: `PDL HTTP ${response.status}`,
+            message: `People Data Labs HTTP ${response.status}`,
             retryable: response.status >= 500,
           },
         };
       }
 
       const json = (await response.json()) as {
+        status?: number;
         data?: {
           full_name?: string;
+          first_name?: string;
+          last_name?: string;
           work_email?: string;
           personal_emails?: string[];
           job_title?: string;
@@ -145,39 +168,19 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
         };
       };
 
-      const person = json.data;
-      if (!person) {
-        return {
-          success: true,
-          latencyMs,
-          costMicrocents: 150,
-          data: {
-            fullName: null,
-            workEmail: null,
-            personalEmails: [],
-            jobTitle: null,
-            companyName: null,
-            linkedinUrl: null,
-            confidence: 0,
-          },
-          raw: json as Record<string, unknown>,
-        };
-      }
-
-      const hasWorkEmail = Boolean(person.work_email);
-      const confidence = hasWorkEmail ? 0.95 : 0.7;
+      const record = json.data;
+      const confidence = record?.work_email ? 0.95 : record?.full_name ? 0.7 : 0;
 
       return {
         success: true,
         latencyMs,
-        costMicrocents: 150, // ~$0.0015
         data: {
-          fullName: person.full_name ?? null,
-          workEmail: person.work_email ?? null,
-          personalEmails: person.personal_emails ?? [],
-          jobTitle: person.job_title ?? null,
-          companyName: person.job_company_name ?? input.company ?? null,
-          linkedinUrl: person.linkedin_url ?? input.linkedinUrl ?? null,
+          fullName: record?.full_name ?? (record?.first_name ? `${record.first_name} ${record.last_name ?? ''}`.trim() : null),
+          workEmail: record?.work_email ?? null,
+          personalEmails: record?.personal_emails ?? [],
+          jobTitle: record?.job_title ?? null,
+          companyName: record?.job_company_name ?? null,
+          linkedinUrl: record?.linkedin_url ?? null,
           confidence,
         },
         raw: json as Record<string, unknown>,
@@ -188,7 +191,9 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: redactSecrets(err instanceof Error ? err.message : 'Unknown People Data Labs network error', [
+            ctx.apiKey,
+          ]),
           retryable: true,
         },
       };

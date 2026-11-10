@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface ZeroBounceInput {
   email: string;
@@ -21,6 +26,12 @@ export interface ZeroBounceOutput {
   confidence: number;
 }
 
+const DEFAULT_BASE_URL = 'https://api.zerobounce.com';
+
+/**
+ * ZeroBounce Single Email Validation Connector (fixture-tested, not live-verified)
+ * Official endpoint: GET https://api.zerobounce.com/v2/validate?api_key={api_key}&email={email}
+ */
 export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounceOutput> {
   readonly id = 'zerobounce';
   readonly name = 'ZeroBounce';
@@ -34,6 +45,7 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
     requestsPerMinute: 600,
     concurrency: 10,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: ZeroBounceInput,
@@ -61,17 +73,27 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
       };
     }
 
-    const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const base = ctx.baseUrl ?? 'https://api.zerobounce.net';
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
 
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
+    const start = Date.now();
     const params = new URLSearchParams({
       api_key: ctx.apiKey,
       email: input.email,
     });
-    if (input.ipAddress) params.set('ip_address', input.ipAddress);
+    if (input.ipAddress) {
+      params.append('ip_address', input.ipAddress);
+    }
 
-    const url = `${base}/v2/validate?${params.toString()}`;
+    const url = `${baseCheck.url}/v2/validate?${params.toString()}`;
 
     try {
       const response = await fetchImpl(url, {
@@ -112,30 +134,66 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
         sub_status?: string;
         account?: string;
         domain?: string;
-        did_you_mean?: string;
-        free_email?: boolean;
+        did_you_mean?: string | null;
+        free_email?: boolean | string;
         mx_found?: string | boolean;
       };
 
-      const status = (json.status?.toLowerCase() as ZeroBounceOutput['status']) ?? 'unknown';
+      let status: ZeroBounceOutput['status'] = 'unknown';
+      let confidence = 0.5;
+
+      switch (json.status) {
+        case 'valid':
+          status = 'valid';
+          confidence = 0.98;
+          break;
+        case 'invalid':
+          status = 'invalid';
+          confidence = 0.98;
+          break;
+        case 'catch-all':
+          status = 'catch-all';
+          confidence = 0.4;
+          break;
+        case 'spamtrap':
+          status = 'spamtrap';
+          confidence = 0.99;
+          break;
+        case 'abuse':
+          status = 'abuse';
+          confidence = 0.95;
+          break;
+        case 'do_not_mail':
+          status = 'do_not_mail';
+          confidence = 0.95;
+          break;
+        default:
+          status = 'unknown';
+          confidence = 0.3;
+      }
+
       const mxFound = json.mx_found === true || json.mx_found === 'true';
-      const confidence = status === 'valid' ? 1.0 : status === 'catch-all' ? 0.6 : 0;
+      const freeEmail = json.free_email === true || json.free_email === 'true';
+
+      const sanitizedRaw = JSON.parse(redactSecrets(JSON.stringify(json), [ctx.apiKey])) as Record<
+        string,
+        unknown
+      >;
 
       return {
         success: true,
         latencyMs,
-        costMicrocents: 60, // ~$0.0006
         data: {
           status,
           subStatus: json.sub_status,
           account: json.account,
           domain: json.domain,
           didYouMean: json.did_you_mean ?? null,
-          freeEmail: Boolean(json.free_email),
+          freeEmail,
           mxFound,
           confidence,
         },
-        raw: json as Record<string, unknown>,
+        raw: sanitizedRaw,
       };
     } catch (err) {
       return {
@@ -143,7 +201,9 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: redactSecrets(err instanceof Error ? err.message : 'Unknown ZeroBounce error', [
+            ctx.apiKey,
+          ]),
           retryable: true,
         },
       };

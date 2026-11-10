@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant';
@@ -23,6 +28,13 @@ export interface OllamaOutput {
   evalCount?: number;
 }
 
+const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
+
+/**
+ * Ollama Local Model Inference Connector (fixture-tested, not live-verified)
+ * Official endpoint: POST http://127.0.0.1:11434/api/chat
+ * Security: Strictly enforces loopback (127.0.0.1/localhost/::1) and rejects all external/cloud-metadata hosts.
+ */
 export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
   readonly id = 'ollama';
   readonly name = 'Ollama (Local)';
@@ -35,6 +47,7 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
     requestsPerMinute: 120,
     concurrency: 2,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: OllamaInput,
@@ -51,11 +64,22 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
       };
     }
 
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl, {
+      allowLocalHttp: true,
+    });
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
+
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
     const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const base = ctx.baseUrl ?? 'http://127.0.0.1:11434';
     const model = input.model ?? 'llama3.2';
-    const url = `${base}/api/chat`;
+    const url = `${baseCheck.url}/api/chat`;
 
     try {
       const response = await fetchImpl(url, {
@@ -115,7 +139,10 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: `Ollama local daemon unreachable at ${base}: ${err instanceof Error ? err.message : String(err)}`,
+          message: redactSecrets(
+            `Ollama local daemon unreachable: ${err instanceof Error ? err.message : 'Unknown network failure'}`,
+            [ctx.apiKey]
+          ),
           retryable: true,
         },
       };

@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface OpenAiMessage {
   role: 'system' | 'user' | 'assistant';
@@ -29,6 +34,12 @@ export interface OpenAiOutput {
   };
 }
 
+const DEFAULT_BASE_URL = 'https://api.openai.com';
+
+/**
+ * OpenAI Chat Completions Connector (fixture-tested, not live-verified)
+ * Official endpoint: POST https://api.openai.com/v1/chat/completions
+ */
 export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
   readonly id = 'openai';
   readonly name = 'OpenAI';
@@ -41,6 +52,7 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
     requestsPerMinute: 500,
     concurrency: 10,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: OpenAiInput,
@@ -68,10 +80,20 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
       };
     }
 
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
+
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
     const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const url = ctx.baseUrl ? `${ctx.baseUrl}/v1/chat/completions` : 'https://api.openai.com/v1/chat/completions';
     const model = input.model ?? 'gpt-4o-mini';
+    const url = `${baseCheck.url}/v1/chat/completions`;
 
     try {
       const response = await fetchImpl(url, {
@@ -98,7 +120,7 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
           error: {
             code: 'RATE_LIMITED',
             status: 429,
-            message: 'OpenAI rate limit or quota exceeded',
+            message: 'OpenAI rate limit exceeded',
             retryable: true,
           },
         };
@@ -133,28 +155,21 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
 
       const choice = json.choices?.[0];
       const content = choice?.message?.content ?? '';
-      const usage = json.usage
-        ? {
-            promptTokens: json.usage.prompt_tokens ?? 0,
-            completionTokens: json.usage.completion_tokens ?? 0,
-            totalTokens: json.usage.total_tokens ?? 0,
-          }
-        : undefined;
-
-      // Approximate cost in microcents for gpt-4o-mini ($0.15/1M input, $0.60/1M output)
-      const costMicrocents = usage
-        ? Math.round((usage.promptTokens * 15 + usage.completionTokens * 60) / 100)
-        : 50;
 
       return {
         success: true,
         latencyMs,
-        costMicrocents,
         data: {
           content,
           model: json.model ?? model,
           finishReason: choice?.finish_reason,
-          usage,
+          usage: json.usage
+            ? {
+                promptTokens: json.usage.prompt_tokens ?? 0,
+                completionTokens: json.usage.completion_tokens ?? 0,
+                totalTokens: json.usage.total_tokens ?? 0,
+              }
+            : undefined,
         },
         raw: json as Record<string, unknown>,
       };
@@ -164,7 +179,9 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: redactSecrets(err instanceof Error ? err.message : 'Unknown OpenAI error', [
+            ctx.apiKey,
+          ]),
           retryable: true,
         },
       };

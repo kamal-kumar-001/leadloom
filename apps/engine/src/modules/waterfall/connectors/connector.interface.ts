@@ -34,7 +34,9 @@ export interface ConnectorError {
     | 'INVALID_INPUT'
     | 'PROVIDER_ERROR'
     | 'NETWORK_ERROR'
-    | 'TIMEOUT';
+    | 'TIMEOUT'
+    | 'NETWORK_DISABLED'
+    | 'INVALID_BASE_URL';
   message: string;
   status?: number;
   retryable?: boolean;
@@ -55,6 +57,7 @@ export interface Connector<TInput = unknown, TOutput = unknown> {
   readonly capabilities: ConnectorCapability[];
   readonly auth: ConnectorAuthConfig;
   readonly rateLimit: ConnectorRateLimit;
+  readonly verification: 'fixture-tested';
 
   run(input: TInput, ctx: ConnectorContext): Promise<ConnectorResult<TOutput>>;
 }

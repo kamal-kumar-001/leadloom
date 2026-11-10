@@ -1,4 +1,5 @@
 export * from './connector.interface';
+export * from './security';
 export * from './registry';
 export * from './apollo.connector';
 export * from './hunter.connector';

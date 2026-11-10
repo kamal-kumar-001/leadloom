@@ -4,6 +4,11 @@ import {
   ConnectorContext,
   ConnectorResult,
 } from './connector.interface';
+import {
+  validateAndResolveBaseUrl,
+  resolveFetch,
+  redactSecrets,
+} from './security';
 
 export interface SerperInput {
   query: string;
@@ -31,6 +36,12 @@ export interface SerperOutput {
   totalResults?: number;
 }
 
+const DEFAULT_BASE_URL = 'https://google.serper.dev';
+
+/**
+ * Serper Google Search Signal Connector (fixture-tested, not live-verified)
+ * Official endpoint: POST https://google.serper.dev/search
+ */
 export class SerperConnector implements Connector<SerperInput, SerperOutput> {
   readonly id = 'serper';
   readonly name = 'Serper Google Search';
@@ -44,6 +55,7 @@ export class SerperConnector implements Connector<SerperInput, SerperOutput> {
     requestsPerMinute: 300,
     concurrency: 5,
   };
+  readonly verification = 'fixture-tested' as const;
 
   async run(
     input: SerperInput,
@@ -60,20 +72,30 @@ export class SerperConnector implements Connector<SerperInput, SerperOutput> {
       };
     }
 
-    if (!input.query?.trim()) {
+    if (!input.query || input.query.trim().length === 0) {
       return {
         success: false,
         error: {
           code: 'INVALID_INPUT',
-          message: 'Query string required for Serper search',
+          message: 'Search query must be non-empty',
           retryable: false,
         },
       };
     }
 
+    const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
+    if (baseCheck.error) {
+      return { success: false, error: baseCheck.error };
+    }
+
+    const fetchCheck = resolveFetch(ctx);
+    if (fetchCheck.error || !fetchCheck.fetchFn) {
+      return { success: false, error: fetchCheck.error };
+    }
+    const fetchImpl = fetchCheck.fetchFn;
+
     const start = Date.now();
-    const fetchImpl = ctx.fetch ?? fetch;
-    const url = ctx.baseUrl ? `${ctx.baseUrl}/search` : 'https://google.serper.dev/search';
+    const url = `${baseCheck.url}/search`;
 
     try {
       const response = await fetchImpl(url, {
@@ -85,8 +107,8 @@ export class SerperConnector implements Connector<SerperInput, SerperOutput> {
         body: JSON.stringify({
           q: input.query,
           num: input.num ?? 10,
-          gl: input.country ?? 'us',
-          hl: input.language ?? 'en',
+          gl: input.country,
+          hl: input.language,
         }),
       });
 
@@ -119,29 +141,33 @@ export class SerperConnector implements Connector<SerperInput, SerperOutput> {
       }
 
       const json = (await response.json()) as {
-        searchParameters?: { q?: string };
-        organic?: Array<{ title?: string; link?: string; snippet?: string; position?: number }>;
+        organic?: Array<{
+          title?: string;
+          link?: string;
+          snippet?: string;
+          position?: number;
+        }>;
         knowledgeGraph?: {
           title?: string;
           type?: string;
           description?: string;
           website?: string;
         };
+        searchParameters?: { q?: string };
       };
 
-      const organic: SerperOrganicResult[] = (json.organic ?? []).map((item, index) => ({
+      const organic: SerperOrganicResult[] = (json.organic ?? []).map((item, idx) => ({
         title: item.title ?? '',
         link: item.link ?? '',
         snippet: item.snippet ?? '',
-        position: item.position ?? index + 1,
+        position: item.position ?? idx + 1,
       }));
 
       return {
         success: true,
         latencyMs,
-        costMicrocents: 100, // ~$0.001
         data: {
-          query: json.searchParameters?.q ?? input.query,
+          query: input.query,
           organic,
           knowledgeGraph: json.knowledgeGraph,
           totalResults: organic.length,
@@ -154,7 +180,9 @@ export class SerperConnector implements Connector<SerperInput, SerperOutput> {
         latencyMs: Date.now() - start,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: redactSecrets(err instanceof Error ? err.message : 'Unknown Serper error', [
+            ctx.apiKey,
+          ]),
           retryable: true,
         },
       };
