@@ -16,7 +16,7 @@ export function SavingsCalculator() {
   const annualSavings = (proprietaryCost - leadloomCost) * 12;
 
   return (
-    <section className="py-20 border-t border-border-subtle relative overflow-hidden">
+    <section className="py-14 sm:py-20 border-t border-border-subtle relative overflow-hidden">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="text-center max-w-2xl mx-auto mb-12">
           <Badge variant="matrix" className="mb-3">

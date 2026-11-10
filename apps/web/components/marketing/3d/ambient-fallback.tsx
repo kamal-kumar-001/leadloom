@@ -2,7 +2,7 @@ import React from 'react';
 
 export function AmbientLoomFallback() {
   return (
-    <div className="relative w-full h-[540px] flex items-center justify-center overflow-hidden rounded-2xl border border-border-subtle bg-canvas-surface/40">
+    <div className="relative w-full h-[340px] sm:h-[440px] lg:h-[520px] flex items-center justify-center overflow-hidden rounded-2xl border border-border-subtle bg-canvas-surface/40">
       {/* Background ambient radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.18)_0%,transparent_70%)] pointer-events-none" />
       

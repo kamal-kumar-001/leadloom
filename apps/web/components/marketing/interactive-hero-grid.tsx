@@ -123,9 +123,9 @@ export function InteractiveHeroGrid() {
             <tr className="border-b border-border-subtle bg-canvas-elevated/20 text-text-muted font-mono">
               <th className="py-2.5 px-4 w-12">#</th>
               <th className="py-2.5 px-4">Account</th>
-              <th className="py-2.5 px-4">Live Buying Signal</th>
-              <th className="py-2.5 px-4">Adaptive Waterfall Email (Tier 1-3)</th>
-              <th className="py-2.5 px-4 text-right">Telemetry</th>
+              <th className="py-2.5 px-4 whitespace-nowrap">Live Buying Signal</th>
+              <th className="py-2.5 px-4 whitespace-nowrap">Adaptive Waterfall Email (Tier 1-3)</th>
+              <th className="py-2.5 px-4 text-right whitespace-nowrap">Telemetry</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-subtle">

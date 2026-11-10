@@ -32,11 +32,11 @@ export function LivingLoomCanvas({ lightingState = 'indigo' }: LivingLoomCanvasP
   }
 
   return (
-    <div className="relative w-full h-[520px] rounded-2xl overflow-hidden border border-border-subtle bg-canvas-surface/30 backdrop-blur-sm">
+    <div className="relative w-full h-[340px] sm:h-[440px] lg:h-[520px] rounded-2xl overflow-hidden border border-border-subtle bg-canvas-surface/30 backdrop-blur-sm">
       <Suspense fallback={<AmbientLoomFallback />}>
         <Canvas
           camera={{ position: [0, 0, 5], fov: 45 }}
-          dpr={[1, 2]} // High-DPI support capped at 2x for GPU efficiency
+          dpr={[1, 1.75]} // High-DPI support capped for GPU efficiency on mobile
           className="w-full h-full cursor-grab active:cursor-grabbing"
         >
           <SceneContent lightingState={lightingState} />

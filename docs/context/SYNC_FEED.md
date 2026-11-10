@@ -72,3 +72,10 @@
 - Generic nodemailer/imapflow client factories (any provider; OAuth2 or password; lazy-loaded libs, no connections in tests).
 - Unsubscribe tokens now carry workspaceId (w= param) so suppression is tenant-scoped.
 - Engine suite 118/118, tsc clean. No live exposure, no sends, not deployed.
+
+## 2026-11-10 17:28 IST - Gamma: marketing design repair (user-reported)
+- Living Loom globe rebuilt: clean lat/long wireframe sphere + smooth fresnel glow body + 90 deterministic signal nodes + 3 restrained orbital threads (replaces spiky faceted orb and 36 chaotic fibers). Slow continuous rotation, subtle mouse parallax, matrix lighting state preserved.
+- Responsive canvas heights (340/440/520px), dpr capped 1.75, fallback heights matched.
+- Anchor sections get scroll-mt so the sticky header never covers section tops; mobile section padding tightened (py-14 sm:py-24) to kill dead gaps; hero padding responsive.
+- PreFlightBar now solid bg (table content no longer bleeds through); hero sandbox table headers nowrap.
+- Verified: next build clean, smoke-production.mjs PASSED (0 console/page errors), pixel-verified at 390px and 1440px.

@@ -10,7 +10,7 @@ export function IdeaValidatorShowcase() {
   );
 
   return (
-    <section className="py-24 border-t border-border-subtle bg-canvas-surface/20 relative">
+    <section className="py-14 sm:py-24 border-t border-border-subtle bg-canvas-surface/20 relative">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="text-center max-w-2xl mx-auto mb-16">
           <Badge variant="matrix" className="mb-3">

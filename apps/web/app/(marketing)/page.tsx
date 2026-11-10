@@ -78,7 +78,7 @@ export default function MarketingPage() {
         </header>
 
         {/* Hero Section */}
-        <section className="relative pt-20 pb-28 px-4 sm:px-6 max-w-6xl mx-auto">
+        <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-28 px-4 sm:px-6 max-w-6xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-12">
             <Badge variant="loom" className="mb-4">
               🧵 Open-Core Signal Engine • Apache 2.0 / MIT Licensed
@@ -128,7 +128,7 @@ export default function MarketingPage() {
           </div>
 
           {/* Playable Hero Mini-Grid */}
-          <div id="waterfall" className="mt-12">
+          <div id="waterfall" className="mt-12 scroll-mt-24">
             <InteractiveHeroGrid />
           </div>
         </section>
@@ -151,12 +151,12 @@ export default function MarketingPage() {
         </section>
 
         {/* Pre-Product Idea Validator Section */}
-        <div id="validator">
+        <div id="validator" className="scroll-mt-16">
           <IdeaValidatorShowcase />
         </div>
 
         {/* Savings Calculator Section */}
-        <div id="calculator">
+        <div id="calculator" className="scroll-mt-16">
           <SavingsCalculator />
         </div>
 
@@ -164,12 +164,12 @@ export default function MarketingPage() {
         <BentoGridSection />
 
         {/* Developer Architecture Tabs */}
-        <div id="architecture">
+        <div id="architecture" className="scroll-mt-16">
           <ArchitectureTabs />
         </div>
 
         {/* Pricing Matrix */}
-        <section className="py-24 max-w-5xl mx-auto px-4 sm:px-6">
+        <section className="py-14 sm:py-24 max-w-5xl mx-auto px-4 sm:px-6">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <Badge variant="loom" className="mb-3">
               Transparent Pricing
@@ -284,7 +284,7 @@ export default function MarketingPage() {
         </section>
 
         {/* Final High-Conversion CTA Block */}
-        <section className="py-24 border-t border-border-subtle bg-gradient-to-b from-canvas to-canvas-surface">
+        <section className="py-14 sm:py-24 border-t border-border-subtle bg-gradient-to-b from-canvas to-canvas-surface">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
             <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-text-primary">
               Ready to take back your GTM margins?

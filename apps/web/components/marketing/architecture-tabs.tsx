@@ -57,7 +57,7 @@ export function ArchitectureTabs() {
   };
 
   return (
-    <section className="py-24 max-w-5xl mx-auto px-4 sm:px-6">
+    <section className="py-14 sm:py-24 max-w-5xl mx-auto px-4 sm:px-6">
       <div className="text-center max-w-2xl mx-auto mb-12">
         <Badge variant="matrix" className="mb-3">
           Developer-First Transparency

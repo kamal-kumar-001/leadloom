@@ -27,7 +27,7 @@ export function PreFlightBar() {
   };
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 md:left-auto md:right-6 z-40 flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-border-muted bg-canvas-surface/90 px-3 py-3 shadow-2xl backdrop-blur-xl animate-fade-in select-none">
+    <div className="fixed bottom-3 left-3 right-3 md:left-auto md:right-6 z-40 flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-border-muted bg-canvas-surface px-3 py-3 shadow-2xl animate-fade-in select-none">
       {/* Counters & Telemetry */}
       <div className="flex items-center gap-2 md:border-r border-border-subtle pr-4 font-mono text-xs">
         <span className="flex items-center gap-1.5 font-semibold text-text-primary">

@@ -6,7 +6,7 @@ import { Radio, GitBranch, Mail, ArrowUpRight, CheckCircle2 } from 'lucide-react
 
 export function BentoGridSection() {
   return (
-    <section className="py-24 max-w-6xl mx-auto px-4 sm:px-6">
+    <section className="py-14 sm:py-24 max-w-6xl mx-auto px-4 sm:px-6">
       <div className="text-center max-w-2xl mx-auto mb-16">
         <Badge variant="loom" className="mb-3">
           Architecture & Capabilities
