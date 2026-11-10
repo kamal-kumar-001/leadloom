@@ -1,0 +1,17 @@
+# Dashboard stage - Team Beta task 3: shared feedback and error-handling foundation
+
+Same rules as docs/plan/DASHBOARD_BETA.md (tokens only, @leadloom/ui components, dark and light, 390 and 1280, no invented data, pull --rebase before push, main only, commits as Kamal, no secrets, no deploy, no real email sends).
+Kamal asked for: proper toasts all over the site, plus the other basics a production site needs, with a written list.
+
+## Part A - the list (docs/plan/UI_FOUNDATIONS.md)
+Audit the real source (apps/web) and list only gaps that exist today, each with: where it shows up (file or route), the fix, status (todo / done / not needed), owner. Cover what applies: loading states, empty states, error states with retry, route-level error boundaries and not-found, offline notice, pending and disabled buttons during submits, double-submit protection, inline form errors with aria-describedby and focus on the first error, destructive-action confirmation, keyboard and focus handling in modals, toast accessibility (role, live region, no auto-dismiss of errors that need action), reduced motion, page titles and metadata. Do not pad with items that do not apply. Use only the repo, WAI-ARIA Authoring Practices and the sonner docs as guidance. Do not install or run third-party skill repos or scripts.
+
+## Part B - implement through shared pieces (not per-page patches)
+Files you own: apps/web/lib/notify.ts, apps/web/components/feedback/* (new), apps/web/app/error.tsx, apps/web/app/not-found.tsx, apps/web/app/app/error.tsx, apps/web/app/app/loading.tsx, docs/plan/UI_FOUNDATIONS.md, and the sonner `<Toaster>` block in apps/web/app/layout.tsx (touch only that block).
+1. `notify` wrapper over sonner (already a dependency): success, info, warning, error, with a stable id per message so repeats are deduplicated, a safe message mapper (never show raw stack, status text or engine internals; map EngineClientError and HTTP statuses to short plain sentences), errors stay until dismissed when they carry an action (Retry). Toaster styled only with tokens, `aria-live` correct, mobile position that does not cover primary actions.
+2. Replace direct `toast.` calls in existing pages and components with `notify` (mechanical change; keep their behavior). Fixture pages stay fixtures: do not add fake success toasts for simulated work; if a page simulates, the message must say it is a sample.
+3. Form pieces: `FormField` (label, hint, inline error, aria wiring), used by login, signup, forgot-password and verify-email without changing their logic or the auth flow. Errors that belong to a field show inline; toasts are for events, not for every validation error.
+4. `ConfirmDialog` for destructive actions (focus trap, Escape, returns focus), `OfflineBanner` (navigator.onLine and online/offline events). You may add exactly one line in apps/web/app/app/layout.tsx to mount OfflineBanner; make no other edit there.
+5. Error boundaries and loading skeletons use Card/EmptyState from @leadloom/ui.
+Gamma owns the shell, tokens, packages/ui and the gating components (docs/plan/GATING.md): do not edit them. If you need a shared primitive in packages/ui, write what you need in docs/context/SYNC_FEED.md.
+Checks: tsc, next build, view dark and light at 1280 and 390 (a toast showing, an error page, the offline banner), then push. Do the list first and push it, then implement and push, so partial progress is saved. Report both commit hashes.

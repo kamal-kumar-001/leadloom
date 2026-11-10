@@ -59,7 +59,7 @@ export function PlanLimitsCard() {
             </Badge>
           </div>
           <p className="text-xs text-text-secondary mt-0.5">
-            System limit schemas defined in packages/contracts/src/entitlements.contract.ts.
+            Limits defined for this product. They are not enforced yet.
           </p>
         </div>
       </div>

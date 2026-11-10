@@ -6,3 +6,4 @@ export * from './badge';
 export * from './theme-provider';
 export * from './tailwind-preset';
 export * from './card';
+export * from './feature-gate';
