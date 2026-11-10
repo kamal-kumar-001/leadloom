@@ -124,7 +124,11 @@ export async function createApplication(services?:RuntimeServices) {
    });
   }
  }
- fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false}));
+ // Coarse Boolean(services) alone was easy to misread as "open mutations";
+ // report per-route mount state so health checks show exactly what exists.
+ // Every mounted mutation route still requires a session + write role, and
+ // sessions can only be minted when the login issuer itself is mounted.
+ fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false,routes:{mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted'}}));
  fastify.get('/ready',async(_request:any,reply:any)=>reply.code(503).send({status:'not-ready',reason:'Database/auth/provider workers are not mounted'}));
  await app.init();
  return app;
