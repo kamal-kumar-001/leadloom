@@ -40,3 +40,9 @@ Connectors exist from Beta, fixture-tested only. Wiring, credential storage on t
 ## Scaffolding inventory (what exists, reuse unless it blocks a stage)
 Reuse as is: engine auth, bridge, provisioning, access guard, audit log, entitlements, vault, migrations and bootstrap. Alpha shell, tokens and layout (fix auth first). Beta connectors and security helpers (leave alone until stage 3).
 Do not build now: connector catalog contract, credential facade, test-connection service, CSV importer, DNS inspector, validator edge limits, waterfall UI.
+
+## Landed before the pause (Beta 38dc6e0, 2026-11-10 21:55 IST): unwired, parked until stage 3
+Files: `waterfall/credentials/*` (own AES-GCM sealer, port, in-memory store), `waterfall/connectors/test-connection.service.ts`, `packages/contracts/src/connector-catalog.contract.ts`, raw allowlists in Apollo, OpenAI and Ollama.
+- Nothing imports these from a route or from `main.ts`. They are not part of login or the dashboard and must not be wired now.
+- `credential-sealer.ts` duplicates what `apps/engine/src/modules/vault` (VaultService, `docs/adr/001-byok-encryption.md`, `LEADLOOM_MASTER_KEY`, `key_version`) already does. In stage 3 it is reconciled onto the existing vault (thin write-only facade) rather than shipping a second key system. Do not use the sealer for real keys.
+- Kept, not deleted: tests pass and the catalog and raw allowlists are reusable.
