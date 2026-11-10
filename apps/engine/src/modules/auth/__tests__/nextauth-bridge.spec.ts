@@ -4,47 +4,62 @@ import { createApplication } from '../../../main';
 import { mintBridgeToken, verifyBridgeToken } from '../nextauth-bridge';
 
 const bridgeKey = randomBytes(32);
-const ident = () => ({ sub: randomUUID(), workspaceId: randomUUID(), role: 'member' as const });
+const wsA = randomUUID(), wsB = randomUUID();
+const members: Record<string, { id: string; workspaceId: string; email: string; passwordHash: null; role: 'admin' | 'member' | 'read_only' }> = {
+  'rw@example.invalid': { id: randomUUID(), workspaceId: wsA, email: 'rw@example.invalid', passwordHash: null, role: 'member' },
+  'ro@example.invalid': { id: randomUUID(), workspaceId: wsB, email: 'ro@example.invalid', passwordHash: null, role: 'read_only' },
+};
+const directory = { findByEmail: async (e: string) => members[e.trim().toLowerCase()] ?? null };
+const seenWorkspaces: string[] = [];
 const core = (extra: object = {}) => ({
-  credentials: { save: async () => ({}), list: async () => [], delete: async () => false },
+  credentials: { save: async () => ({}), list: async (w: string) => { seenWorkspaces.push(w); return []; }, delete: async () => false },
   outbound: { enqueue: async () => randomUUID(), suppress: async () => {} },
   sessionKey: randomBytes(32),
+  userDirectory: directory,
   ...extra,
 });
+const signRaw = (payload: object) => {
+  const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `${head}.${body}.${createHmac('sha256', bridgeKey).update(`${head}.${body}`).digest('base64url')}`;
+};
+const exp = () => Math.floor(Date.now() / 1000) + 60;
 
 describe('nextauth bridge token', () => {
-  it('round-trips valid claims', () => {
-    const id = ident();
-    const c = verifyBridgeToken(mintBridgeToken(id, bridgeKey), bridgeKey);
-    expect(c.sub).toBe(id.sub); expect(c.workspaceId).toBe(id.workspaceId); expect(c.role).toBe('member');
+  it('round-trips a verified email only', () => {
+    expect(verifyBridgeToken(mintBridgeToken({ email: 'RW@Example.invalid' }, bridgeKey), bridgeKey).email).toBe('rw@example.invalid');
   });
-  it('rejects expired, wrong key, tampered, alg none and extra claims', () => {
-    const id = ident();
-    expect(() => verifyBridgeToken(mintBridgeToken(id, bridgeKey, 10, Date.now() - 60_000), bridgeKey)).toThrow();
-    expect(() => verifyBridgeToken(mintBridgeToken(id, bridgeKey), randomBytes(32))).toThrow();
-    const t = mintBridgeToken(id, bridgeKey).split('.');
-    const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(t[1], 'base64url').toString()), role: 'admin' })).toString('base64url');
-    expect(() => verifyBridgeToken(`${t[0]}.${forged}.${t[2]}`, bridgeKey)).toThrow();
+  it('rejects expired, wrong key, tampered, alg none, unverified email and any extra identity claims', () => {
+    const t = mintBridgeToken({ email: 'rw@example.invalid' }, bridgeKey);
+    expect(() => verifyBridgeToken(mintBridgeToken({ email: 'a@b.co' }, bridgeKey, 10, Date.now() - 60_000), bridgeKey)).toThrow();
+    expect(() => verifyBridgeToken(t, randomBytes(32))).toThrow();
+    const p = t.split('.');
+    const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(p[1], 'base64url').toString()), email: 'ro@example.invalid' })).toString('base64url');
+    expect(() => verifyBridgeToken(`${p[0]}.${forged}.${p[2]}`, bridgeKey)).toThrow();
     const none = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
-    expect(() => verifyBridgeToken(`${none}.${t[1]}.`, bridgeKey)).toThrow();
-    const body = Buffer.from(JSON.stringify({ iss: 'leadloom-web', aud: 'leadloom-engine', ...id, exp: Math.floor(Date.now() / 1000) + 60, extra: 1 })).toString('base64url');
-    const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const sig = createHmac('sha256', bridgeKey).update(`${head}.${body}`).digest('base64url');
-    expect(() => verifyBridgeToken(`${head}.${body}.${sig}`, bridgeKey)).toThrow();
+    expect(() => verifyBridgeToken(`${none}.${p[1]}.`, bridgeKey)).toThrow();
+    const base = { iss: 'leadloom-web', aud: 'leadloom-engine', email: 'rw@example.invalid', exp: exp() };
+    expect(() => verifyBridgeToken(signRaw({ ...base, email_verified: false }), bridgeKey)).toThrow();
+    expect(() => verifyBridgeToken(signRaw({ ...base, email_verified: true, role: 'admin' }), bridgeKey)).toThrow();
+    expect(() => verifyBridgeToken(signRaw({ ...base, email_verified: true, workspaceId: wsB }), bridgeKey)).toThrow();
   });
 });
 
-describe('bridge in runtime (default off)', () => {
-  it('bridge token is rejected unless the bridge key is configured', async () => {
-    const token = mintBridgeToken(ident(), bridgeKey);
+describe('bridge in runtime (default off, membership from server)', () => {
+  it('rejects unless configured; derives workspace and role from the directory; unknown email gets 401', async () => {
     const off = await createApplication(core() as never);
     const on = await createApplication(core({ nextAuthBridgeKey: bridgeKey }) as never);
     try {
-      const h = { authorization: 'Bearer ' + token };
-      expect((await off.getHttpAdapter().getInstance().inject({ method: 'GET', url: '/vault/credentials', headers: h })).statusCode).toBe(401);
-      expect((await on.getHttpAdapter().getInstance().inject({ method: 'GET', url: '/vault/credentials', headers: h })).statusCode).toBe(200);
-      const ro = mintBridgeToken({ ...ident(), role: 'read_only' }, bridgeKey);
-      expect((await on.getHttpAdapter().getInstance().inject({ method: 'POST', url: '/outbound/suppressions', headers: { authorization: 'Bearer ' + ro }, payload: {} })).statusCode).toBe(403);
+      const get = (app: typeof on, t: string) => app.getHttpAdapter().getInstance().inject({ method: 'GET', url: '/vault/credentials', headers: { authorization: 'Bearer ' + t } });
+      const rw = mintBridgeToken({ email: 'rw@example.invalid' }, bridgeKey);
+      expect((await get(off, rw)).statusCode).toBe(401);
+      seenWorkspaces.length = 0;
+      expect((await get(on, rw)).statusCode).toBe(200);
+      expect(seenWorkspaces).toEqual([wsA]);
+      expect((await get(on, mintBridgeToken({ email: 'nobody@example.invalid' }, bridgeKey))).statusCode).toBe(401);
+      const ro = mintBridgeToken({ email: 'ro@example.invalid' }, bridgeKey);
+      const res = await on.getHttpAdapter().getInstance().inject({ method: 'POST', url: '/vault/credentials', headers: { authorization: 'Bearer ' + ro }, payload: {} });
+      expect(res.statusCode).toBe(403);
     } finally { await off.close(); await on.close(); }
   });
 });

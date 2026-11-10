@@ -12,7 +12,7 @@
 ## 1. Executive Summary & Product Vision `[Recommended Skill: prd-generator]`
 
 ### 1.1 The Market Opportunity
-Modern outbound Go-To-Market (GTM) engines like PumpGTM, Clay, and 6sense suffer from three fundamental architectural and economic flaws:
+Modern outbound Go-To-Market (GTM) engines like the leading hosted GTM platforms suffer from three fundamental architectural and economic flaws:
 1. **Predatory Markups on Wholesale Data:** SaaS vendors charge 300% to 1,000% markups on third-party enrichment APIs (e.g., reselling a $0.003 Hunter/Apollo call for $0.03 to $0.05 in proprietary "credits").
 2. **Brittle Vendor Lock-in:** Proprietary table schemas trap contact records, prompt engineering templates, and custom scraping logic inside closed databases.
 3. **Execution-Enrichment Fragmentation:** Teams enrich leads in tool A, draft copy with LLM B, sequence emails via tool C, and handle replies in tool D, causing lead leakage, broken webhooks, and deliverability blind spots.
@@ -54,7 +54,7 @@ Modern outbound Go-To-Market (GTM) engines like PumpGTM, Clay, and 6sense suffer
 ## 2. Product Positioning & Value Propositions `[Recommended Skill: landing-page-design]`
 
 * **Tagline:** *Zero-markup, signal-driven outbound engine with instant idea validation.*
-* **Positioning:** The developer-first, self-hostable alternative to Clay, PumpGTM, and manual pre-product smoke-testing.
+* **Positioning:** The developer-first, self-hostable alternative to hosted GTM platforms and manual pre-product smoke-testing.
 * **Core Value Pillars:**
   1. **Zero Data Markup (BYOK):** Plug in your raw Apollo, Hunter, Anymail Finder, Dropcontact, Perplexity, or OpenAI keys. Pay providers directly; LeadLoom takes zero commission on API calls.
   2. **Adaptive DAG Waterfalls:** Short-circuit expensive enrichment tiers as soon as a low-cost tier returns a verified, deliverable email.

@@ -44,34 +44,40 @@ export async function createApplication(services?:RuntimeServices) {
  const app=await NestFactory.create<NestFastifyApplication>(RuntimeModule,new FastifyAdapter({bodyLimit:65536}),{logger:['error','warn']});
  const fastify=app.getHttpAdapter().getInstance();
  if(services) {
-  const authorize=(request:any,reply:any,write=false)=>{
+  const authorize=async(request:any,reply:any,write=false)=>{
    try {
     const token=String(request.headers.authorization??'').replace(/^Bearer /,'');
     let claims;
     try {claims=verifySession(token,services.sessionKey);}
-    catch(e) {if(!services.nextAuthBridgeKey) throw e; claims=verifyBridgeToken(token,services.nextAuthBridgeKey);}
+    catch(e) {
+     if(!services.nextAuthBridgeKey||!services.userDirectory) throw e;
+     const proven=verifyBridgeToken(token,services.nextAuthBridgeKey);
+     const member=await services.userDirectory.findByEmail(proven.email);
+     if(!member) throw new Error('No membership');
+     claims={sub:member.id,workspaceId:member.workspaceId,role:member.role,exp:proven.exp};
+    }
     if(write && !canWrite(claims)) {reply.code(403).send({error:'Read-only workspace role'});return null;}
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
   };
   fastify.get('/vault/credentials',async(request:any,reply:any)=>{
-   const session=authorize(request,reply);if(!session)return;
+   const session=await authorize(request,reply);if(!session)return;
    return services.credentials.list(session.workspaceId);
   });
   fastify.post('/vault/credentials',async(request:any,reply:any)=>{
-   const session=authorize(request,reply,true);if(!session)return;
+   const session=await authorize(request,reply,true);if(!session)return;
    try{return await services.credentials.save(session.workspaceId,request.body);}
    catch{return reply.code(400).send({error:'Credential could not be saved'});}
   });
   fastify.delete('/vault/credentials/:id',async(request:any,reply:any)=>{
-   const session=authorize(request,reply,true);if(!session)return;
+   const session=await authorize(request,reply,true);if(!session)return;
    const id=z.string().uuid().safeParse(request.params.id);
    if(!id.success)return reply.code(400).send({error:'Invalid credential ID'});
    return {deleted:await services.credentials.delete(session.workspaceId,id.data)};
   });
   const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime()}).strict();
   fastify.post('/outbound/jobs',async(request:any,reply:any)=>{
-   const session=authorize(request,reply,true);if(!session)return;
+   const session=await authorize(request,reply,true);if(!session)return;
    const parsed=Enqueue.safeParse(request.body);
    if(!parsed.success)return reply.code(400).send({error:'Invalid job request'});
    try {
@@ -80,7 +86,7 @@ export async function createApplication(services?:RuntimeServices) {
    } catch {return reply.code(400).send({error:'Job could not be queued'});}
   });
   fastify.post('/outbound/suppressions',async(request:any,reply:any)=>{
-   const session=authorize(request,reply,true);if(!session)return;
+   const session=await authorize(request,reply,true);if(!session)return;
    const email=z.object({email:z.string().email()}).strict().safeParse(request.body);
    if(!email.success)return reply.code(400).send({error:'Invalid suppression request'});
    await services.outbound.suppress(session.workspaceId,email.data.email);return {suppressed:true};
@@ -109,24 +115,24 @@ export async function createApplication(services?:RuntimeServices) {
   // so the deployed posture stays unchanged unless an operator opts in.
   if(services.waterfall) {
    fastify.post('/waterfall/pre-flight',async(request:any,reply:any)=>{
-    const session=authorize(request,reply);if(!session)return;
+    const session=await authorize(request,reply);if(!session)return;
     try{return await services.waterfall!.getPreFlightEstimate(request.body);}
     catch{return reply.code(400).send({error:'Invalid pre-flight request'});}
    });
    fastify.post('/waterfall/dispatch',async(request:any,reply:any)=>{
-    const session=authorize(request,reply,true);if(!session)return;
+    const session=await authorize(request,reply,true);if(!session)return;
     try{return await services.waterfall!.dispatch(request.body);}
     catch{return reply.code(400).send({error:'Invalid waterfall dispatch request'});}
    });
   }
   if(services.validator) {
    fastify.post('/validator/experiments',async(request:any,reply:any)=>{
-    const session=authorize(request,reply,true);if(!session)return;
+    const session=await authorize(request,reply,true);if(!session)return;
     try{return await services.validator!.generate(request.body);}
     catch{return reply.code(400).send({error:'Invalid validation request'});}
    });
    fastify.get('/validator/experiments/:id/scorecard',async(request:any,reply:any)=>{
-    const session=authorize(request,reply);if(!session)return;
+    const session=await authorize(request,reply);if(!session)return;
     try{return await services.validator!.getScorecard(String(request.params.id));}
     catch{return reply.code(404).send({error:'Experiment not found'});}
    });

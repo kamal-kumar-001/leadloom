@@ -10,11 +10,11 @@
 
 ## 1. UX Research & Competitive Friction Analysis `[Recommended Skill: emil-design-eng]`
 
-Before engineering LeadLoom's interfaces, we audited four market incumbents: **Clay**, **PumpGTM**, **Instantly**, and **Apollo**. While commercially successful, their interfaces impose significant cognitive drag on RevOps teams and growth practitioners.
+Before engineering LeadLoom's interfaces, we audited four market incumbents (names withheld). While commercially successful, their interfaces impose significant cognitive drag on RevOps teams and growth practitioners.
 
 ### 1.1 Competitor Failure Modes vs. LeadLoom Solutions
 
-| UX Bottleneck | Incumbent Failure Mode (Clay / PumpGTM) | LeadLoom Design Solution |
+| UX Bottleneck | Incumbent Failure Mode (incumbents) | LeadLoom Design Solution |
 | :--- | :--- | :--- |
 | **Horizontal Scroll Hell** | Adding 4 enrichment providers generates 30+ wide, un-collapsible columns. Users waste 40% of their session panning across screens. | **Collapsible Single-Column Bundles (`<WaterfallCell/>`):** An entire 3-tier cascade occupies a single $220\text{px}$ column. Hovering or clicking reveals execution breadcrumbs and provider attribution inline. |
 | **Credit Anxiety & Blind API Burn** | Clicking "Run Batch" triggers irreversible credit consumption without showing provider pricing or short-circuit rules. | **Pre-Flight Telemetry Dock (`<PreFlightBar/>`):** A fixed glassmorphic dock displays: *Estimated Wholesale Cost ($4.12 via BYOK) • 3 Tiers • 2m 10s run time • Max cost ceiling*. |
@@ -408,7 +408,7 @@ To guarantee that the 3D visual upgrades **cost $0 extra in infrastructure** and
 #### Section 1: Hero Section (Above the Fold) `[Recommended Skill: landing-page-design]`
 - **Eyebrow Badge:** `🧵 Open-Core Signal Engine • Apache 2.0 / MIT Licensed`
 - **H1 Headline:** **Weave buying signals into qualified revenue. Stop paying middleman markups on data.**
-- **Subheadline:** The self-hostable alternative to Clay and PumpGTM. Connect your own Apollo, Hunter, and OpenAI keys to enrich leads, validate startup hypotheses, and sequence cold email at pure wholesale API cost.
+- **Subheadline:** The self-hostable alternative to hosted GTM platforms. Connect your own Apollo, Hunter, and OpenAI keys to enrich leads, validate startup hypotheses, and sequence cold email at pure wholesale API cost.
 - **Magnetic CTAs:**
   - `[ Launch Free Cloud Trial ]` (Indigo Glow, Magnetic 20px radius).
   - `$ docker compose up -d leadloom` (Monospace 1-click copy with Sonner toast).
@@ -426,7 +426,7 @@ To guarantee that the 3D visual upgrades **cost $0 extra in infrastructure** and
 
 #### Section 4: The "Markup Exposed" Interactive Calculator `[Recommended Skill: landing-page-design]`
 - **Interactive Range Slider:** $1,000$ to $100,000$ monthly contacts.
-- **Card A (Clay / PumpGTM):** `$1,200/mo` with predatory credit markups.
+- **Card A (incumbents):** `$1,200/mo` with predatory credit markups.
 - **Card B (LeadLoom Self-Hosted):** `$74/mo` direct API cost (**Save $13,512/year**).
 
 #### Section 5: The 3-Pillar Asymmetric Bento Grid `[Recommended Skill: apple-design]`
