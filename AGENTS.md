@@ -83,3 +83,6 @@ Before generating or modifying any code in this repository:
 - **File Naming:** Kebab-case for all files (`waterfall-cell.tsx`, `token-bucket.service.ts`, `living-loom-canvas.tsx`).
 - **Strict TypeScript:** No `any` types permitted. All external API payloads and webhook bodies must be validated with `zod` schemas.
 - **Defensive Error Handling:** Every BullMQ worker processor must implement exponential backoff with randomized jitter.
+
+## Design rules
+Before any UI, email or copy change read docs/plan/DESIGN_RULES.md and run `node scripts/check-design.mjs`. These rules are binding for all teams and are never optional per task.

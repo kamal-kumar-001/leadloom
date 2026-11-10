@@ -1,6 +1,6 @@
 # Dashboard stage - Team Beta task 3: shared feedback and error-handling foundation
 
-Same rules as docs/plan/DASHBOARD_BETA.md (tokens only, @leadloom/ui components, dark and light, 390 and 1280, no invented data, pull --rebase before push, main only, commits as Kamal, no secrets, no deploy, no real email sends).
+Binding first: docs/plan/DESIGN_RULES.md (run `node scripts/check-design.mjs` before pushing). Same rules as docs/plan/DASHBOARD_BETA.md (tokens only, @leadloom/ui components, dark and light, 390 and 1280, no invented data, pull --rebase before push, main only, commits as Kamal, no secrets, no deploy, no real email sends).
 Kamal asked for: proper toasts all over the site, plus the other basics a production site needs, with a written list.
 
 ## Part A - the list (docs/plan/UI_FOUNDATIONS.md)

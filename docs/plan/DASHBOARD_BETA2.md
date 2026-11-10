@@ -1,6 +1,6 @@
 # Dashboard stage - Team Beta task 2: real Settings page
 
-Same rules as docs/plan/DASHBOARD_BETA.md (tokens only, @leadloom/ui components, dark and light, 390 and 1280, no invented data, pull --rebase before push, main only, commits as Kamal, no secrets, no deploy).
+Binding first: docs/plan/DESIGN_RULES.md (run `node scripts/check-design.mjs` before pushing). Same rules as docs/plan/DASHBOARD_BETA.md (tokens only, @leadloom/ui components, dark and light, 390 and 1280, no invented data, pull --rebase before push, main only, commits as Kamal, no secrets, no deploy).
 
 Files you own for this task: apps/web/app/app/settings/page.tsx and apps/web/components/settings/* (new). Gamma has moved the shell identity into components/shell/identity.tsx (`useShellIdentity()` gives email, workspaceId, role from the engine). Do not edit the shell, tokens, packages/ui or the overview page.
 

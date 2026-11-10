@@ -141,7 +141,7 @@ function ForgotPasswordForm() {
           type="button"
           variant="primary"
           onClick={() => router.push(`/login?email=${encodeURIComponent(email)}`)}
-          className="w-full justify-center py-2.5 text-xs font-medium bg-brand-loom hover:bg-brand-loom/90 text-text-inverse h-11 transition-colors"
+          className="w-full justify-center py-2.5 text-xs font-medium h-11 transition-colors"
         >
           Sign In Now
         </Button>
@@ -195,7 +195,7 @@ function ForgotPasswordForm() {
             type="submit"
             variant="primary"
             disabled={isSubmitting || code.length !== 6 || !password}
-            className="w-full justify-center py-2.5 text-xs font-medium bg-brand-loom hover:bg-brand-loom/90 text-text-inverse h-11 transition-colors disabled:opacity-50"
+            className="w-full justify-center py-2.5 text-xs font-medium h-11 transition-colors disabled:opacity-50"
           >
             {isSubmitting ? 'Updating password...' : 'Update Password & Sign In'}
           </Button>
@@ -257,7 +257,7 @@ function ForgotPasswordForm() {
           type="submit"
           variant="primary"
           disabled={isSubmitting}
-          className="w-full justify-center py-2.5 text-xs font-medium bg-brand-loom hover:bg-brand-loom/90 text-text-inverse h-11 transition-colors"
+          className="w-full justify-center py-2.5 text-xs font-medium h-11 transition-colors"
         >
           {isSubmitting ? 'Sending code...' : 'Send Recovery Code'}
         </Button>

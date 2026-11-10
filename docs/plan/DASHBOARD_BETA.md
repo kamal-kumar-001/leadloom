@@ -1,3 +1,5 @@
+> Binding for every task: read docs/plan/DESIGN_RULES.md first and run `node scripts/check-design.mjs` before pushing.
+
 # Dashboard stage - Team Beta task (Stage 2)
 
 Owner of integration: Gamma. Pull --rebase before every push. Main branch only. Author commits as Kamal. No secrets anywhere.

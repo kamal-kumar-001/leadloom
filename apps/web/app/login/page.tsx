@@ -163,7 +163,7 @@ function LoginForm() {
           type="submit"
           variant="primary"
           disabled={isSubmitting}
-          className="w-full justify-center py-2.5 text-xs font-medium bg-brand-loom hover:bg-brand-loom/90 text-text-inverse h-11 transition-colors"
+          className="w-full justify-center py-2.5 text-xs font-medium h-11 transition-colors"
         >
           {isSubmitting ? 'Signing in...' : 'Sign In'}
         </Button>

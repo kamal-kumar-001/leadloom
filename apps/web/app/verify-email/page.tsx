@@ -134,7 +134,7 @@ function VerifyEmailForm() {
           type="submit"
           variant="primary"
           disabled={isSubmitting || code.length !== 6}
-          className="w-full justify-center py-2.5 text-xs font-medium bg-brand-loom hover:bg-brand-loom/90 text-text-inverse h-11 transition-colors disabled:opacity-50"
+          className="w-full justify-center py-2.5 text-xs font-medium h-11 transition-colors disabled:opacity-50"
         >
           {isSubmitting ? 'Verifying...' : 'Verify Email & Continue'}
         </Button>
