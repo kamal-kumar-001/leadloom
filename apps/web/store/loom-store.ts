@@ -26,6 +26,8 @@ export interface LoomState {
   toggleSequencer: (open?: boolean) => void;
   updateCell: (rowId: string, colId: string, value: any) => void;
   runWaterfallForSelected: () => void;
+  importRows: (newRows: Array<{ company: string; domain: string; signal?: string }>) => void;
+  addWaterfallColumn: (name: string, tiers: string[], exitPredicate: string) => void;
 }
 
 // Generate 50 initial mock rows for high-density testing
@@ -182,6 +184,96 @@ export const useLoomStore = create<LoomState>((set, get) => ({
           ],
         });
       }, 800 + Math.random() * 600);
+    });
+  },
+
+  importRows: (newRows) => {
+    set((state) => {
+      const nextRowsById = { ...state.rowsById };
+      const nextRowOrder = [...state.rowOrder];
+
+      newRows.forEach((item, index) => {
+        const id = `00000000-0000-4000-9000-${Date.now().toString(16).slice(-6)}${String(index).padStart(6, '0')}`;
+        nextRowOrder.unshift(id);
+
+        const cells: Record<string, any> = {
+          '00000000-0000-4000-8000-000000000101': item.company,
+          '00000000-0000-4000-8000-000000000102': item.domain,
+          '00000000-0000-4000-8000-000000000103': item.signal || '[CSV] Direct Upload',
+          '00000000-0000-4000-8000-000000000104': {
+            value: null,
+            status: 'idle',
+            confidence: 0,
+            trace: [],
+          },
+        };
+
+        // Initialize any dynamically added columns
+        state.table.columns.forEach((col) => {
+          if (!cells[col.id]) {
+            cells[col.id] = col.type === 'waterfall' ? { value: null, status: 'idle', trace: [] } : '';
+          }
+        });
+
+        nextRowsById[id] = {
+          id,
+          tableId: state.table.id,
+          orderIndex: index,
+          cells,
+        };
+      });
+
+      return {
+        rowsById: nextRowsById,
+        rowOrder: nextRowOrder,
+        table: {
+          ...state.table,
+          rowCount: nextRowOrder.length,
+        },
+      };
+    });
+  },
+
+  addWaterfallColumn: (name, tiers, exitPredicate) => {
+    set((state) => {
+      const colId = `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0')}`;
+      const newCol = {
+        id: colId,
+        tableId: state.table.id,
+        name: `${name} (${tiers.length})`,
+        type: 'waterfall' as const,
+        orderIndex: state.table.columns.length,
+        width: 240,
+        isVisible: true,
+        config: {
+          tiers,
+          exitPredicate,
+        },
+      };
+
+      const nextRowsById = { ...state.rowsById };
+      Object.keys(nextRowsById).forEach((rowId) => {
+        nextRowsById[rowId] = {
+          ...nextRowsById[rowId],
+          cells: {
+            ...nextRowsById[rowId].cells,
+            [colId]: {
+              value: null,
+              status: 'idle',
+              confidence: 0,
+              trace: [],
+            },
+          },
+        };
+      });
+
+      return {
+        table: {
+          ...state.table,
+          columns: [...state.table.columns, newCol],
+        },
+        rowsById: nextRowsById,
+      };
     });
   },
 }));

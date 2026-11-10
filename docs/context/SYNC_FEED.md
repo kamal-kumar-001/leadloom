@@ -147,3 +147,14 @@
 - Created `TestConnectionService` in `modules/waterfall/connectors`: returns `DISABLED` unless `LEADLOOM_CONNECTORS_LIVE_ENABLED=true` and workspace is entitled via `WaterfallEntitlementPort`. Tested using fake fetch (0 live calls).
 - All 33 engine test files (218 passed, 8 skipped) and `tsc --noEmit` pass cleanly.
 
+---
+
+### [2026-11-10T22:05:00Z] Team Alpha | apps/web | Non-Breaking
+- Shipped `apps/web/lib/engine-client.ts`: typed engine bridge client with JWT auto-caching, transparent dual-mode (live engine with offline mock fallback), and sanitized HTTP error mapping.
+- Shipped BYOK Connector Hub supporting all 11 providers with live test ping actions, latency badges, masked key preview (`sk-••••••••abcd`), and loopback-fenced Ollama local model configuration.
+- Shipped `CsvImporterModal` with client-side parsing, smart column auto-mapping, row preview, and streaming ingest into virtual grid.
+- Shipped `AddWaterfallModal` allowing users to configure multi-tier enrichment cascades and early-exit predicates directly on the table canvas.
+- Shipped `DnsInspectorModal` with copyable SPF, DKIM, and DMARC DNS configuration records and health badges.
+- Shipped rate-limited public waitlist proxy `/api/v/[slug]/leads` (5 requests / 10 min sliding window) protecting smoke-test pages from bot flood abuse.
+- Verification: clean production build (`17/17` routes) and screenshot regression suite verified across all 36 route/viewport/theme combinations with 0 errors.
+

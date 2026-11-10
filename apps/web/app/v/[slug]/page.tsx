@@ -16,6 +16,8 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
   const [slug, setSlug] = useState('preview');
   useEffect(() => { let mounted = true; params.then(value => { if (mounted) setSlug(value.slug); }); return () => { mounted = false; }; }, [params]);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleInitialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !email.includes('@')) {
@@ -25,11 +27,42 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
     setShowSurvey(true);
   };
 
-  const handleFinalSubmit = (e: React.FormEvent) => {
+  const handleFinalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPreviewNotice(true);
-    toast.info('Preview only: your response was not saved.');
-    setShowSurvey(false);
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/v/${slug}/leads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          survey: { frustration: q1Response, teamSize: q2Response },
+        }),
+      });
+
+      if (res.status === 429) {
+        toast.error('Submission rate limit exceeded. Please try again later.');
+        return;
+      }
+
+      if (!res.ok) {
+        toast.error('Failed to submit waitlist registration.');
+        return;
+      }
+
+      const data = await res.json();
+      toast.success(
+        data.isMock
+          ? 'Demo preview: waitlist spot reserved and intent score recorded!'
+          : 'Waitlist spot reserved! Thank you for validating this idea.'
+      );
+      setPreviewNotice(true);
+      setShowSurvey(false);
+    } catch {
+      toast.error('Network error during waitlist submission.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

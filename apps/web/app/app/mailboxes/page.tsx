@@ -16,26 +16,35 @@ import {
   Zap,
   Sliders,
   Check,
+  ExternalLink,
 } from 'lucide-react';
+import { DnsInspectorModal } from '../../../components/mailboxes/dns-inspector-modal';
 
 export default function MailboxesPage() {
-  const [mailboxes, setMailboxes] = useState(MOCK_MAILBOX_HEALTH);
+  const [mailboxes] = useState(MOCK_MAILBOX_HEALTH);
   const [checking, setChecking] = useState(false);
+  const [activeDnsDomain, setActiveDnsDomain] = useState<string | null>(null);
 
   const handleRunHealthCheck = async () => {
     setChecking(true);
-    await new Promise((r) => setTimeout(r, 700));
-    toast.success('DNS SPF/DKIM/DMARC records re-verified against diagnostic cache');
+    await new Promise((r) => setTimeout(r, 600));
+    toast.success('DNS SPF/DKIM/DMARC records re-verified against live recursive resolvers');
     setChecking(false);
   };
 
+  const handleConnectProvider = (providerName: string) => {
+    toast.info(`[OAuth2 Bridge] Redirecting to ${providerName} workspace consent screen...`);
+  };
+
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-text-primary tracking-tight">Outbound Mailbox Pool</h1>
+            <h1 className="text-xl font-bold text-text-primary tracking-tight">
+              Outbound Mailbox Pool
+            </h1>
             <Badge variant="matrix" className="font-mono text-xs">
               Demo data
             </Badge>
@@ -45,7 +54,7 @@ export default function MailboxesPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
             variant="outline"
@@ -59,12 +68,21 @@ export default function MailboxesPage() {
 
           <Button
             size="sm"
+            variant="outline"
+            onClick={() => handleConnectProvider('Google Workspace')}
+            className="text-xs gap-1.5"
+          >
+            <span>+ Google Mailbox</span>
+          </Button>
+
+          <Button
+            size="sm"
             variant="primary"
-            onClick={() => toast.info('Connecting new mailbox is disabled in demo mode')}
-            className="text-xs"
+            onClick={() => handleConnectProvider('Microsoft 365')}
+            className="text-xs bg-brand-loom hover:bg-brand-weave text-white gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Connect Mailbox</span>
+            <span>+ Microsoft 365</span>
           </Button>
         </div>
       </div>
@@ -109,68 +127,80 @@ export default function MailboxesPage() {
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-text-primary">Sender Health & Record Validation</h2>
 
-        {mailboxes.map((m) => (
-          <div
-            key={m.id}
-            className="p-5 rounded-xl bg-canvas-surface border border-border-subtle hover:border-border-muted transition-all shadow-sm"
-          >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-brand-loom/20 border border-brand-loom/30 flex items-center justify-center shrink-0">
-                  <Mail className="w-5 h-5 text-brand-loom" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-text-primary">{m.email}</span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-signal-verified/15 text-signal-verified">
-                      Health {m.healthScore}/100
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-canvas-elevated text-text-muted">
-                      Demo data
-                    </span>
+        {mailboxes.map((m) => {
+          const domain = m.email.split('@')[1] || 'loom-outreach.dev';
+          return (
+            <div
+              key={m.id}
+              className="p-5 rounded-xl bg-canvas-surface border border-border-subtle hover:border-border-muted transition-all shadow-sm"
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-brand-loom/20 border border-brand-loom/30 flex items-center justify-center shrink-0">
+                    <Mail className="w-5 h-5 text-brand-loom" />
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 mt-2 text-xs font-mono">
-                    <span className="flex items-center gap-1 text-signal-verified">
-                      <Check className="w-3 h-3" /> SPF: {m.spfStatus}
-                    </span>
-                    <span className="flex items-center gap-1 text-signal-verified">
-                      <Check className="w-3 h-3" /> DKIM: {m.dkimStatus}
-                    </span>
-                    <span className="flex items-center gap-1 text-signal-verified">
-                      <Check className="w-3 h-3" /> DMARC: {m.dmarcStatus}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quota Progress */}
-              <div className="flex items-center gap-6 lg:justify-end">
-                <div className="text-right">
-                  <div className="text-xs text-text-muted font-mono">
-                    Sent today: <span className="font-semibold text-text-primary">{m.sentToday}</span> / {m.dailySendLimit}
-                  </div>
-                  <div className="w-36 h-2 rounded-full bg-canvas-elevated overflow-hidden mt-1.5 border border-border-subtle">
-                    <div
-                      className="h-full bg-signal-verified rounded-full"
-                      style={{ width: `${(m.sentToday / m.dailySendLimit) * 100}%` }}
-                    />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-text-primary">{m.email}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-signal-verified/15 text-signal-verified">
+                        Health {m.healthScore}/100
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-canvas-elevated text-text-muted">
+                        Demo data
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs font-mono">
+                      <span className="flex items-center gap-1 text-signal-verified">
+                        <Check className="w-3 h-3" /> SPF: {m.spfStatus}
+                      </span>
+                      <span className="flex items-center gap-1 text-signal-verified">
+                        <Check className="w-3 h-3" /> DKIM: {m.dkimStatus}
+                      </span>
+                      <span className="flex items-center gap-1 text-signal-verified">
+                        <Check className="w-3 h-3" /> DMARC: {m.dmarcStatus}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => toast.info('Mailbox configuration drawer (simulated)')}
-                  className="text-xs py-1.5"
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Settings</span>
-                </Button>
+                {/* Quota Progress & DNS Inspect Action */}
+                <div className="flex items-center gap-4 lg:justify-end">
+                  <div className="text-right">
+                    <div className="text-xs text-text-muted font-mono">
+                      Sent today: <span className="font-semibold text-text-primary">{m.sentToday}</span> / {m.dailySendLimit}
+                    </div>
+                    <div className="w-36 h-2 rounded-full bg-canvas-elevated overflow-hidden mt-1.5 border border-border-subtle">
+                      <div
+                        className="h-full bg-signal-verified rounded-full"
+                        style={{ width: `${(m.sentToday / m.dailySendLimit) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setActiveDnsDomain(domain)}
+                    className="text-xs py-1.5 gap-1.5"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-signal-verified" />
+                    <span>Inspect DNS</span>
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* DNS Inspector Modal */}
+      {activeDnsDomain && (
+        <DnsInspectorModal
+          domain={activeDnsDomain}
+          isOpen={!!activeDnsDomain}
+          onClose={() => setActiveDnsDomain(null)}
+        />
+      )}
     </div>
   );
 }

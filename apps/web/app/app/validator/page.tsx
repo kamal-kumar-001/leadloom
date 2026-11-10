@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { MOCK_VALIDATION_SCORECARD } from '@leadloom/contracts';
 import { ValidationRadarCard } from '../../../components/validation/validation-radar-card';
+import { NewExperimentModal } from '../../../components/validation/new-experiment-modal';
 import { Badge, Button } from '@leadloom/ui';
 import { toast } from 'sonner';
 import {
@@ -17,13 +18,23 @@ import {
 } from 'lucide-react';
 
 export default function ValidatorPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeExperiment, setActiveExperiment] = useState({
+    title: 'Kubernetes Pod Cost Cutter',
+    slug: 'k8s-cutter',
+    hypothesis: MOCK_VALIDATION_SCORECARD.hypothesis,
+    targetIcp: 'Seed & Series A VP Engineering / DevOps Lead',
+  });
+
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-text-primary tracking-tight">Idea Validation & Smoke-Test Workbench</h1>
+            <h1 className="text-xl font-bold text-text-primary tracking-tight">
+              Idea Validation & Smoke-Test Workbench
+            </h1>
             <Badge variant="matrix" className="font-mono text-xs">
               Demo data
             </Badge>
@@ -35,7 +46,7 @@ export default function ValidatorPage() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/v/k8s-cutter"
+            href={`/v/${activeExperiment.slug}`}
             target="_blank"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle bg-canvas-elevated text-xs font-medium text-text-primary hover:bg-canvas-subtle transition-colors"
           >
@@ -46,8 +57,8 @@ export default function ValidatorPage() {
           <Button
             size="sm"
             variant="primary"
-            onClick={() => toast.info('New hypothesis composer (simulated)')}
-            className="text-xs"
+            onClick={() => setIsModalOpen(true)}
+            className="text-xs bg-brand-loom hover:bg-brand-weave text-white gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New Hypothesis</span>
@@ -60,32 +71,37 @@ export default function ValidatorPage() {
         <div>
           <span className="text-[10px] font-mono text-text-muted uppercase">Active Experiment</span>
           <h2 className="text-base font-bold text-text-primary mt-0.5">
-            {MOCK_VALIDATION_SCORECARD.hypothesis}
+            {activeExperiment.hypothesis}
           </h2>
           <div className="text-xs text-text-muted font-mono mt-1">
-            Target Audience: Seed & Series A VP Engineering / DevOps Lead • Slug: <span className="text-brand-loom">/v/k8s-cutter</span>
+            Target Audience: {activeExperiment.targetIcp} • Slug:{' '}
+            <span className="text-brand-loom">/v/{activeExperiment.slug}</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Badge variant="verified" className="text-xs font-mono">
-            Status: Telemetry Active
+          <Badge variant="loom" className="font-mono text-xs py-1">
+            Status: {MOCK_VALIDATION_SCORECARD.verdict.toUpperCase()}
           </Badge>
         </div>
       </div>
 
-      {/* Radar Scorecard */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-text-primary">Quantitative Intent Scorecard</h2>
-          <span className="text-xs font-mono text-text-muted">Simulated telemetry data</span>
-        </div>
+      {/* Analytics Radar Card */}
+      <ValidationRadarCard scorecard={MOCK_VALIDATION_SCORECARD} />
 
-        <ValidationRadarCard
-          scorecard={MOCK_VALIDATION_SCORECARD}
-          onPromoteToCampaign={() => toast.success('Hypothesis promoted to outbound campaign sequence')}
-        />
-      </div>
+      {/* New Experiment Modal */}
+      <NewExperimentModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onCreate={(exp) => {
+          setActiveExperiment({
+            title: exp.title,
+            slug: exp.slug,
+            hypothesis: exp.hypothesis,
+            targetIcp: exp.targetIcp,
+          });
+        }}
+      />
     </div>
   );
 }

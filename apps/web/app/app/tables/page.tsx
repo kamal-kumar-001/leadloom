@@ -1,11 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button, Badge } from '@leadloom/ui';
 import { LoomVirtualGrid } from '../../../components/grid/loom-virtual-grid';
 import { PreFlightBar } from '../../../components/grid/pre-flight-bar';
 import { ThreadInspector } from '../../../components/grid/drawers/thread-inspector';
 import { LoomViewDrawer } from '../../../components/sequencer/loom-view-drawer';
+import { CsvImporterModal } from '../../../components/grid/csv-importer-modal';
+import { AddWaterfallModal } from '../../../components/grid/add-waterfall-modal';
 import { useLoomStore } from '../../../store/loom-store';
 import {
   Filter,
@@ -15,8 +17,8 @@ import {
   Mail,
   Key,
   SlidersHorizontal,
-  Download,
-  Upload,
+  UploadCloud,
+  Layers,
 } from 'lucide-react';
 
 export default function TablesPage() {
@@ -24,9 +26,14 @@ export default function TablesPage() {
   const toggleSequencer = useLoomStore((state) => state.toggleSequencer);
   const isSequencerOpen = useLoomStore((state) => state.isSequencerOpen);
   const runWaterfallForSelected = useLoomStore((state) => state.runWaterfallForSelected);
+  const importRows = useLoomStore((state) => state.importRows);
+  const addWaterfallColumn = useLoomStore((state) => state.addWaterfallColumn);
+
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+  const [isWaterfallModalOpen, setIsWaterfallModalOpen] = useState(false);
 
   return (
-    <div className="flex flex-col h-full bg-canvas overflow-hidden">
+    <div className="flex flex-col h-full bg-canvas overflow-hidden font-sans">
       {/* Grid Filter / Action Toolbar */}
       <div className="min-h-12 py-2 gap-2 overflow-x-auto whitespace-nowrap min-w-0 border-b border-border-subtle bg-canvas-surface/90 px-4 flex items-center justify-between text-xs shrink-0 select-none">
         <div className="flex items-center gap-2">
@@ -47,6 +54,29 @@ export default function TablesPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* Add Waterfall Column Button */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIsWaterfallModalOpen(true)}
+            className="text-xs py-1.5 gap-1.5 border-border-subtle hover:border-border-strong"
+          >
+            <Layers className="w-3.5 h-3.5 text-brand-loom" />
+            <span>Add Waterfall</span>
+          </Button>
+
+          {/* Import CSV Button */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIsCsvModalOpen(true)}
+            className="text-xs py-1.5 gap-1.5 border-border-subtle hover:border-border-strong"
+          >
+            <UploadCloud className="w-3.5 h-3.5 text-signal-verified" />
+            <span>Import CSV</span>
+          </Button>
+
+          {/* Outbound Sequencer Drawer Toggle */}
           <button
             onClick={() => toggleSequencer()}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-subtle bg-canvas-elevated text-text-secondary hover:text-text-primary transition-all active:scale-[0.97]"
@@ -55,11 +85,12 @@ export default function TablesPage() {
             <span>{isSequencerOpen ? 'Hide Sequencer' : 'Outbound Loom'}</span>
           </button>
 
+          {/* Execute / Simulate Waterfall */}
           <Button
             size="sm"
             variant="primary"
             onClick={() => runWaterfallForSelected()}
-            className="text-xs py-1.5"
+            className="text-xs py-1.5 bg-brand-loom hover:bg-brand-weave text-white gap-1.5"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
             <span>Simulate Waterfall</span>
@@ -74,6 +105,21 @@ export default function TablesPage() {
         <ThreadInspector />
         <LoomViewDrawer />
       </div>
+
+      {/* Modals */}
+      <CsvImporterModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        onImport={(rows) => importRows(rows)}
+      />
+
+      <AddWaterfallModal
+        isOpen={isWaterfallModalOpen}
+        onClose={() => setIsWaterfallModalOpen(false)}
+        onAddColumn={(name, tiers, exitPredicate) =>
+          addWaterfallColumn(name, tiers, exitPredicate)
+        }
+      />
     </div>
   );
 }

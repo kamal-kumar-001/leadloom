@@ -1,46 +1,33 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Badge } from '@leadloom/ui';
-import { toast } from 'sonner';
 import {
   Plug,
-  Key,
-  ShieldCheck,
-  CheckCircle2,
   Lock,
-  ExternalLink,
   Plus,
   RefreshCw,
-  Eye,
-  EyeOff,
-  X,
-  Zap,
+  ShieldCheck,
+  Search,
+  Filter,
+  CheckCircle2,
 } from 'lucide-react';
+import { ConnectorCard, ConnectorMeta } from '../../../components/connectors/connector-card';
+import { ByokVaultModal } from '../../../components/connectors/byok-vault-modal';
+import { fetchVaultCredentials } from '../../../lib/engine-client';
+import { MaskedBYOKCredential, BYOKProvider } from '@leadloom/contracts';
+import { toast } from 'sonner';
 
-interface Connector {
-  id: string;
-  name: string;
-  category: 'Enrichment' | 'Verification' | 'AI Intelligence' | 'Headless Scraper';
-  description: string;
-  unitCostUSD: number;
-  status: 'connected' | 'not_configured';
-  maskedKey?: string;
-  hitRateEstimate: number;
-  icon: string;
-}
-
-const INITIAL_CONNECTORS: Connector[] = [
+const ALL_CONNECTORS: ConnectorMeta[] = [
   {
     id: 'apollo',
     name: 'Apollo Enrichment',
     category: 'Enrichment',
-    description: 'B2B contact directory and verified work email waterfall tier.',
+    description: 'B2B contact directory and primary waterfall tier for verified work emails.',
     unitCostUSD: 0.001,
-    status: 'connected',
-    maskedKey: 'sk-••••••••••••4a91',
     hitRateEstimate: 0.58,
     icon: '⚡',
+    docsUrl: 'https://knowledge.apollo.io/hc/en-us/articles/4415734564877-API-Overview',
   },
   {
     id: 'hunter',
@@ -48,275 +35,245 @@ const INITIAL_CONNECTORS: Connector[] = [
     category: 'Verification',
     description: 'Domain email verification and secondary waterfall fallback tier.',
     unitCostUSD: 0.003,
-    status: 'connected',
-    maskedKey: 'sk-••••••••••••b82f',
     hitRateEstimate: 0.28,
     icon: '🎯',
+    docsUrl: 'https://hunter.io/api-documentation/v2',
   },
   {
     id: 'dropcontact',
     name: 'Dropcontact Waterfall',
     category: 'Enrichment',
-    description: 'European GDPR-compliant corporate email resolution and phone finder.',
-    unitCostUSD: 0.02,
-    status: 'not_configured',
-    hitRateEstimate: 0.10,
-    icon: '💧',
+    description: 'European corporate email resolution, phone numbers, and company legal info.',
+    unitCostUSD: 0.012,
+    hitRateEstimate: 0.32,
+    icon: '🇫🇷',
+    docsUrl: 'https://developer.dropcontact.com/',
   },
   {
-    id: 'ai-researcher',
-    name: 'Perplexity / AI Researcher',
-    category: 'AI Intelligence',
-    description: 'Real-time corporate signals, hiring sprees, and tech stack detection.',
-    unitCostUSD: 0.005,
-    status: 'connected',
-    maskedKey: 'sk-••••••••••••10c4',
-    hitRateEstimate: 0.92,
-    icon: '🧠',
+    id: 'prospeo',
+    name: 'Prospeo B2B',
+    category: 'Enrichment',
+    description: 'Mobile phone finder and secondary corporate email waterfall resolver.',
+    unitCostUSD: 0.008,
+    hitRateEstimate: 0.42,
+    icon: '🔍',
+    docsUrl: 'https://prospeo.io/api',
   },
   {
-    id: 'headless-scraper',
-    name: 'Headless Signal Scraper',
-    category: 'Headless Scraper',
-    description: 'Local Chromium runner with resource blocking for website trigger extraction.',
-    unitCostUSD: 0.0,
-    status: 'connected',
-    maskedKey: 'built-in worker',
+    id: 'anymail_finder',
+    name: 'People Data Labs',
+    category: 'Enrichment',
+    description: 'B2B profile identity resolution, tech stack data, and company headcount intel.',
+    unitCostUSD: 0.015,
+    hitRateEstimate: 0.45,
+    icon: '🌐',
+    docsUrl: 'https://docs.peopledatalabs.com/',
+  },
+  {
+    id: 'deepseek',
+    name: 'ZeroBounce Verification',
+    category: 'Verification',
+    description: 'Deliverability and catch-all validation; protects mailbox sender reputation.',
+    unitCostUSD: 0.002,
+    hitRateEstimate: 0.99,
+    icon: '🛡️',
+    docsUrl: 'https://www.zerobounce.net/docs/',
+  },
+  {
+    id: 'groq',
+    name: 'NeverBounce Single-Check',
+    category: 'Verification',
+    description: 'Real-time 20-point email hygiene and spam-trap suppression inspection.',
+    unitCostUSD: 0.003,
+    hitRateEstimate: 0.98,
+    icon: '📬',
+    docsUrl: 'https://developers.neverbounce.com/',
+  },
+  {
+    id: 'perplexity',
+    name: 'Serper Search Signals',
+    category: 'Search Signals',
+    description: 'Google search signals, hiring announcements, and press release trigger monitoring.',
+    unitCostUSD: 0.001,
     hitRateEstimate: 0.85,
-    icon: '🕷️',
+    icon: '🔎',
+    docsUrl: 'https://serper.dev/documentation',
   },
   {
-    id: 'github-signals',
-    name: 'GitHub Intent Harvester',
-    category: 'Headless Scraper',
-    description: 'Extract stargazer intent, package usage, and engineering team commits.',
+    id: 'openai',
+    name: 'OpenAI GPT-4o',
+    category: 'AI Intelligence',
+    description: 'Account intelligence synthesis, custom icebreakers, and intent score classification.',
+    unitCostUSD: 0.005,
+    hitRateEstimate: 0.96,
+    icon: '🤖',
+    docsUrl: 'https://platform.openai.com/docs/api-reference',
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic Claude 3.5',
+    category: 'AI Intelligence',
+    description: 'High-altitude company research, deep intent reasoning, and multi-step copy drafts.',
+    unitCostUSD: 0.006,
+    hitRateEstimate: 0.98,
+    icon: '🧠',
+    docsUrl: 'https://docs.anthropic.com/en/api/getting-started',
+  },
+  {
+    id: ('ollama' as unknown as BYOKProvider),
+    name: 'Ollama Local Model',
+    category: 'Local AI',
+    description: '$0 self-hosted LLM inference running on your local machine with complete data privacy.',
     unitCostUSD: 0.0,
-    status: 'not_configured',
-    hitRateEstimate: 0.70,
-    icon: '🐙',
+    hitRateEstimate: 0.91,
+    icon: '🦙',
+    docsUrl: 'https://ollama.com',
+    isLocal: true,
   },
 ];
 
 export default function ConnectorsPage() {
-  const [connectors, setConnectors] = useState<Connector[]>(INITIAL_CONNECTORS);
-  const [activeModalConnector, setActiveModalConnector] = useState<Connector | null>(null);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [credentials, setCredentials] = useState<Record<string, MaskedBYOKCredential>>({});
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeModalConnector, setActiveModalConnector] = useState<ConnectorMeta | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleSaveKey = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeModalConnector) return;
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const { credentials: list } = await fetchVaultCredentials();
+        if (mounted) {
+          const mapped: Record<string, MaskedBYOKCredential> = {};
+          for (const c of list) {
+            mapped[c.provider] = c;
+          }
+          setCredentials(mapped);
+        }
+      } catch {
+        // Fallback gracefully
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-    setSubmitting(true);
-    // Simulate POST to /connectors vault
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
-    const masked = 'sk-••••••••••••' + (apiKeyInput.slice(-4) || '99ef');
-    setConnectors((prev) =>
-      prev.map((c) =>
-        c.id === activeModalConnector.id
-          ? { ...c, status: 'connected', maskedKey: masked }
-          : c
-      )
-    );
-
-    toast.success(`${activeModalConnector.name} credentials encrypted and stored in vault`);
-    setSubmitting(false);
-    setActiveModalConnector(null);
-    setApiKeyInput('');
+  const handleCredentialSaved = (cred: MaskedBYOKCredential) => {
+    setCredentials((prev) => ({
+      ...prev,
+      [cred.provider]: cred,
+    }));
   };
 
+  const categories = ['All', 'Enrichment', 'Verification', 'AI Intelligence', 'Search Signals', 'Local AI'];
+
+  const filteredConnectors = ALL_CONNECTORS.filter((c) => {
+    const matchesCategory = activeCategory === 'All' || c.category === activeCategory;
+    const matchesSearch =
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const connectedCount = Object.keys(credentials).length;
+
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 font-sans">
+      {/* Top Header & Metrics */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border-subtle">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-text-primary tracking-tight">BYOK Enrichment Connectors</h1>
-            <Badge variant="matrix" className="font-mono text-xs">
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-xl font-bold tracking-tight text-text-primary">
+              BYOK Connector Hub & Vault
+            </h1>
+            <Badge variant="matrix" className="text-xs font-mono">
               Demo data
             </Badge>
           </div>
-          <p className="text-xs text-text-secondary mt-1">
-            Connect your own API credentials at wholesale cost. LeadLoom adds zero markup.
+          <p className="text-xs text-text-muted">
+            Connect your own API keys. All credentials encrypted via AES-256-GCM envelope vault.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Badge variant="subtle" className="font-mono text-xs py-1 px-2.5">
-            <ShieldCheck className="w-3.5 h-3.5 mr-1 text-signal-verified" />
-            AES-256-GCM Vault Active
-          </Badge>
-        </div>
-      </div>
-
-      {/* Connectors Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {connectors.map((c) => {
-          const isConnected = c.status === 'connected';
-
-          return (
-            <div
-              key={c.id}
-              className="p-5 rounded-xl bg-canvas-surface border border-border-subtle hover:border-border-muted transition-all flex flex-col justify-between shadow-sm relative group"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-9 h-9 rounded-lg bg-canvas-elevated border border-border-subtle flex items-center justify-center text-lg shadow-sm">
-                      {c.icon}
-                    </span>
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-primary leading-snug">{c.name}</h3>
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-                        {c.category}
-                      </span>
-                    </div>
-                  </div>
-
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono ${
-                      isConnected
-                        ? 'bg-signal-verified/15 text-signal-verified'
-                        : 'bg-canvas-elevated text-text-muted'
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        isConnected ? 'bg-signal-verified' : 'bg-text-muted'
-                      }`}
-                    />
-                    {isConnected ? 'Active' : 'Unconfigured'}
-                  </span>
-                </div>
-
-                <p className="text-xs text-text-secondary line-clamp-2 mb-4 leading-relaxed">
-                  {c.description}
-                </p>
-
-                <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-canvas-elevated/50 border border-border-subtle mb-4 text-xs font-mono">
-                  <div>
-                    <div className="text-[10px] text-text-muted uppercase">Vendor Cost</div>
-                    <div className="text-text-primary font-medium mt-0.5">
-                      {c.unitCostUSD === 0 ? 'Free (Local)' : `$${c.unitCostUSD.toFixed(3)}/call`}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-text-muted uppercase">Est. Hit Rate</div>
-                    <div className="text-brand-loom font-medium mt-0.5">
-                      {Math.round(c.hitRateEstimate * 100)}%
-                    </div>
-                  </div>
-                </div>
-
-                {isConnected && c.maskedKey && (
-                  <div className="mb-4 flex items-center justify-between text-xs px-2.5 py-1.5 rounded bg-canvas-elevated border border-border-subtle font-mono text-text-muted">
-                    <span className="text-[11px] truncate">{c.maskedKey}</span>
-                    <Lock className="w-3 h-3 text-signal-verified shrink-0 ml-2" />
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-2 border-t border-border-subtle flex items-center justify-between">
-                <span className="text-[11px] text-text-muted">Simulated Provider</span>
-                <Button
-                  size="sm"
-                  variant={isConnected ? 'outline' : 'primary'}
-                  onClick={() => {
-                    setActiveModalConnector(c);
-                    setApiKeyInput('');
-                  }}
-                  className="text-xs py-1.5"
-                >
-                  <Key className="w-3.5 h-3.5" />
-                  <span>{isConnected ? 'Rotate Key' : 'Configure Key'}</span>
-                </Button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Key Entry Modal Drawer */}
-      {activeModalConnector && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-canvas-surface border border-border-subtle rounded-xl max-w-md w-full p-6 shadow-xl relative animate-fade-in">
-            <button
-              onClick={() => setActiveModalConnector(null)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-canvas-elevated transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center gap-2.5 mb-2">
-              <span className="text-2xl">{activeModalConnector.icon}</span>
-              <div>
-                <h2 className="text-base font-bold text-text-primary">
-                  Configure {activeModalConnector.name}
-                </h2>
-                <span className="text-xs text-text-muted font-mono">
-                  AES-256 Vault Encryption
-                </span>
-              </div>
-            </div>
-
-            <p className="text-xs text-text-secondary mb-4 leading-relaxed">
-              Your API key will be encrypted at the server boundary using authenticated KEK/DEK envelope encryption. Raw plaintext keys are never stored.
-            </p>
-
-            <form onSubmit={handleSaveKey} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Provider API Secret Key
-                </label>
-                <div className="relative">
-                  <input
-                    type={showKey ? 'text' : 'password'}
-                    required
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    placeholder="sk-••••••••••••••••"
-                    className="w-full pr-10 pl-3 py-2 rounded-lg bg-canvas-elevated border border-border-subtle text-text-primary text-xs font-mono placeholder:text-text-muted focus:outline-none focus:border-border-focus"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-                  >
-                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-lg bg-canvas-elevated/50 border border-border-subtle text-xs text-text-muted flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 text-brand-loom shrink-0 mt-0.5" />
-                <span>
-                  Demo data mode: this form triggers the simulated vault persistence handler without dispatching real vendor calls.
-                </span>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setActiveModalConnector(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="sm"
-                  disabled={submitting}
-                >
-                  {submitting ? 'Encrypting & Storing...' : 'Save to Vault'}
-                </Button>
-              </div>
-            </form>
+        <div className="flex items-center gap-3">
+          <div className="bg-canvas-surface border border-border-subtle rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs">
+            <span className="w-2 h-2 rounded-full bg-signal-verified animate-pulse" />
+            <span className="text-text-muted">Active Connectors:</span>
+            <span className="font-mono font-semibold text-text-primary">
+              {connectedCount} / {ALL_CONNECTORS.length}
+            </span>
           </div>
         </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        {/* Category Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                activeCategory === cat
+                  ? 'bg-brand-loom text-white'
+                  : 'bg-canvas-surface text-text-muted hover:text-text-primary border border-border-subtle'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-full sm:w-64">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search connectors..."
+            className="w-full bg-canvas-surface border border-border-subtle rounded-lg pl-9 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-loom"
+          />
+        </div>
+      </div>
+
+      {/* Connector Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredConnectors.map((connector) => (
+          <ConnectorCard
+            key={connector.id}
+            meta={connector}
+            credential={credentials[connector.id]}
+            onConfigure={(meta) => setActiveModalConnector(meta)}
+          />
+        ))}
+      </div>
+
+      {/* Zero State if Filter empty */}
+      {filteredConnectors.length === 0 && (
+        <div className="text-center py-16 bg-canvas-surface border border-border-subtle rounded-xl p-8">
+          <Plug className="w-10 h-10 text-text-muted mx-auto mb-3 opacity-40" />
+          <h3 className="font-semibold text-sm text-text-primary mb-1">No connectors found</h3>
+          <p className="text-xs text-text-muted">
+            Try adjusting your search query or switching categories.
+          </p>
+        </div>
+      )}
+
+      {/* BYOK Vault Modal */}
+      {activeModalConnector && (
+        <ByokVaultModal
+          connector={activeModalConnector}
+          isOpen={!!activeModalConnector}
+          onClose={() => setActiveModalConnector(null)}
+          onSuccess={handleCredentialSaved}
+        />
       )}
     </div>
   );
