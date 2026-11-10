@@ -11,3 +11,6 @@ Known caveats:
 - This replaces the earlier approach (a guarded inbound_sync plus a 20261111 ensure migration, commit a5f2d5e on main), which changed the applied checksum. That drift is gone in this source.
 
 Verification (Postgres 16.2 + pgvector throwaway fixtures, local, no lab data): plain deploy on empty (fails, control); bootstrap on empty (3 rows, checksums equal the files, status up to date); second bootstrap refused; replica of lab history then deploy (no-op, status up to date).
+
+## Later additive migrations
+`20261112_workspace_entitlements` adds two tables and touches nothing applied. Verified on fresh bootstrap and on a replica of the lab history (deploy applies only that migration; the three recorded checksums stay identical). It is NOT applied on the lab DB; a redeploy runs it via `migrate deploy` and still needs Kamal's approval.

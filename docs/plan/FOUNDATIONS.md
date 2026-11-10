@@ -41,3 +41,13 @@ Scope note: the aim is modularity and config-driven plans, prices and limits. A 
 8. Observability: structured logs, request ids, error reporting without payloads.
 9. Backups and the update.sh fresh-install path (see MIGRATIONS.md).
 10. Data export and deletion per tenant.
+
+## Built since: entitlement enforcement (default-off)
+- Migration `20261112_workspace_entitlements` (additive): `workspace_plans` (which plan, billing status) and `usage_counters`. No row means no plan, which means deny.
+- `PrismaEntitlementStore` implements the plan and usage ports, with atomic increment. Routes `/waterfall/*`, `/validator/experiments`, `/outbound/jobs` check the server-side gate when `LEADLOOM_ENTITLEMENTS_ENFORCED=true`. Without the flag nothing changes (`/health` shows `routes.entitlements`).
+- Not yet: nothing writes `workspace_plans` rows (needs provisioning), nothing calls `record()` (needs real metered actions), limit gates are not on routes yet.
+
+## Platform-admin boundary (design, not built; no role is assigned to anyone)
+- Separate from tenant roles: a `platform_admins` table keyed by user id, with its own token audience (`leadloom-platform`) so a tenant token can never carry it, and a separate route prefix `/platform/*` with its own layout in the web app.
+- Grants happen out of band (a one-off script run by the owner), never through a tenant API. Every platform action writes an audit-log row. Impersonation, if ever added, is read-only and logged.
+- This follows the owner's super-admin pattern in his other products; it is not authority to grant platform privileges to any user.

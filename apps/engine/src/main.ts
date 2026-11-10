@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { PrismaClient } from '@leadloom/database';
 import { verifySession } from './modules/auth/session';
+import type { EntitlementService } from './modules/entitlements/entitlements.service';
+import type { FeatureKey } from '@leadloom/contracts';
 import { verifyBridgeToken } from './modules/auth/nextauth-bridge';
 import { canWrite } from './modules/auth/rbac';
 import { issueSession } from './modules/auth/issuer';
@@ -39,6 +41,8 @@ export interface RuntimeServices {
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
+ /** Optional: when provided, plan/feature gates are enforced server-side (main gates it behind LEADLOOM_ENTITLEMENTS_ENFORCED). */
+ entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'>;
 }
 export async function createApplication(services?:RuntimeServices) {
  const app=await NestFactory.create<NestFastifyApplication>(RuntimeModule,new FastifyAdapter({bodyLimit:65536}),{logger:['error','warn']});
@@ -60,6 +64,14 @@ export async function createApplication(services?:RuntimeServices) {
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
   };
+  /** Server-side plan gate; no-op unless entitlements are configured. Deny-by-default when enforced. */
+  const allowed=async(reply:any,workspaceId:string,feature:FeatureKey)=>{
+   if(!services.entitlements)return true;
+   const decision=await services.entitlements.checkFeature(workspaceId,feature);
+   if(decision.allowed)return true;
+   reply.code(403).send({error:'Not available on the current plan',reason:decision.reason,feature});
+   return false;
+  };
   fastify.get('/vault/credentials',async(request:any,reply:any)=>{
    const session=await authorize(request,reply);if(!session)return;
    return services.credentials.list(session.workspaceId);
@@ -78,6 +90,7 @@ export async function createApplication(services?:RuntimeServices) {
   const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime()}).strict();
   fastify.post('/outbound/jobs',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
+   if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
    const parsed=Enqueue.safeParse(request.body);
    if(!parsed.success)return reply.code(400).send({error:'Invalid job request'});
    try {
@@ -116,11 +129,13 @@ export async function createApplication(services?:RuntimeServices) {
   if(services.waterfall) {
    fastify.post('/waterfall/pre-flight',async(request:any,reply:any)=>{
     const session=await authorize(request,reply);if(!session)return;
+    if(!await allowed(reply,session.workspaceId,'waterfall'))return;
     try{return await services.waterfall!.getPreFlightEstimate(request.body);}
     catch{return reply.code(400).send({error:'Invalid pre-flight request'});}
    });
    fastify.post('/waterfall/dispatch',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
+    if(!await allowed(reply,session.workspaceId,'waterfall'))return;
     try{return await services.waterfall!.dispatch(request.body);}
     catch{return reply.code(400).send({error:'Invalid waterfall dispatch request'});}
    });
@@ -128,6 +143,7 @@ export async function createApplication(services?:RuntimeServices) {
   if(services.validator) {
    fastify.post('/validator/experiments',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
+    if(!await allowed(reply,session.workspaceId,'validator'))return;
     try{return await services.validator!.generate(request.body);}
     catch{return reply.code(400).send({error:'Invalid validation request'});}
    });
@@ -179,7 +195,7 @@ export async function createApplication(services?:RuntimeServices) {
  // report per-route mount state so health checks show exactly what exists.
  // Every mounted mutation route still requires a session + write role, and
  // sessions can only be minted when the login issuer itself is mounted.
- fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false,routes:{mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted'}}));
+ fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false,routes:{entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted'}}));
  fastify.get('/ready',async(_request:any,reply:any)=>reply.code(503).send({status:'not-ready',reason:'Database/auth/provider workers are not mounted'}));
  await app.init();
  return app;
@@ -197,6 +213,13 @@ if(require.main===module) {
    const unsubscribeKey=process.env.LEADLOOM_UNSUBSCRIBE_KEY?Buffer.from(process.env.LEADLOOM_UNSUBSCRIBE_KEY,'base64'):undefined;
    if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
    services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
+   if(process.env.LEADLOOM_ENTITLEMENTS_ENFORCED==='true') {
+    const {EntitlementService}=await import('./modules/entitlements/entitlements.service.js');
+    const {PrismaEntitlementStore}=await import('./modules/entitlements/prisma-entitlement-store.js');
+    const {DEFAULT_PLANS}=await import('./modules/entitlements/default-plans.js');
+    const store=new PrismaEntitlementStore(prisma);
+    services.entitlements=new EntitlementService(DEFAULT_PLANS,store,store);
+   }
    if(process.env.LEADLOOM_NEXTAUTH_BRIDGE_ENABLED==='true') {
     const bridge=process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET?Buffer.from(process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET,'base64'):undefined;
     if(!bridge||bridge.length<32)throw new Error('LEADLOOM_NEXTAUTH_BRIDGE_SECRET (base64, >=32 bytes) required when bridge enabled');
