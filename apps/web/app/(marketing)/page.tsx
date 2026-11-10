@@ -137,7 +137,7 @@ export default function MarketingPage() {
         <section className="py-12 border-y border-border-subtle bg-canvas-surface/40">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 text-center">
             <p className="text-xs font-mono uppercase tracking-widest text-text-muted mb-6">
-              Trusted by growth engineers and technical founders at modern teams
+              Illustrative sample ecosystem - the modern stack LeadLoom is designed for. No endorsement or live integration implied.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14 font-mono font-bold text-sm text-text-muted">
               <span className="hover:text-text-primary transition-colors">▲ VERCEL</span>

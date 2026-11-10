@@ -85,3 +85,7 @@
 - Globe badge fps is now measured on-device per second (render loop sample), never hardcoded; hidden until first real sample.
 - Anchor nav verified pixel-level: /#waterfall lands fully below the sticky header at desktop and mobile.
 - Full-page pass: /, /workspace, /v/k8s-cutter at 390px and 1440px all render clean; smoke-production PASSED again.
+
+## 2026-11-10 17:36 IST - Gamma: final honesty pass (review corrections)
+- Social-proof bar no longer implies endorsement: "Illustrative sample ecosystem - no endorsement or live integration implied."
+- Sandbox footer telemetry marked simulated at point of display ("Simulated example ... No real provider calls", "Simulated cost: $0.015") and stacks vertically on mobile (was cramped side-by-side).

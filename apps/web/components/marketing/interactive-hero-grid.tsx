@@ -171,12 +171,12 @@ export function InteractiveHeroGrid() {
       </div>
 
       {/* Footer Guarantee Note */}
-      <div className="flex items-center justify-between border-t border-border-subtle px-4 py-2 bg-canvas-surface text-[11px] text-text-muted">
-        <span className="flex items-center gap-1.5">
-          <Zap className="w-3 h-3 text-signal-verified" />
-          <span>Early-exit triggered on Hunter for Row 1 — Dropcontact ($0.03) aborted automatically.</span>
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between border-t border-border-subtle px-4 py-2 bg-canvas-surface text-[11px] text-text-muted">
+        <span className="flex items-start gap-1.5">
+          <Zap className="w-3 h-3 mt-0.5 shrink-0 text-signal-verified" />
+          <span>Simulated example: early exit on Hunter for Row 1, so the Dropcontact step ($0.03) is skipped. No real provider calls.</span>
         </span>
-        <span className="font-mono text-text-primary font-medium">Wholesale Cost: $0.015</span>
+        <span className="font-mono text-text-primary font-medium">Simulated cost: $0.015</span>
       </div>
     </div>
   );
