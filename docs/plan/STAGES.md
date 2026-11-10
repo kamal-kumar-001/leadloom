@@ -9,7 +9,7 @@ This file wins over `PHASES.md`, `ALPHA_BRIEF.md` and `BETA_BRIEF.md` wherever t
 - Nothing hardcoded that pretends to work. No fake users, no password-less sign-in, no fallback secrets, no mock data shown as live. Anything that is a sample is labelled "sample" in the UI.
 - No new placeholder pages, no new routes, no new modules for a later stage.
 - Keep working code. Do not delete or rewrite modules wholesale. Inventory first (see below).
-- Main only, commits as Kamal, pull before push, never overwrite `.env`. No deploy, no real email, no spend, no provider calls, no account changes. Flags default off.
+- Main only, commits as Kamal. Kamal's rule: run `git pull --rebase origin main` immediately before every push, re-run the affected tests after any merge, and never force-push or overwrite another team's changes. Never overwrite `.env`. No deploy, no real email, no spend, no provider calls, no account changes. Flags default off.
 
 ## Stage 1: login end to end (current)
 Done means a person can sign up or sign in, land in their own workspace, see only their own data, sign out, and get clear errors when something fails. Checked in a browser on the web app talking to the real engine.

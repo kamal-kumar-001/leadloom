@@ -38,3 +38,20 @@ These are release blockers. Fix them in Alpha-owned paths. Gamma has changed onl
    - The Ollama URL is validated by the engine (`security.ts`: loopback only, no redirects). Do not add a second URL check in the browser that is looser.
    - Validator rate limits: use the trusted client IP from the proxy, not a client header. The in-memory limiter is a stopgap and is documented as weak behind the tunnel.
    - Mailbox DNS inspector: only show records that a real backend lookup returned, label anything else as an example.
+
+---
+
+## Gamma review of Alpha 959094c (2026-11-10 22:30 IST): what is fixed, what still blocks Stage 1
+
+Fixed, read from code (not yet browser-verified): the password-less Credentials provider is gone, roles no longer come from an email string, secrets fail closed, and `/api/engine-token` mints only for a Google or GitHub session with `idp` from the provider account.
+
+Still open. Fix these in Alpha-owned paths, in this order:
+1. **`apps/web/app/app/layout.tsx` fails open.** When `/auth/me` errors with anything except 401, or the fetch throws, it sets `status: 'verified'` and renders the app ("offline demo"). The UI must show an error screen with Retry instead, and render the app only after the engine returned a userId. Same for `provisionWorkspace` outcomes it does not recognise.
+2. **Browser to engine calls.** `engine-client.ts` calls the engine directly from the browser (`NEXT_PUBLIC_ENGINE_URL`, default `http://127.0.0.1:4100`). The engine sends no CORS headers, so a cross-origin call with an `Authorization` header will be blocked by the browser. Use a same-origin Next route or rewrite (for example `/api/engine/*` forwarding to a server-only `ENGINE_URL`), which also avoids exposing the engine address. Gamma will confirm in the browser harness.
+3. **Email/password screens.** Not built. Kamal chose GitHub and email/password (Google later). Build them per the contract in `docs/plan/STAGES.md` (engine `/auth/register`, `/auth/verify-email`, `/auth/resend-verification`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password`; 6-digit emailed code; same step pattern as BakeryPOS `apps/web/app/forgot-password/page.tsx`). Credentials `authorize()` calls the engine `/auth/login`; a password session keeps the engine token and must never mint a bridge token.
+4. **GitHub `email_verified`.** `auth.ts` sets it to `true` for any GitHub sign-in. Check the primary email's `verified` flag from GitHub's `/user/emails` (needs the `user:email` scope) in the `signIn` callback, and deny when the address is not a verified primary.
+5. **Dev admin flag.** `auth.config.ts` reads `LEADLOOM_DEV_ADMIN_ENABLED`; the sync note says `NEXT_PUBLIC_DEV_ADMIN_ENABLED`. Use one server-only flag and refuse it when `NODE_ENV=production`.
+6. **Build-time literal secret.** The static build secret string in `auth.ts` is a literal in source. It is used only during `next build`, but prefer reading a build-only env var or skipping the check at build time, so no secret-shaped literal sits in the repo.
+7. Commit 1f88606 (Phase 2 screens: connectors, BYOK modal, waterfall modal, CSV importer, DNS inspector) landed after the sequential-stage directive. Keep it parked: no further work on it until Stage 1 and Stage 2 are verified.
+
+Evidence required for Stage 1 done: a recorded browser run (GitHub sign-in, first-time provisioning, `/app` gated on `/auth/me`, sign-out, expired session, engine-down error screen) against `scripts/dev/stage1-harness.sh up`.
