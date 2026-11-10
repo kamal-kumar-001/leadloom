@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * collapses to one passing skip marker, so `npm test` never needs Docker.
  *
  *   docker run --rm -d -p 55432:5432 -e POSTGRES_PASSWORD=test pgvector/pgvector:pg16
+ *   (when running inside a pre-built image, bind-mount packages/database/prisma too: atomic-dispatch.spec reads migration SQL from disk)
  *   LEADLOOM_INTEGRATION=1 LEADLOOM_TEST_DATABASE_URL=postgres://postgres:test@localhost:55432/postgres npx vitest run
  */
 const DATABASE_URL = process.env.LEADLOOM_TEST_DATABASE_URL;
@@ -49,7 +50,7 @@ describe.runIf(RUN)('postgres integration (gated: LEADLOOM_INTEGRATION=1)', () =
     expect(await store.has(mailboxId, '<m1@example.com>')).toBe(true);
 
     const rows = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
-      `SELECT count(*) AS n FROM outreach_events WHERE mailbox_id = $1 AND type = 'reply_received'`,
+      `SELECT count(*) AS n FROM outreach_events WHERE mailbox_id = $1::uuid AND type = 'reply_received'`,
       mailboxId,
     );
     expect(Number(rows[0].n)).toBe(1);
