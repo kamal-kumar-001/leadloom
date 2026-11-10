@@ -63,16 +63,17 @@ export async function createApplication(services?:RuntimeServices) {
   const authorize=async(request:any,reply:any,write=false)=>{
    try {
     const token=String(request.headers.authorization??'').replace(/^Bearer /,'');
-    let claims;
-    try {claims=verifySession(token,services.sessionKey);}
+    let claims;let engineSession=false;
+    try {claims=verifySession(token,services.sessionKey);engineSession=true;}
     catch(e) {
      if(!services.nextAuthBridgeKey||!services.userDirectory) throw e;
      const proven=verifyBridgeToken(token,services.nextAuthBridgeKey);
+     await services.passwordAccounts?.claimByProvider(proven.email);
      const member=await services.userDirectory.findByEmail(proven.email);
      if(!member) throw new Error('No membership');
      claims={sub:member.id,workspaceId:member.workspaceId,role:member.role,exp:proven.exp};
     }
-    if(services.accessGuard&&!await services.accessGuard.isActive(claims.sub,claims.workspaceId)) {reply.code(401).send({error:'Authentication required'});return null;}
+    if(services.accessGuard&&!await services.accessGuard.isActive(claims.sub,claims.workspaceId,engineSession?{iat:(claims as any).iat}:undefined)) {reply.code(401).send({error:'Authentication required'});return null;}
     if(write && !canWrite(claims)) {reply.code(403).send({error:'Read-only workspace role'});return null;}
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
@@ -97,6 +98,7 @@ export async function createApplication(services?:RuntimeServices) {
     if(!provisionLimiter.take('ip:'+String(request.ip))||!provisionLimiter.take('global')) return reply.code(429).send({error:'Too many requests'});
     const name=typeof request.body?.name==='string'?request.body.name:null;
     try {
+     await services.passwordAccounts?.claimByProvider(email);
      const member=await services.provisioning!.provision(email,name);
      return reply.code(member.created?201:200).send(member);
     } catch(e) {

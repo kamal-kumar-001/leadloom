@@ -20,6 +20,7 @@ class MemStore implements PasswordAccountStore {
   async consumeToken(h: string, kind: any) { const t = this.tokens.find(x => x.hash === h && x.kind === kind && !x.used && x.exp.getTime() > Date.now()); if (!t) return null; t.used = true; return t.userId; }
   async markVerified(id: string) { this.users.get(id)!.verified = true; }
   async setPassword(id: string, h: string) { const u = this.users.get(id)!; u.passwordHash = h; u.verified = true; }
+  async claimByProvider(e: string) { const u = [...this.users.values()].find(x => x.email === e && !x.verified); if (u) { u.verified = true; u.passwordHash = null; } }
   async audit(a: string) { this.audits.push(a); }
 }
 class Capture implements TransactionalEmail { sent: TransactionalMessage[] = []; async send(m: TransactionalMessage) { this.sent.push(m); return { sent: true as const, providerId: 'x' }; } }
@@ -95,7 +96,8 @@ describe('PasswordAccountService', () => {
   it('reset: only verified active users get mail; token single-use; new password works, old does not; also verifies', async () => {
     const { s, m, svc } = mk();
     await svc.register('a@example.com', PW);
-    await svc.forgotPassword('a@example.com'); expect(m.sent).toHaveLength(1); // unverified: no reset mail
+    await svc.forgotPassword('a@example.com'); expect(m.sent).toHaveLength(2); // unverified may reset; the link proves control
+    m.sent.pop();
     await svc.forgotPassword('ghost@example.com'); expect(m.sent).toHaveLength(1);
     await svc.verifyEmail(tokenOf(m.sent[0]));
     await svc.forgotPassword('a@example.com'); expect(m.sent).toHaveLength(2); expect(m.sent[1].kind).toBe('password_reset');
@@ -123,5 +125,11 @@ describe('PasswordAccountService', () => {
     const { s, svc } = mk();
     s.users.set('g', { id: 'g', email: 'g@example.com', workspaceId: 'w', role: 'admin', passwordHash: null, verified: true, active: true });
     await expect(svc.authenticate('g@example.com', PW)).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+  it('a provider-proven email takes over an unverified password account and drops the planted password', async () => {
+    const { svc } = mk();
+    await svc.register('v@example.com', PW); // attacker pre-registers the victim address
+    await svc.claimByProvider('V@Example.com'); // victim later signs in with a verified provider
+    await expect(svc.authenticate('v@example.com', PW)).rejects.toBeInstanceOf(InvalidCredentialsError);
   });
 });

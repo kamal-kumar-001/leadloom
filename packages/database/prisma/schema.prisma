@@ -45,6 +45,7 @@ model User {
   role         String   @default("member") @db.VarChar(16) // admin | member | read_only
   disabledAt   DateTime? @map("disabled_at") @db.Timestamptz // non-null = suspended
   emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz // null = email not verified (password sign-in blocked)
+  sessionsValidAfter DateTime? @map("sessions_valid_after") @db.Timestamptz // engine sessions issued before this are refused
   emailTokens  EmailToken[]
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz

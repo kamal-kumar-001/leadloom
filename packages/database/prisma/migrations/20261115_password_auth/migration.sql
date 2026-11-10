@@ -1,11 +1,18 @@
--- Password sign-in support. Additive. Existing users were created through a
--- provider-verified email or by an operator, so they are marked verified at
--- their creation time and keep working.
+-- Password sign-in support. Additive.
+-- email_verified_at: only set when the engine has its own record that the address
+-- was proven. A user is backfilled as verified ONLY if the audit log shows they
+-- were provisioned from a provider-verified email (action user.provisioned,
+-- method verified_email). Anyone else (operator-created, fixtures, anything
+-- self-asserted) stays unverified: they cannot password sign in until they prove
+-- the mailbox through a reset link. Provider sign-in does not use this column.
 ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMPTZ;
-UPDATE users SET email_verified_at = created_at;
+ALTER TABLE users ADD COLUMN sessions_valid_after TIMESTAMPTZ;
+UPDATE users u SET email_verified_at = a.at
+  FROM audit_log a
+ WHERE a.action = 'user.provisioned'
+   AND a.target = u.id::text
+   AND a.metadata ->> 'method' = 'verified_email';
 
--- Single-use, expiring tokens for email verification and password reset.
--- Only the SHA-256 of the token is stored, never the token itself.
 CREATE TABLE email_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

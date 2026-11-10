@@ -25,6 +25,8 @@ export interface PasswordAccountStore {
   consumeToken(tokenHash: string, kind: 'verify' | 'reset'): Promise<string | null>;
   markVerified(userId: string): Promise<void>;
   setPassword(userId: string, passwordHash: string): Promise<void>;
+  /** A provider has proven this email: verify an unverified password account and drop its password (pre-registration takeover guard). */
+  claimByProvider(email: string): Promise<void>;
   audit(action: string, userId: string | null): Promise<void>;
 }
 
@@ -94,6 +96,9 @@ export class PasswordAccountService {
     await this.issue(made.userId, email, 'verify');
   }
 
+  /** Call with an email proven by a verified provider (bridge token). */
+  async claimByProvider(emailIn: string): Promise<void> { await this.store.claimByProvider(normEmail(emailIn)); }
+
   async verifyEmail(token: string): Promise<void> {
     if (typeof token !== 'string' || token.length < 20 || token.length > 200) throw new InvalidTokenError();
     const userId = await this.store.consumeToken(sha256(token), 'verify');
@@ -107,7 +112,7 @@ export class PasswordAccountService {
     if (!EMAIL.test(email)) return;
     if (!this.mailReady()) throw new MailUnavailableError();
     const u = await this.store.findByEmail(email);
-    if (!u || !u.active || !u.verified) return; // no signal either way
+    if (!u || !u.active) return; // no signal either way. Unverified accounts may reset: the link proves mailbox control.
     await this.issue(u.id, email, 'reset');
   }
 

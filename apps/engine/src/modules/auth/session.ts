@@ -1,6 +1,6 @@
 import { createHmac,timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-const Claims=z.object({sub:z.string().uuid(),workspaceId:z.string().uuid(),role:z.enum(['admin','member','read_only']),exp:z.number().int().positive()}).strict();
+const Claims=z.object({sub:z.string().uuid(),workspaceId:z.string().uuid(),role:z.enum(['admin','member','read_only']),exp:z.number().int().positive(),iat:z.number().int().positive().optional()}).strict();
 export type SessionClaims=z.infer<typeof Claims>;
 /** Verification primitive only. An authenticated login/issuer must create tokens. */
 export function verifySession(token:string,key:Buffer,now=Date.now()):SessionClaims {

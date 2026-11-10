@@ -50,7 +50,14 @@ export class PrismaPasswordStore implements PasswordAccountStore {
 
   // A reset link proves control of the mailbox, so it also verifies the address.
   async setPassword(userId: string, passwordHash: string) {
-    await this.prisma.$executeRawUnsafe(`UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1::uuid`, userId, passwordHash);
+    await this.prisma.$executeRawUnsafe(`UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()), sessions_valid_after = now() WHERE id = $1::uuid`, userId, passwordHash);
+  }
+
+  async claimByProvider(email: string) {
+    const rows: Array<{ id: string }> = await this.prisma.$queryRawUnsafe(
+      `UPDATE users SET email_verified_at = now(), password_hash = NULL, sessions_valid_after = now()
+        WHERE email = $1 AND email_verified_at IS NULL RETURNING id::text AS id`, email);
+    if (rows[0]) await this.audit('user.claimed_by_provider', rows[0].id);
   }
 
   async audit(action: string, userId: string | null) {

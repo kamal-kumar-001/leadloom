@@ -28,6 +28,7 @@ export function issueSession(
     workspaceId: identity.workspaceId,
     role: identity.role,
     exp: Math.floor(now / 1000) + ttlSeconds,
+    iat: Math.floor(now / 1000),
   };
   const body = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
   const signature = createHmac('sha256', key).update(body).digest().toString('base64url');

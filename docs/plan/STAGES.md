@@ -35,7 +35,9 @@ Gamma (engine, auth, database, integration):
   - The links point to web pages `/verify-email?token=` and `/reset-password?token=` that Alpha must build; they post the token to the engine.
   - Alpha: Auth.js Credentials `authorize()` calls the engine `/auth/login` and keeps the engine session token for later engine calls (send it as `Authorization: Bearer`). Do not verify passwords in the web app. Show the engine's real errors, including "verify your email".
   - Local harness now also turns this on with a file mail sink (`/tmp/leadloom-stage1-mail.jsonl`, dev only, refused when `NODE_ENV=production`): verification links land in that file, nothing is sent.
-  - Known limits: stateless sessions (12h) are not revoked by a password reset; no captcha; per-IP limiting sees the proxy address until IP passthrough exists. Real mail needs an approved sender (Resend key, domain, from-address): not configured, nothing has been sent.
+  - Sessions: engine sessions carry `iat`; a password reset sets `users.sessions_valid_after`, and the access guard then refuses any engine session issued before it (seconds resolution). Verified over HTTP: old token 401 after reset, new login 200. Provider (bridge) tokens are unaffected.
+  - Email provenance: the migration marks a user verified only when the audit log shows a provider-verified provisioning; operator-created or fixture users stay unverified and can verify by reset link. A provider-proven email taking over an unverified password account drops its password (pre-registration takeover guard).
+  - Known limits: no captcha; per-IP limiting sees the proxy address until IP passthrough exists. Real mail needs an approved sender (Resend key, domain, from-address): not configured, nothing has been sent.
 - Open engine work for login: client IP passthrough for the per-IP limiter.
 
 Beta: paused. Finish only what is already in flight and safe to stop (commit it if tests pass, otherwise leave uncommitted). No new files for stage 3.
