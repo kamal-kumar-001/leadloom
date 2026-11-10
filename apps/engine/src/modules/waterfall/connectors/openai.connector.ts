@@ -8,6 +8,8 @@ import {
   validateAndResolveBaseUrl,
   resolveFetch,
   redactSecrets,
+  safeFetch,
+  checkRedirectResponse,
 } from './security';
 
 export interface OpenAiMessage {
@@ -96,7 +98,7 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
     const url = `${baseCheck.url}/v1/chat/completions`;
 
     try {
-      const response = await fetchImpl(url, {
+      const response = await safeFetch(fetchImpl, url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,6 +114,11 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
       });
 
       const latencyMs = Date.now() - start;
+
+      const redirectErr = checkRedirectResponse(response);
+      if (redirectErr) {
+        return { success: false, latencyMs, error: redirectErr };
+      }
 
       if (response.status === 429) {
         return {

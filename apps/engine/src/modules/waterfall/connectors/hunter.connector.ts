@@ -8,6 +8,8 @@ import {
   validateAndResolveBaseUrl,
   resolveFetch,
   redactSecrets,
+  safeFetch,
+  checkRedirectResponse,
 } from './security';
 
 export interface HunterInput {
@@ -96,7 +98,7 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
     const url = `${baseCheck.url}/v2/email-finder?${params.toString()}`;
 
     try {
-      const response = await fetchImpl(url, {
+      const response = await safeFetch(fetchImpl, url, {
         method: 'GET',
         headers: {
           'X-API-KEY': ctx.apiKey,
@@ -105,6 +107,11 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
       });
 
       const latencyMs = Date.now() - start;
+
+      const redirectErr = checkRedirectResponse(response);
+      if (redirectErr) {
+        return { success: false, latencyMs, error: redirectErr };
+      }
 
       if (response.status === 429) {
         return {

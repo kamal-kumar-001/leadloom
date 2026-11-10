@@ -8,6 +8,8 @@ import {
   validateAndResolveBaseUrl,
   resolveFetch,
   redactSecrets,
+  safeFetch,
+  checkRedirectResponse,
 } from './security';
 
 export interface NeverBounceInput {
@@ -88,12 +90,17 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
     const url = `${baseCheck.url}/v4.2/single/check?${params.toString()}`;
 
     try {
-      const response = await fetchImpl(url, {
+      const response = await safeFetch(fetchImpl, url, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
 
       const latencyMs = Date.now() - start;
+
+      const redirectErr = checkRedirectResponse(response);
+      if (redirectErr) {
+        return { success: false, latencyMs, error: redirectErr };
+      }
 
       if (response.status === 429) {
         return {

@@ -8,6 +8,8 @@ import {
   validateAndResolveBaseUrl,
   resolveFetch,
   redactSecrets,
+  safeFetch,
+  checkRedirectResponse,
 } from './security';
 
 export interface DropcontactInput {
@@ -96,7 +98,7 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
 
     try {
       // 1. Submit enrichment job
-      const submitResponse = await fetchImpl(submitUrl, {
+      const submitResponse = await safeFetch(fetchImpl, submitUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -116,6 +118,11 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
           language: 'en',
         }),
       });
+
+      const redirectSubmitErr = checkRedirectResponse(submitResponse);
+      if (redirectSubmitErr) {
+        return { success: false, latencyMs: Date.now() - start, error: redirectSubmitErr };
+      }
 
       if (submitResponse.status === 429) {
         return {
@@ -164,7 +171,7 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
 
       // 2. Fetch enriched results
       const fetchUrl = `${baseCheck.url}/v1/enrich/all/${encodeURIComponent(requestId)}`;
-      const resultResponse = await fetchImpl(fetchUrl, {
+      const resultResponse = await safeFetch(fetchImpl, fetchUrl, {
         method: 'GET',
         headers: {
           'X-Access-Token': ctx.apiKey,
@@ -172,6 +179,11 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
       });
 
       const latencyMs = Date.now() - start;
+
+      const redirectFetchErr = checkRedirectResponse(resultResponse);
+      if (redirectFetchErr) {
+        return { success: false, latencyMs, error: redirectFetchErr };
+      }
 
       if (!resultResponse.ok) {
         return {

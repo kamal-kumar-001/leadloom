@@ -6,7 +6,11 @@ import {
   WaterfallEntitlementError,
 } from '../waterfall.service';
 import { WaterfallController } from '../waterfall.controller';
-import { DispatchWaterfallRequest } from '@leadloom/contracts';
+import {
+  DispatchWaterfallRequest,
+  DispatchWaterfallResponseSchema,
+  WaterfallCellPayloadSchema,
+} from '@leadloom/contracts';
 
 describe('WaterfallService Entitlement Gating', () => {
   const sampleRequest: DispatchWaterfallRequest = {
@@ -15,11 +19,64 @@ describe('WaterfallService Entitlement Gating', () => {
     priority: 'standard',
   };
 
-  it('allows dispatch when no EntitlementPort is configured (default unconfigured posture)', async () => {
-    const service = new WaterfallService();
-    const res = await service.dispatchWaterfall(sampleRequest, randomUUID());
-    expect(res.totalQueued).toBe(3);
-    expect(res.jobId).toMatch(/^job-/);
+  it('allows dispatch when no EntitlementPort is configured and LEADLOOM_ENTITLEMENTS_ENFORCED != true', async () => {
+    const saved = process.env.LEADLOOM_ENTITLEMENTS_ENFORCED;
+    try {
+      delete process.env.LEADLOOM_ENTITLEMENTS_ENFORCED;
+      const service = new WaterfallService();
+      const res = await service.dispatchWaterfall(sampleRequest, randomUUID());
+      expect(res.totalQueued).toBe(3);
+      expect(res.jobId).toMatch(/^job-/);
+    } finally {
+      if (saved !== undefined) process.env.LEADLOOM_ENTITLEMENTS_ENFORCED = saved;
+    }
+  });
+
+  it('fails closed: rejects missing workspaceId when EntitlementPort is configured', async () => {
+    const port: WaterfallEntitlementPort = {
+      checkFeature: vi.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+      checkLimit: vi.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+    };
+    const service = new WaterfallService(port);
+
+    // 1. undefined workspaceId
+    await expect(service.dispatchWaterfall(sampleRequest, undefined)).rejects.toThrow(
+      WaterfallEntitlementError
+    );
+    await expect(service.dispatchWaterfall(sampleRequest, undefined)).rejects.toMatchObject({
+      decision: { allowed: false, reason: 'no_plan' },
+    });
+
+    // 2. empty workspaceId
+    await expect(service.dispatchWaterfall(sampleRequest, '   ')).rejects.toThrow(
+      WaterfallEntitlementError
+    );
+
+    // 3. executeSingleRow without workspaceId
+    await expect(service.executeSingleRow({ email: 'x@example.com' }, undefined, undefined)).rejects.toThrow(
+      WaterfallEntitlementError
+    );
+
+    expect(port.checkFeature).not.toHaveBeenCalled();
+  });
+
+  it('fails closed: rejects missing EntitlementPort when LEADLOOM_ENTITLEMENTS_ENFORCED === true', async () => {
+    const saved = process.env.LEADLOOM_ENTITLEMENTS_ENFORCED;
+    try {
+      process.env.LEADLOOM_ENTITLEMENTS_ENFORCED = 'true';
+      const service = new WaterfallService(); // no port provided
+      const workspaceId = randomUUID();
+
+      await expect(service.dispatchWaterfall(sampleRequest, workspaceId)).rejects.toThrow(
+        WaterfallEntitlementError
+      );
+      await expect(service.dispatchWaterfall(sampleRequest, workspaceId)).rejects.toMatchObject({
+        decision: { allowed: false, reason: 'billing_inactive' },
+      });
+    } finally {
+      if (saved !== undefined) process.env.LEADLOOM_ENTITLEMENTS_ENFORCED = saved;
+      else delete process.env.LEADLOOM_ENTITLEMENTS_ENFORCED;
+    }
   });
 
   it('allows dispatch when EntitlementPort is configured and permits feature and limits', async () => {
@@ -107,5 +164,22 @@ describe('WaterfallService Entitlement Gating', () => {
     expect(res.totalQueued).toBe(3);
     expect(port.checkFeature).toHaveBeenCalledWith(workspaceId, 'waterfall');
     expect(port.checkLimit).toHaveBeenCalledWith(workspaceId, 'enrichment_credits_per_month', 3);
+  });
+
+  it('confirms raw payload never reaches API dispatch response or executeSingleRow response', async () => {
+    const service = new WaterfallService();
+    const workspaceId = randomUUID();
+
+    // 1. Dispatch response must strictly match DispatchWaterfallResponseSchema with no raw field
+    const dispatchRes = await service.dispatchWaterfall(sampleRequest, workspaceId);
+    const parsedDispatch = DispatchWaterfallResponseSchema.parse(dispatchRes);
+    expect((parsedDispatch as any).raw).toBeUndefined();
+    expect(Object.keys(dispatchRes)).toEqual(['jobId', 'totalQueued', 'estimatedCompletionAt']);
+
+    // 2. executeSingleRow response must strictly match WaterfallCellPayloadSchema with no raw field
+    const cellRes = await service.executeSingleRow({ email: 'known@example.com' }, [], workspaceId);
+    const parsedCell = WaterfallCellPayloadSchema.parse(cellRes);
+    expect((parsedCell as any).raw).toBeUndefined();
+    expect((cellRes as any).raw).toBeUndefined();
   });
 });

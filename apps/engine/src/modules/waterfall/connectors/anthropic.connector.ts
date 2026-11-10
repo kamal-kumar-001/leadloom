@@ -8,6 +8,8 @@ import {
   validateAndResolveBaseUrl,
   resolveFetch,
   redactSecrets,
+  safeFetch,
+  checkRedirectResponse,
 } from './security';
 
 export interface AnthropicMessage {
@@ -96,7 +98,7 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
     const url = `${baseCheck.url}/v1/messages`;
 
     try {
-      const response = await fetchImpl(url, {
+      const response = await safeFetch(fetchImpl, url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,6 +115,11 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
       });
 
       const latencyMs = Date.now() - start;
+
+      const redirectErr = checkRedirectResponse(response);
+      if (redirectErr) {
+        return { success: false, latencyMs, error: redirectErr };
+      }
 
       if (response.status === 429) {
         return {

@@ -165,3 +165,34 @@ export function resolveFetch(ctx: ConnectorContext): { fetchFn?: typeof fetch; e
     },
   };
 }
+
+/**
+ * Safely executes a fetch request with redirect: 'manual' to prevent credentials
+ * from following HTTP redirects to foreign hosts.
+ */
+export async function safeFetch(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit
+): Promise<Response> {
+  return fetchImpl(url, {
+    ...init,
+    redirect: 'manual',
+  });
+}
+
+/**
+ * Checks if a fetch response is a 3xx redirect or opaqueredirect.
+ * All redirects are treated as provider errors so secrets are never leaked.
+ */
+export function checkRedirectResponse(response: { status: number; type?: string }): ConnectorError | null {
+  if ((response.status >= 300 && response.status < 400) || response.type === 'opaqueredirect') {
+    return {
+      code: 'PROVIDER_ERROR',
+      status: response.status || 302,
+      message: `HTTP redirect (${response.status || 302}) blocked: redirects are disabled for credential security`,
+      retryable: false,
+    };
+  }
+  return null;
+}

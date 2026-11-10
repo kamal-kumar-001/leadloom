@@ -145,6 +145,36 @@ describe('Security Controls', () => {
     });
   });
 
+  describe('Redirect Protection (redirect: manual)', () => {
+    it('blocks HTTP 302 redirects with redirect: manual and returns PROVIDER_ERROR without following', async () => {
+      const sensitiveKey = 'sk-super-secret-apollo-key';
+      const apollo = new ApolloConnector();
+      let capturedInit: RequestInit | undefined;
+
+      const mockFetch = vi.fn(async (url: string, init?: RequestInit) => {
+        capturedInit = init;
+        return {
+          ok: false,
+          status: 302,
+          type: 'default',
+          headers: new Headers({ Location: 'https://evil-harvest-server.com/steal' }),
+        } as unknown as Response;
+      });
+
+      const res = await apollo.run(
+        { email: 'target@example.com' },
+        { apiKey: sensitiveKey, fetch: mockFetch as any }
+      );
+
+      expect(capturedInit?.redirect).toBe('manual');
+      expect(res.success).toBe(false);
+      expect(res.error?.code).toBe('PROVIDER_ERROR');
+      expect(res.error?.status).toBe(302);
+      expect(res.error?.message).toContain('HTTP redirect (302) blocked');
+      expect(res.error?.message).not.toContain(sensitiveKey);
+    });
+  });
+
   describe('Default-Off Network Disabled Guard', () => {
     it('returns NETWORK_DISABLED when ctx.fetch is omitted and LEADLOOM_CONNECTORS_LIVE_ENABLED != true', async () => {
       const savedEnv = process.env.LEADLOOM_CONNECTORS_LIVE_ENABLED;

@@ -8,6 +8,8 @@ import {
   validateAndResolveBaseUrl,
   resolveFetch,
   redactSecrets,
+  safeFetch,
+  checkRedirectResponse,
 } from './security';
 
 export interface OllamaMessage {
@@ -82,7 +84,7 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
     const url = `${baseCheck.url}/api/chat`;
 
     try {
-      const response = await fetchImpl(url, {
+      const response = await safeFetch(fetchImpl, url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,6 +100,11 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
       });
 
       const latencyMs = Date.now() - start;
+
+      const redirectErr = checkRedirectResponse(response);
+      if (redirectErr) {
+        return { success: false, latencyMs, error: redirectErr };
+      }
 
       if (!response.ok) {
         return {

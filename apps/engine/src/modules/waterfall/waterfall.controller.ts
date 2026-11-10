@@ -16,6 +16,8 @@ export class WaterfallController {
 
   public async dispatch(body: unknown, workspaceId?: string): Promise<DispatchWaterfallResponse> {
     const validated = DispatchWaterfallRequestSchema.parse(body);
-    return this.waterfallService.dispatchWaterfall(validated, workspaceId);
+    const resolvedWorkspaceId =
+      workspaceId ?? (typeof body === 'object' && body !== null ? (body as any).workspaceId : undefined);
+    return this.waterfallService.dispatchWaterfall(validated, resolvedWorkspaceId);
   }
 }

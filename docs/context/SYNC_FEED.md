@@ -111,4 +111,12 @@
 - Added security controls via `security.ts`: `validateAndResolveBaseUrl` strictly enforces HTTPS and vendor host matching (Ollama strictly restricted to loopback 127.0.0.1/localhost/::1, rejecting metadata and external IPs); `resolveFetch` fails closed with `NETWORK_DISABLED` unless test fetch is injected or `LEADLOOM_CONNECTORS_LIVE_ENABLED=true`; `redactSecrets` redacts API keys from query strings, error messages, and raw responses.
 - Labeled all 10 connectors `verification: 'fixture-tested'`, updated fixtures to documented vendor shapes, and added 20 unit tests in `connectors.spec.ts`. All 31 engine test files (182 passed, 8 skipped) and `tsc --noEmit` clean.
 
+---
+
+### [2026-11-10T19:55:00Z] Team Beta | apps/engine/src/modules/waterfall | Non-Breaking
+- Connector credential safety: enforced `redirect: 'manual'` on all 10 connectors and fail-closed handling on any HTTP 3xx redirect status code (`checkRedirectResponse`), ensuring secret tokens never follow redirects to external hosts. Added unit test for 302 redirect blocking.
+- Waterfall entitlement fail-closed enforcement: `WaterfallService.assertEntitlements` rejects missing `workspaceId` (scoped tenant required) and rejects missing `EntitlementPort` whenever `LEADLOOM_ENTITLEMENTS_ENFORCED=true`.
+- Confirmed zero exposure of raw payloads in logs (no console/logger calls in waterfall module) or API contracts (`DispatchWaterfallResponse` and `WaterfallCellPayload` schemas have no raw fields). All 31 engine test files (186 passed, 8 skipped) and `tsc --noEmit` pass cleanly.
+
+
 

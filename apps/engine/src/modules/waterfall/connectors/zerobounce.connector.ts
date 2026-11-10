@@ -8,6 +8,8 @@ import {
   validateAndResolveBaseUrl,
   resolveFetch,
   redactSecrets,
+  safeFetch,
+  checkRedirectResponse,
 } from './security';
 
 export interface ZeroBounceInput {
@@ -96,12 +98,17 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
     const url = `${baseCheck.url}/v2/validate?${params.toString()}`;
 
     try {
-      const response = await fetchImpl(url, {
+      const response = await safeFetch(fetchImpl, url, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
 
       const latencyMs = Date.now() - start;
+
+      const redirectErr = checkRedirectResponse(response);
+      if (redirectErr) {
+        return { success: false, latencyMs, error: redirectErr };
+      }
 
       if (response.status === 429) {
         return {

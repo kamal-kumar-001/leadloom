@@ -60,11 +60,30 @@ export class WaterfallService {
     return this.estimator.estimate(request);
   }
 
-  public async dispatchWaterfall(
-    request: DispatchWaterfallRequest,
-    workspaceId?: string
-  ): Promise<DispatchWaterfallResponse> {
-    if (this.entitlements && workspaceId) {
+  /**
+   * Asserts entitlement checks fail closed:
+   * 1. Rejects missing workspaceId when entitlements are active or enforced.
+   * 2. Allows a missing EntitlementPort ONLY if LEADLOOM_ENTITLEMENTS_ENFORCED !== 'true'.
+   * 3. Evaluates feature and credit limits through the injected port.
+   */
+  private async assertEntitlements(workspaceId: string | undefined, credits: number): Promise<void> {
+    const isEnforced = process.env.LEADLOOM_ENTITLEMENTS_ENFORCED === 'true';
+
+    if (this.entitlements || isEnforced) {
+      if (!workspaceId || typeof workspaceId !== 'string' || workspaceId.trim() === '') {
+        throw new WaterfallEntitlementError(
+          'Missing workspaceId: all waterfall operations must be tenant-scoped',
+          { allowed: false, reason: 'no_plan' }
+        );
+      }
+
+      if (!this.entitlements) {
+        throw new WaterfallEntitlementError(
+          'Missing entitlement service: LEADLOOM_ENTITLEMENTS_ENFORCED is active but no EntitlementPort was provided',
+          { allowed: false, reason: 'billing_inactive' }
+        );
+      }
+
       const featureDecision = await this.entitlements.checkFeature(workspaceId, 'waterfall');
       if (!featureDecision.allowed) {
         throw new WaterfallEntitlementError(
@@ -76,7 +95,7 @@ export class WaterfallService {
       const limitDecision = await this.entitlements.checkLimit(
         workspaceId,
         'enrichment_credits_per_month',
-        request.rowIds.length
+        credits
       );
       if (!limitDecision.allowed) {
         throw new WaterfallEntitlementError(
@@ -85,6 +104,13 @@ export class WaterfallService {
         );
       }
     }
+  }
+
+  public async dispatchWaterfall(
+    request: DispatchWaterfallRequest,
+    workspaceId?: string
+  ): Promise<DispatchWaterfallResponse> {
+    await this.assertEntitlements(workspaceId, request.rowIds.length);
 
     const totalQueued = request.rowIds.length;
     const estSeconds = Math.ceil(totalQueued * 0.2);
@@ -102,27 +128,7 @@ export class WaterfallService {
     nodeConfigs?: WaterfallNodeConfig[],
     workspaceId?: string
   ): Promise<WaterfallCellPayload> {
-    if (this.entitlements && workspaceId) {
-      const featureDecision = await this.entitlements.checkFeature(workspaceId, 'waterfall');
-      if (!featureDecision.allowed) {
-        throw new WaterfallEntitlementError(
-          `Waterfall feature is not permitted on the current plan: ${featureDecision.reason}`,
-          featureDecision
-        );
-      }
-
-      const limitDecision = await this.entitlements.checkLimit(
-        workspaceId,
-        'enrichment_credits_per_month',
-        1
-      );
-      if (!limitDecision.allowed) {
-        throw new WaterfallEntitlementError(
-          `Enrichment credit limit exceeded: ${limitDecision.reason}`,
-          limitDecision
-        );
-      }
-    }
+    await this.assertEntitlements(workspaceId, 1);
 
     const defaultConfigs: WaterfallNodeConfig[] = [
       { id: 'node-apollo', provider: 'apollo', tier: 1, costWeight: 100 },

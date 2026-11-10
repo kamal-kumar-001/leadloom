@@ -8,6 +8,8 @@ import {
   validateAndResolveBaseUrl,
   resolveFetch,
   redactSecrets,
+  safeFetch,
+  checkRedirectResponse,
 } from './security';
 
 export interface PdlInput {
@@ -92,7 +94,7 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
     const url = `${baseCheck.url}/v5/person/enrich`;
 
     try {
-      const response = await fetchImpl(url, {
+      const response = await safeFetch(fetchImpl, url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -110,6 +112,11 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
       });
 
       const latencyMs = Date.now() - start;
+
+      const redirectErr = checkRedirectResponse(response);
+      if (redirectErr) {
+        return { success: false, latencyMs, error: redirectErr };
+      }
 
       if (response.status === 429) {
         return {
