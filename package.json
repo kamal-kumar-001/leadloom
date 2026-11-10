@@ -1,20 +1,22 @@
 {
-  "name": "leadloom-monorepo",
-  "version": "1.0.0",
+  "name": "leadloom",
+  "version": "0.1.0",
   "private": true,
+  "description": "LeadLoom — The Open-Core Signal-to-Revenue Engine",
   "workspaces": [
-    "apps/*",
     "packages/*",
+    "apps/*",
     "workers/*"
   ],
   "scripts": {
-    "build": "turbo run build",
+    "build": "turbo run build || npm run --workspaces --if-present build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "test": "turbo run test"
+    "test": "turbo run test || vitest run"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
   }
 }
