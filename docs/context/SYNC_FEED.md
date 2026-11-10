@@ -301,6 +301,13 @@
   - Desktop table view with responsive stacked mobile view to guarantee no horizontal overflow at 390px.
 - Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (0 errors), `npm run build --workspace @leadloom/web` (18/18 routes compiled).
 
+---
 
-
-
+### [2026-11-11T05:05:00+05:30] Team Beta | apps/web experiments list on validator (Part B) | Non-Breaking
+- Added read-only "Workspace Experiments" list above fixture preview on `/app/validator` (`apps/web/app/app/validator/page.tsx`):
+  - Consumes `fetchWorkspaceExperiments` (`WorkspaceExperimentRow`) with skeleton loading, error card with retry button, and empty state (`EmptyState` "No experiments yet").
+  - Columns / attributes: hypothesis (truncated to 140 chars by server), verdict (Badge variant with capitalized status e.g. Validated, Pending, Rejected), verdictScore (rendered only if not null), and formatted created date.
+  - Retains existing fixture UI strictly under a clearly labelled "Sample preview" Card (`Badge variant="subtle"` "Sample preview").
+  - Zero create/generate mutations or actions added; shell left untouched (note to Gamma: `/app/validator` topbar sample claim can be removed once desired).
+  - Desktop table view with responsive stacked mobile view to guarantee no horizontal overflow at 390px.
+- Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (0 errors), `npm run build --workspace @leadloom/web` (18/18 routes compiled clean).
