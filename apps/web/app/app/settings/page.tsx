@@ -6,6 +6,7 @@ import {
   AppearanceSettingsCard,
   PlanLimitsCard,
   TeamSettingsCard,
+  ProviderKeysCard,
 } from '../../../components/settings';
 
 export default function SettingsPage() {
@@ -17,20 +18,23 @@ export default function SettingsPage() {
           Workspace Settings
         </h1>
         <p className="text-xs text-text-secondary mt-1">
-          Manage your account profile, theme appearance, contractual system limits, and team seats.
+          Manage your account profile, provider keys, theme appearance, contractual system limits, and team seats.
         </p>
       </div>
 
       {/* 1. Account & Workspace */}
       <AccountSettingsCard />
 
-      {/* 2. Theme Appearance */}
+      {/* 2. Provider Keys (BYOK Encrypted Vault) */}
+      <ProviderKeysCard />
+
+      {/* 3. Theme Appearance */}
       <AppearanceSettingsCard />
 
-      {/* 3. Contractual Plan Limits */}
+      {/* 4. Contractual Plan Limits */}
       <PlanLimitsCard />
 
-      {/* 4. Team Members */}
+      {/* 5. Team Members */}
       <TeamSettingsCard />
     </div>
   );

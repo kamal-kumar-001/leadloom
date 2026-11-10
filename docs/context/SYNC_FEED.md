@@ -238,3 +238,17 @@
 - Verified: \`node scripts/check-design.mjs --strict\`, \`npx tsc --noEmit\`, and \`npm run build --workspace @leadloom/web\` (18/18 routes compiled) pass with 0 errors.
 - Visual inspection: dark and light screenshots at 1280px and 390px (toast showing, error page, offline banner) captured and inspected.
 
+---
+
+### [2026-11-11T02:12:00+05:30] Team Beta | apps/web provider keys in Settings | Non-Breaking
+- Built `ProviderKeysCard` in `apps/web/components/settings/provider-keys.tsx` wired to existing engine `/vault/credentials`:
+  - Added `deleteVaultCredential` helper in `apps/web/lib/engine-client.ts`.
+  - Lists saved keys with provider, label, masked tail (`sk-••••••••abcd`), created date, and honest "Saved" status badge (no connector catalog, zero verification claims).
+  - Add Key form using `FormField`, `isSubmitting` pending state, `type="password"` input with immediate state clearing on submit (secrets never exposed in toasts or logs), and notifications via `notify`.
+  - Delete flow with `ConfirmDialog` alertdialog.
+  - States: skeleton loading, empty state (`EmptyState` "No provider keys yet"), error banner with retry.
+  - Role gating via `useShellIdentity()`: only `owner`/`admin` see add/delete actions; other roles see read-only view.
+  - Mounted as a card in `apps/web/app/app/settings/page.tsx`.
+- Verified: `node scripts/check-design.mjs --strict`, `npx tsc --noEmit`, and `npm run build --workspace @leadloom/web` pass with 0 errors.
+- Visual inspection: dark and light screenshots at 1280px and 390px captured and verified.
+

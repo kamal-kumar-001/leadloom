@@ -155,6 +155,7 @@ export async function provisionWorkspace(name?: string): Promise<{
 export async function fetchVaultCredentials(): Promise<{
   credentials: MaskedBYOKCredential[];
   isMock: boolean;
+  error?: string;
 }> {
   const result = await engineFetch<MaskedBYOKCredential[]>('/vault/credentials', {
     method: 'GET',
@@ -165,30 +166,34 @@ export async function fetchVaultCredentials(): Promise<{
   }
 
   // Display demo sample data if engine mock fallback enabled
-  const fallback: MaskedBYOKCredential[] = [
-    {
-      id: '00000000-0000-4000-8000-000000001001',
-      provider: 'apollo',
-      label: 'Sample Apollo Tier 1',
-      maskedKey: 'sk-••••••••••••4a91',
-      isValid: true,
-      quotaRemaining: 4850,
-      lastVerifiedAt: new Date(Date.now() - 3600000).toISOString(),
-      createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
-    },
-    {
-      id: '00000000-0000-4000-8000-000000001002',
-      provider: 'hunter',
-      label: 'Sample Hunter Fallback',
-      maskedKey: 'sk-••••••••••••b82f',
-      isValid: true,
-      quotaRemaining: 1200,
-      lastVerifiedAt: new Date(Date.now() - 7200000).toISOString(),
-      createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
-    },
-  ];
+  if (process.env.NEXT_PUBLIC_ENGINE_MOCK_FALLBACK === 'true') {
+    const fallback: MaskedBYOKCredential[] = [
+      {
+        id: '00000000-0000-4000-8000-000000001001',
+        provider: 'apollo',
+        label: 'Sample Apollo Tier 1',
+        maskedKey: 'sk-••••••••••••4a91',
+        isValid: true,
+        quotaRemaining: 4850,
+        lastVerifiedAt: new Date(Date.now() - 3600000).toISOString(),
+        createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+      },
+      {
+        id: '00000000-0000-4000-8000-000000001002',
+        provider: 'hunter',
+        label: 'Sample Hunter Fallback',
+        maskedKey: 'sk-••••••••••••b82f',
+        isValid: true,
+        quotaRemaining: 1200,
+        lastVerifiedAt: new Date(Date.now() - 7200000).toISOString(),
+        createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
+      },
+    ];
 
-  return { credentials: fallback, isMock: true };
+    return { credentials: fallback, isMock: true };
+  }
+
+  return { credentials: [], isMock: false, error: result.error || 'Failed to fetch vault credentials' };
 }
 
 export async function saveVaultCredential(
@@ -207,6 +212,25 @@ export async function saveVaultCredential(
   throw new EngineClientError(
     result.error || 'Engine vault unavailable. Credential was not saved.',
     503,
+    false,
+    'VAULT_UNAVAILABLE'
+  );
+}
+
+export async function deleteVaultCredential(
+  credentialId: string
+): Promise<{ deleted: boolean; isMock: boolean }> {
+  const result = await engineFetch<{ deleted: boolean }>(`/vault/credentials/${credentialId}`, {
+    method: 'DELETE',
+  });
+
+  if (result.data) {
+    return { deleted: result.data.deleted, isMock: false };
+  }
+
+  throw new EngineClientError(
+    result.error || 'Engine vault unavailable. Credential was not deleted.',
+    result.status || 503,
     false,
     'VAULT_UNAVAILABLE'
   );
