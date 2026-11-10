@@ -61,7 +61,7 @@ export function IdeaValidatorShowcase() {
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-signal-verified animate-ping" />
                 <span className="text-xs font-mono text-text-primary font-medium">
-                  Live Validation Telemetry (/v/k8s-cutter)
+                  Sample Validation Telemetry (simulated /v/k8s-cutter)
                 </span>
               </div>
               <Badge variant="verified" className="font-mono">

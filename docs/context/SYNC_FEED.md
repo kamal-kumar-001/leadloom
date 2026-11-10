@@ -79,3 +79,9 @@
 - Anchor sections get scroll-mt so the sticky header never covers section tops; mobile section padding tightened (py-14 sm:py-24) to kill dead gaps; hero padding responsive.
 - PreFlightBar now solid bg (table content no longer bleeds through); hero sandbox table headers nowrap.
 - Verified: next build clean, smoke-production.mjs PASSED (0 console/page errors), pixel-verified at 390px and 1440px.
+
+## 2026-11-10 17:33 IST - Gamma: honesty labels + measured fps (review corrections)
+- Sandbox CTA now "Run Simulated Waterfall on 5 Sample Accounts"; column "Sample Buying Signal"; validator card "Sample Validation Telemetry (simulated /v/k8s-cutter)". Point-of-action labels match the demo banner.
+- Globe badge fps is now measured on-device per second (render loop sample), never hardcoded; hidden until first real sample.
+- Anchor nav verified pixel-level: /#waterfall lands fully below the sticky header at desktop and mobile.
+- Full-page pass: /, /workspace, /v/k8s-cutter at 390px and 1440px all render clean; smoke-production PASSED again.

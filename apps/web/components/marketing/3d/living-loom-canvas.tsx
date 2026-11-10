@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, useState, useEffect } from 'react';
+import { fpsSample } from './fps-meter';
 import { Canvas } from '@react-three/fiber';
 import { SceneContent } from './scene-content';
 import { AmbientLoomFallback } from './ambient-fallback';
@@ -12,6 +13,7 @@ export interface LivingLoomCanvasProps {
 export function LivingLoomCanvas({ lightingState = 'indigo' }: LivingLoomCanvasProps) {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [measuredFps, setMeasuredFps] = useState(0);
 
   useEffect(() => {
     setIsMounted(true);
@@ -21,6 +23,13 @@ export function LivingLoomCanvas({ lightingState = 'indigo' }: LivingLoomCanvasP
     const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
     mediaQuery.addEventListener('change', handler);
     return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (fpsSample.value > 0) setMeasuredFps(fpsSample.value);
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
   if (!isMounted) {
@@ -46,7 +55,7 @@ export function LivingLoomCanvas({ lightingState = 'indigo' }: LivingLoomCanvasP
       {/* Real-time telemetry overlay badge */}
       <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2 rounded-md border border-border-subtle bg-canvas-elevated/80 px-2.5 py-1 text-[11px] font-mono text-text-muted backdrop-blur-md">
         <span className="w-2 h-2 rounded-full bg-signal-verified animate-pulse" />
-        <span>Living Loom Engine • WebGL Active (60fps)</span>
+        <span>Living Loom Engine • WebGL Active{measuredFps > 0 ? ` • ${measuredFps}fps measured` : ''}</span>
       </div>
     </div>
   );

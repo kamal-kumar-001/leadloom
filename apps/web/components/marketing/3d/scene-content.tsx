@@ -7,6 +7,7 @@ import {
   loomCoreVertexShader,
   loomCoreFragmentShader,
 } from '@leadloom/webgl-scenes';
+import { fpsSample } from './fps-meter';
 
 export interface SceneContentProps {
   lightingState?: 'indigo' | 'matrix';
@@ -115,8 +116,18 @@ export function SceneContent({ lightingState = 'indigo' }: SceneContentProps) {
     [],
   );
 
+  const fpsAccum = useRef({ frames: 0, elapsed: 0 });
+
   useFrame((state, delta) => {
     uniforms.uTime.value += delta;
+
+    fpsAccum.current.frames += 1;
+    fpsAccum.current.elapsed += delta;
+    if (fpsAccum.current.elapsed >= 0.5) {
+      fpsSample.value = Math.round(fpsAccum.current.frames / fpsAccum.current.elapsed);
+      fpsAccum.current.frames = 0;
+      fpsAccum.current.elapsed = 0;
+    }
 
     // Restrained continuous rotation with subtle mouse parallax.
     if (globeRef.current) {
