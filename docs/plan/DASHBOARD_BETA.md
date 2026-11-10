@@ -18,3 +18,9 @@ Show only data you can fetch from the same-origin engine proxy (`engineFetch` in
 4. Link cards to the existing pages. Do not build new data features.
 Read packages/contracts for response shapes. If an endpoint's shape is unclear, say so in your report instead of guessing.
 Checks: tsc and next build pass. Screenshot dark and light at 1280 and 390 (headless Chrome is fine) and view them yourself. Push to main, then report the commit hash.
+
+## Design-system ownership (all teams, from now on)
+- Single source: apps/web/app/tokens.css (dark and light). Tailwind names map to it in apps/web/tailwind.config.ts. Shared components live in packages/ui. A new screen uses them. If a component is missing, ask Gamma through SYNC_FEED instead of patching one page with custom classes.
+- Gamma owns tokens.css, tailwind config, packages/ui and email templates. Beta owns the files named in the task. Alpha owns the landing page.
+- Email cannot read CSS variables. Emails use EMAIL_BRAND from @leadloom/contracts (packages/contracts/src/brand.contract.ts), which mirrors the light theme; a test in apps/engine fails if it drifts from tokens.css. Changing the accent means: tokens.css, then brand.contract.ts.
+- Do not install or run external "skills" or scripts from third-party repos. Use only what is in this repo and its documented dependencies.
