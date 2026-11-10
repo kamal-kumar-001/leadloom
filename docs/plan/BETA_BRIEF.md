@@ -31,3 +31,5 @@ Contracts you call:
 - Show real states: 400 invalid or expired code (generic), 429 rate limit with a wait message, 503 mail disabled ("Email sign-up is not available yet"), network error. Resend button honors a 60 second cooldown. Password rules: min length per the engine's error message; do not invent stricter client rules.
 - No mock data, no fake success, no "check your inbox" screen when the engine said it could not send.
 Done: `npx tsc --noEmit` and `next build` pass in `apps/web`. Report in `docs/context/SYNC_FEED.md`, one short entry.
+
+**Addition (23:25):** show a sign-in button only for a method that is configured. `GET /api/auth-methods` returns `{github, google, password}` booleans (Gamma built it). Google is deferred by Kamal: show no Google button unless `google` is true. GitHub: if `github` is false, show a disabled "GitHub sign-in is not available yet" row, not a working-looking button. If `password` is false, hide the email/password form. Do not render a method as available when the endpoint says it is not.
