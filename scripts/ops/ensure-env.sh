@@ -2,7 +2,7 @@
 # Adds MISSING login settings to .env. Never overwrites an existing value, never prints a secret,
 # never touches other keys. Run on the host before update.sh:
 #   bash scripts/ops/ensure-env.sh [--mail-from-bakerypos /path/to/bakerypos/.env]
-# --mail-from-bakerypos copies that file's SMTP_PASSWORD (the shared Resend key) into
+# --mail-from-bakerypos copies that file's SMTP_PASS (the shared Resend key, only if host=smtp.resend.com, user=resend, key starts re_, from-address on mail.dmpilot.org) into
 # LEADLOOM_RESEND_API_KEY on this host only, and turns on emailed codes with the sender below.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -21,11 +21,13 @@ has LEADLOOM_SIGNUP_HOURLY_CAP || put LEADLOOM_SIGNUP_HOURLY_CAP 20
 if [ "${1:-}" = "--mail-from-bakerypos" ]; then
   src="${2:?path to the BakeryPOS .env}"
   [ -f "$src" ] || { echo "BakeryPOS env not found" >&2; exit 1; }
-  if ! has LEADLOOM_RESEND_API_KEY; then
-    key="$(grep -m1 '^SMTP_PASSWORD=' "$src" | cut -d= -f2- | tr -d '"' || true)"
-    [ -n "$key" ] || { echo "SMTP_PASSWORD not found in that file" >&2; exit 1; }
-    put LEADLOOM_RESEND_API_KEY "$key"
-  fi
+  val() { grep -m1 "^$1=" "$src" | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" || true; }
+  # BakeryPOS names (from its .env.example and email.service.ts): SMTP_HOST SMTP_USER SMTP_PASS SMTP_FROM
+  host="$(val SMTP_HOST)"; user="$(val SMTP_USER)"; pass="$(val SMTP_PASS)"; from="$(val SMTP_FROM)"
+  [ "$host" = "smtp.resend.com" ] && [ "$user" = "resend" ] || { echo "BakeryPOS mail is not Resend SMTP (host/user differ); not copying" >&2; exit 1; }
+  case "$pass" in re_?*) ;; *) echo "SMTP_PASS is empty or not a Resend key (expected re_...); not copying" >&2; exit 1;; esac
+  case "$from" in *"@mail.dmpilot.org"*|*"@mail.dmpilot.org>"*) ;; *) echo "SMTP_FROM is not on mail.dmpilot.org; not copying" >&2; exit 1;; esac
+  has LEADLOOM_RESEND_API_KEY || put LEADLOOM_RESEND_API_KEY "$pass"
   has LEADLOOM_EMAIL_FROM || put LEADLOOM_EMAIL_FROM '"Leadloom <noreply@mail.dmpilot.org>"'
   has LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED || put LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED true
   has LEADLOOM_PASSWORD_AUTH_ENABLED || put LEADLOOM_PASSWORD_AUTH_ENABLED true

@@ -49,31 +49,36 @@ else
   echo -e "   ${YELLOW}⚠ Not a Git root directory. Skipping git pull.${RESET}"
 fi
 
-# 2. Build updated images and restart application containers
-echo -e "\n${BOLD}🔨 [2/6] Ruilding updated images & recreating containers...${RESET}"
-docker compose --profile application up -d --build
-echo -e "   ${GREEN}✓ Containers deployed via Docker Compose.${RESET}"
+# 2. Build images, migrate FIRST with the new image, only then replace running containers.
+echo -e "\n${BOLD}🔨 [2/6] Building updated images...${RESET}"
 
-# 3. Wait for Database, Engine API, and Web Frontend to report healthy
-echo -e "\n${BOLD}🩺 [3/6] Waiting for services to become healthy...${RESET}"
-
-# Engine API Health Probe
-echo -e "   Checking Engine API on http://127.0.0.1:${ENGINE_PORT}/health..."
-api_ready=false
-for i in $(seq 1 60); do
-  if curl -sf --max-time 3 "http://127.0.0.1:${ENGINE_PORT}/health" >/dev/null 2>&1; then
-    api_ready=true
-    break
+# Mail safety: password sign-in must never run with an empty or missing mail key.
+env_val() { grep -m1 "^$1=" .env 2>/dev/null | cut -d= -f2- || true; }
+if [ "$(env_val LEADLOOM_PASSWORD_AUTH_ENABLED)" = "true" ]; then
+  if [ "$(env_val LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED)" != "true" ] || [ -z "$(env_val LEADLOOM_RESEND_API_KEY)" ] || [ -z "$(env_val LEADLOOM_EMAIL_FROM)" ]; then
+    echo -e "   ${RED}✗ LEADLOOM_PASSWORD_AUTH_ENABLED=true but transactional mail is not fully configured. Refusing to deploy; the running stack is untouched.${RESET}" >&2
+    exit 1
   fi
-  sleep 2
-done
+fi
 
-if [ "$api_ready" != "true" ]; then
-  echo -e "   ${RED}✗ Warning: Engine API failed to respond on http://127.0.0.1:${ENGINE_PORT}/health within 120s.${RESET}" >&2
-  docker compose logs --tail 30 api >&2 || true
+docker compose --profile application build
+echo -e "   ${GREEN}✓ Images built (running containers untouched).${RESET}"
+
+echo -e "\n${BOLD}🗄  [3/6] Applying non-destructive migrations with the new image (old stack keeps running)...${RESET}"
+docker compose up -d postgres redis
+if ! docker compose --profile application run --rm --no-deps -T api npx prisma migrate deploy --schema packages/database/prisma/schema.prisma; then
+  echo -e "   ${RED}✗ Migration failed. Stopping here; the previous containers were NOT replaced. No data was reset.${RESET}" >&2
   exit 1
 fi
-echo -e "   ${GREEN}● [OK] Engine API is healthy.${RESET}"
+if ! docker compose --profile application run --rm --no-deps -T api npx prisma migrate status --schema packages/database/prisma/schema.prisma; then
+  echo -e "   ${RED}✗ Migration status is not clean after deploy. Stopping before restart.${RESET}" >&2
+  exit 1
+fi
+echo -e "   ${GREEN}✓ Migrations applied and history verified.${RESET}"
+
+echo -e "\n${BOLD}🚀 Replacing containers...${RESET}"
+docker compose --profile application up -d
+echo -e "   ${GREEN}✓ Containers deployed via Docker Compose.${RESET}"
 
 # Web Frontend Health Probe
 echo -e "   Checking Web Frontend on http://127.0.0.1:${WEB_PORT}..."
@@ -92,14 +97,6 @@ if [ "$web_ready" != "true" ]; then
   exit 1
 fi
 echo -e "   ${GREEN}● [OK] Web frontend is healthy.${RESET}"
-
-# 4. Apply non-destructive database migrations
-echo -e "\n${BOLD}🗄  [4/6] Applying non-destructive database migrations...${RESET}"
-if docker compose exec -T api npx prisma migrate deploy --schema packages/database/prisma/schema.prisma; then
-  echo -e "   ${GREEN}✓ Prisma database migrations applied safely (zero data loss).${RESET}"
-else
-  echo -e "   ${YELLOW}⚠ Prisma migration deployment exited with a non-zero code. Check logs if schema has changes.${RESET}"
-fi
 
 # 5. Cloudflare Tunnel & Edge Health Verification
 echo -e "\n${BOLD}🌐 [5/6] Verifying Cloudflare Tunnel and public routing...${RESET}"
