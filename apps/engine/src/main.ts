@@ -1,6 +1,10 @@
 import 'reflect-metadata';
 import { PrismaClient } from '@leadloom/database';
 import { verifySession } from './modules/auth/session';
+import { PrismaAccessGuard } from './modules/auth/access-guard';
+import type { AccessGuard } from './modules/auth/access-guard';
+import { AccountSuspendedError, SignupLimitedError } from './modules/provisioning/provisioning.service';
+import { SlidingWindowLimiter } from './modules/auth/rate-limiter';
 import type { ProvisioningService } from './modules/provisioning/provisioning.service';
 import type { EntitlementService } from './modules/entitlements/entitlements.service';
 import type { FeatureKey } from '@leadloom/contracts';
@@ -37,6 +41,8 @@ export interface RuntimeServices {
  sessionKey: Buffer;
  /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
  nextAuthBridgeKey?: Buffer;
+ /** Optional: deny suspended users and deactivated workspaces on every authenticated request. */
+ accessGuard?: AccessGuard;
  /** Optional: first sign-in provisioning (default off; needs the bridge key). */
  provisioning?: Pick<ProvisioningService,'provision'>;
  userDirectory?: UserDirectory;
@@ -63,6 +69,7 @@ export async function createApplication(services?:RuntimeServices) {
      if(!member) throw new Error('No membership');
      claims={sub:member.id,workspaceId:member.workspaceId,role:member.role,exp:proven.exp};
     }
+    if(services.accessGuard&&!await services.accessGuard.isActive(claims.sub,claims.workspaceId)) {reply.code(401).send({error:'Authentication required'});return null;}
     if(write && !canWrite(claims)) {reply.code(403).send({error:'Read-only workspace role'});return null;}
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
@@ -71,16 +78,23 @@ export async function createApplication(services?:RuntimeServices) {
   // email). The body can supply a display name and nothing else: workspace and
   // role are always server-assigned (new workspace, admin of it alone).
   if(services.provisioning&&services.nextAuthBridgeKey) {
+   // Request-level abuse cap (per client IP and global). In-memory, per process.
+   const provisionLimiter=new SlidingWindowLimiter(5,60_000);
    fastify.post('/auth/provision',async(request:any,reply:any)=>{
     let email:string;
     try {
      email=verifyBridgeToken(String(request.headers.authorization??'').replace(/^Bearer /,''),services.nextAuthBridgeKey!).email;
     } catch {return reply.code(401).send({error:'Authentication required'});}
+    if(!provisionLimiter.take('ip:'+String(request.ip))||!provisionLimiter.take('global')) return reply.code(429).send({error:'Too many requests'});
     const name=typeof request.body?.name==='string'?request.body.name:null;
     try {
      const member=await services.provisioning!.provision(email,name);
      return reply.code(member.created?201:200).send(member);
-    } catch {return reply.code(400).send({error:'Provisioning failed'});}
+    } catch(e) {
+     if(e instanceof AccountSuspendedError) return reply.code(403).send({error:'Account unavailable'});
+     if(e instanceof SignupLimitedError) return reply.code(429).send({error:'Too many requests'});
+     return reply.code(400).send({error:'Provisioning failed'});
+    }
    });
   }
   /** Server-side plan gate; no-op unless entitlements are configured. Deny-by-default when enforced. */
@@ -232,6 +246,7 @@ if(require.main===module) {
    const unsubscribeKey=process.env.LEADLOOM_UNSUBSCRIBE_KEY?Buffer.from(process.env.LEADLOOM_UNSUBSCRIBE_KEY,'base64'):undefined;
    if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
    services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
+   services.accessGuard=new PrismaAccessGuard(prisma);
    if(process.env.LEADLOOM_ENTITLEMENTS_ENFORCED==='true') {
     const {EntitlementService}=await import('./modules/entitlements/entitlements.service.js');
     const {PrismaEntitlementStore}=await import('./modules/entitlements/prisma-entitlement-store.js');
@@ -248,7 +263,8 @@ if(require.main===module) {
     if(!services.nextAuthBridgeKey)throw new Error('LEADLOOM_SELF_SIGNUP_ENABLED requires the NextAuth bridge');
     const {ProvisioningService}=await import('./modules/provisioning/provisioning.service.js');
     const {PrismaProvisioningStore}=await import('./modules/provisioning/prisma-provisioning-store.js');
-    services.provisioning=new ProvisioningService(new PrismaProvisioningStore(prisma));
+    const creationLimiter=new SlidingWindowLimiter(Number(process.env.LEADLOOM_SIGNUP_HOURLY_CAP??20),3_600_000);
+    services.provisioning=new ProvisioningService(new PrismaProvisioningStore(prisma),()=>creationLimiter.take('new-accounts'));
    }
    // Opt-in product APIs, default OFF in every environment. Each requires an
    // explicit env flag; providers still need per-workspace BYOK keys at call

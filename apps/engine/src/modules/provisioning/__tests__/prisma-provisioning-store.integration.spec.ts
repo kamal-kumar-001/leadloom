@@ -40,3 +40,30 @@ describe.runIf(RUN)('provisioning on real Postgres (gated)', () => {
     expect(r).toMatchObject({ workspaceId: ws, role: 'read_only', created: false });
   });
 });
+
+describe.runIf(RUN)('access guard on real Postgres (gated)', () => {
+  it('suspended user or inactive workspace is denied; unknown pair is denied; active is allowed', async () => {
+    const { PrismaClient } = await import('@leadloom/database');
+    const prisma: any = new PrismaClient({ datasources: { db: { url: URL } } });
+    const { PrismaAccessGuard } = await import('../../auth/access-guard');
+    const guard = new PrismaAccessGuard(prisma);
+    const ws = randomUUID(), other = randomUUID(), u = randomUUID();
+    try {
+      await prisma.workspace.create({ data: { id: ws, name: 'guard-a' } });
+      await prisma.workspace.create({ data: { id: other, name: 'guard-b' } });
+      await prisma.user.create({ data: { id: u, workspaceId: ws, email: `guard-${u}@example.invalid`, role: 'member' } });
+      expect(await guard.isActive(u, ws)).toBe(true);
+      expect(await guard.isActive(u, other)).toBe(false); // wrong tenant pairing
+      expect(await guard.isActive(randomUUID(), ws)).toBe(false);
+      await prisma.user.update({ where: { id: u }, data: { disabledAt: new Date() } });
+      expect(await guard.isActive(u, ws)).toBe(false);
+      await prisma.user.update({ where: { id: u }, data: { disabledAt: null } });
+      await prisma.workspace.update({ where: { id: ws }, data: { isActive: false } });
+      expect(await guard.isActive(u, ws)).toBe(false);
+      // suspended identity is not provisioned or revived
+      const { PrismaProvisioningStore } = await import('../prisma-provisioning-store');
+      const { ProvisioningService, AccountSuspendedError } = await import('../provisioning.service');
+      await expect(new ProvisioningService(new PrismaProvisioningStore(prisma)).provision(`guard-${u}@example.invalid`)).rejects.toBeInstanceOf(AccountSuspendedError);
+    } finally { await prisma.workspace.deleteMany({ where: { id: { in: [ws, other] } } }); await prisma.$disconnect(); }
+  });
+});

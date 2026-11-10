@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { ProvisioningService, type ProvisioningStore } from '../provisioning.service';
+import { ProvisioningService, AccountSuspendedError, SignupLimitedError, type ProvisioningStore } from '../provisioning.service';
 import { createApplication } from '../../../main';
 import { mintBridgeToken } from '../../auth/nextauth-bridge';
 
@@ -11,7 +11,7 @@ function memStore(): ProvisioningStore & { users: Map<string, any>; workspaces: 
     findByEmail: async (e) => users.get(e) ?? null,
     createWorkspaceWithAdmin: async ({ email }) => {
       if (users.has(email)) return null;
-      const u = { userId: randomUUID(), workspaceId: randomUUID(), role: 'admin' as const };
+      const u = { userId: randomUUID(), workspaceId: randomUUID(), role: 'admin' as const, active: true };
       users.set(email, u); workspaces.push(u.workspaceId); return { userId: u.userId, workspaceId: u.workspaceId };
     },
   };
@@ -28,7 +28,7 @@ describe('provisioning service', () => {
   });
   it('is idempotent and never changes an existing user (role, workspace)', async () => {
     const store = memStore(); const svc = new ProvisioningService(store);
-    store.users.set('member@example.invalid', { userId: randomUUID(), workspaceId: randomUUID(), role: 'read_only' });
+    store.users.set('member@example.invalid', { userId: randomUUID(), workspaceId: randomUUID(), role: 'read_only', active: true });
     const r = await svc.provision('MEMBER@example.invalid');
     expect(r).toMatchObject({ role: 'read_only', created: false });
     expect(store.workspaces).toHaveLength(0);
@@ -38,6 +38,16 @@ describe('provisioning service', () => {
     const results = await Promise.all(Array.from({ length: 8 }, () => svc.provision('race@example.invalid')));
     expect(new Set(results.map((r) => r.workspaceId)).size).toBe(1);
     expect(results.filter((r) => r.created)).toHaveLength(1);
+  });
+  it('never provisions or revives a suspended identity, and caps new-account creation', async () => {
+    const store = memStore(); const svc = new ProvisioningService(store);
+    store.users.set('gone@example.invalid', { userId: randomUUID(), workspaceId: randomUUID(), role: 'admin', active: false });
+    await expect(svc.provision('gone@example.invalid')).rejects.toBeInstanceOf(AccountSuspendedError);
+    expect(store.workspaces).toHaveLength(0);
+    let n = 0; const capped = new ProvisioningService(memStore(), () => ++n <= 2);
+    await capped.provision('a1@example.invalid'); await capped.provision('a2@example.invalid');
+    await expect(capped.provision('a3@example.invalid')).rejects.toBeInstanceOf(SignupLimitedError);
+    expect(await capped.provision('a1@example.invalid')).toMatchObject({ created: false }); // existing users are not blocked by the cap
   });
   it('rejects invalid emails', async () => {
     await expect(new ProvisioningService(memStore()).provision('not-an-email')).rejects.toThrow();
@@ -68,6 +78,8 @@ describe('POST /auth/provision (default off, bridge token only)', () => {
       expect(store.users.has('boss@example.invalid')).toBe(false);
       expect((await srv.inject({ method: 'POST', url: '/auth/provision', headers: h, payload: {} })).statusCode).toBe(200);
       expect((await srv.inject({ method: 'POST', url: '/auth/provision', headers: { authorization: 'Bearer junk' }, payload: {} })).statusCode).toBe(401);
+      for (let i = 0; i < 6; i++) await srv.inject({ method: 'POST', url: '/auth/provision', headers: h, payload: {} });
+      expect((await srv.inject({ method: 'POST', url: '/auth/provision', headers: h, payload: {} })).statusCode).toBe(429);
       expect((await srv.inject({ method: 'GET', url: '/health' })).json().routes.provisioning).toBe('mounted:bridge-token-required');
     } finally { await off.close(); await on.close(); }
   });

@@ -6,8 +6,11 @@ export class PrismaProvisioningStore implements ProvisioningStore {
   constructor(private readonly prisma: any) {}
 
   async findByEmail(email: string) {
-    const u = await this.prisma.user.findUnique({ where: { email }, select: { id: true, workspaceId: true, role: true } });
-    return u ? { userId: u.id as string, workspaceId: u.workspaceId as string, role: u.role as Role } : null;
+    const rows: Array<{ id: string; workspace_id: string; role: string; ok: boolean }> = await this.prisma.$queryRawUnsafe(
+      `SELECT u.id::text AS id, u.workspace_id::text AS workspace_id, u.role, (w.is_active AND u.disabled_at IS NULL) AS ok
+         FROM users u JOIN workspaces w ON w.id = u.workspace_id WHERE u.email = $1`, email);
+    const u = rows[0];
+    return u ? { userId: u.id, workspaceId: u.workspace_id, role: u.role as Role, active: u.ok === true } : null;
   }
 
   async createWorkspaceWithAdmin(input: { email: string; name: string | null; workspaceName: string }) {

@@ -43,6 +43,7 @@ model User {
   name         String?  @db.VarChar(255)
   passwordHash String?  @map("password_hash")
   role         String   @default("member") @db.VarChar(16) // admin | member | read_only
+  disabledAt   DateTime? @map("disabled_at") @db.Timestamptz // non-null = suspended
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
