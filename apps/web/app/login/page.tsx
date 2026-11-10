@@ -11,9 +11,12 @@ import {
   PasswordInput,
   AuthAlert,
   OAuthButtons,
+  useAuthMethods,
+  safeCallback,
 } from '@/components/auth';
 
 function LoginForm() {
+  const methods = useAuthMethods();
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
@@ -64,7 +67,7 @@ function LoginForm() {
 
       // Success: navigate to application dashboard
       const callbackUrl = searchParams.get('callbackUrl') || '/app/tables';
-      router.push(callbackUrl);
+      router.push(safeCallback(callbackUrl));
     } catch {
       setErrorMessage('Unable to connect to authentication service. Please check your connection.');
     } finally {
@@ -104,6 +107,8 @@ function LoginForm() {
       {/* OAuth Buttons */}
       <OAuthButtons mode="signin" callbackUrl={searchParams.get('callbackUrl') || '/app/tables'} />
 
+      {methods.password && (
+      <>
       {/* Divider */}
       <div className="relative my-6 text-center">
         <div className="absolute inset-0 flex items-center">
@@ -163,6 +168,8 @@ function LoginForm() {
           {isSubmitting ? 'Signing in...' : 'Sign In'}
         </Button>
       </form>
+      </>
+      )}
 
       <div className="mt-6 text-center">
         <span className="text-xs text-text-secondary">

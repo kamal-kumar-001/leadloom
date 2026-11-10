@@ -34,4 +34,14 @@ describe('transactional email', () => {
     const bad = new ResendTransactionalEmail({ apiKey: 'k', from: 'a@b.co' }, async () => ({ ok: false, json: async () => ({}) }));
     expect(await bad.send(msg)).toEqual({ sent: false, reason: 'provider_error' });
   });
+  it('stops at a daily ceiling so a shared provider allowance is not used up', async () => {
+    const calls: any[] = [];
+    let t = 1000;
+    const mail = new ResendTransactionalEmail({ apiKey: 'k', from: 'a@b.co', maxPerMinute: 100, maxPerDay: 3 }, okFetch(calls), () => t);
+    for (let i = 0; i < 3; i++) expect((await mail.send(msg)).sent).toBe(true);
+    expect(await mail.send(msg)).toEqual({ sent: false, reason: 'rate_limited' });
+    expect(calls).toHaveLength(3);
+    t += 86_400_000;
+    expect((await mail.send(msg)).sent).toBe(true);
+  });
 });

@@ -5,3 +5,4 @@ export * from './resend-countdown';
 export * from './auth-alert';
 export * from './oauth-buttons';
 export * from './auth-flow-client';
+export * from './use-auth-methods';

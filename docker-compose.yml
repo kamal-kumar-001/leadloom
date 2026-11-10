@@ -94,6 +94,8 @@ services:
       LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED: ${LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED:-false}
       LEADLOOM_RESEND_API_KEY: ${LEADLOOM_RESEND_API_KEY:-}
       LEADLOOM_EMAIL_FROM: ${LEADLOOM_EMAIL_FROM:-}
+      # Shared Resend account (Free plan: 100/day): hard daily ceiling for Leadloom mail.
+      LEADLOOM_TRANSACTIONAL_DAILY_CAP: ${LEADLOOM_TRANSACTIONAL_DAILY_CAP:-40}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}

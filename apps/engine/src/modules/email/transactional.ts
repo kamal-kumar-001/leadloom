@@ -27,14 +27,17 @@ export class DisabledTransactionalEmail implements TransactionalEmail {
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; json(): Promise<any> }>;
 
 export class ResendTransactionalEmail implements TransactionalEmail {
-  private windowStart = 0; private count = 0;
-  constructor(private readonly cfg: { apiKey: string; from: string; maxPerMinute?: number }, private readonly fetchImpl: FetchLike, private readonly now: () => number = Date.now) {}
+  private windowStart = 0; private count = 0; private dayStart = 0; private dayCount = 0;
+  constructor(private readonly cfg: { apiKey: string; from: string; maxPerMinute?: number; maxPerDay?: number }, private readonly fetchImpl: FetchLike, private readonly now: () => number = Date.now) {}
   async send(m: TransactionalMessage): Promise<SendResult> {
     if (!validMessage(m)) return { sent: false, reason: 'invalid_message' };
     const t = this.now();
     if (t - this.windowStart >= 60_000) { this.windowStart = t; this.count = 0; }
     if (this.count >= (this.cfg.maxPerMinute ?? 30)) return { sent: false, reason: 'rate_limited' };
-    this.count++;
+    if (t - this.dayStart >= 86_400_000) { this.dayStart = t; this.dayCount = 0; }
+    // Shared provider account: keep a hard ceiling so Leadloom cannot use up the whole daily allowance.
+    if (this.dayCount >= (this.cfg.maxPerDay ?? 40)) return { sent: false, reason: 'rate_limited' };
+    this.count++; this.dayCount++;
     try {
       const res = await this.fetchImpl('https://api.resend.com/emails', {
         method: 'POST',
@@ -52,5 +55,6 @@ export function createTransactionalEmail(env: Record<string, string | undefined>
   if (env.LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED !== 'true') return new DisabledTransactionalEmail();
   const apiKey = env.LEADLOOM_RESEND_API_KEY, from = env.LEADLOOM_EMAIL_FROM;
   if (!apiKey || !from || /[\r\n]/.test(from)) throw new Error('LEADLOOM_RESEND_API_KEY and LEADLOOM_EMAIL_FROM are required when transactional email is enabled');
-  return new ResendTransactionalEmail({ apiKey, from }, fetchImpl);
+  const day = Number(env.LEADLOOM_TRANSACTIONAL_DAILY_CAP);
+  return new ResendTransactionalEmail({ apiKey, from, ...(Number.isInteger(day) && day > 0 ? { maxPerDay: day } : {}) }, fetchImpl);
 }

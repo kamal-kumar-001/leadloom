@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { Button } from '@leadloom/ui';
+import { useAuthMethods, safeCallback } from './use-auth-methods';
 
 interface OAuthButtonsProps {
   mode?: 'signin' | 'signup';
@@ -16,17 +17,19 @@ export function OAuthButtons({
   disabled = false,
 }: OAuthButtonsProps) {
   const [loadingProvider, setLoadingProvider] = useState<'google' | 'github' | null>(null);
+  const methods = useAuthMethods();
 
   const handleOAuth = (provider: 'google' | 'github') => {
     if (disabled || loadingProvider) return;
     setLoadingProvider(provider);
-    signIn(provider, { callbackUrl });
+    signIn(provider, { callbackUrl: safeCallback(callbackUrl) });
   };
 
   const actionText = mode === 'signup' ? 'Sign up' : 'Continue';
 
   return (
     <div className="space-y-3">
+      {methods.google && (
       <Button
         type="button"
         variant="outline"
@@ -56,11 +59,12 @@ export function OAuthButtons({
           {loadingProvider === 'google' ? 'Redirecting to Google...' : `${actionText} with Google`}
         </span>
       </Button>
+      )}
 
       <Button
         type="button"
         variant="outline"
-        disabled={disabled || loadingProvider !== null}
+        disabled={disabled || loadingProvider !== null || !methods.github}
         onClick={() => handleOAuth('github')}
         className="w-full justify-center py-2.5 text-xs font-medium border-border-subtle hover:bg-canvas-subtle gap-2.5 h-11"
       >
@@ -72,7 +76,13 @@ export function OAuthButtons({
           />
         </svg>
         <span>
-          {loadingProvider === 'github' ? 'Redirecting to GitHub...' : `${actionText} with GitHub`}
+          {loadingProvider === 'github'
+            ? 'Redirecting to GitHub...'
+            : methods.github
+            ? `${actionText} with GitHub`
+            : methods.loaded
+            ? 'GitHub sign-in is not available yet'
+            : 'Checking sign-in options...'}
         </span>
       </Button>
     </div>

@@ -10,10 +10,13 @@ import {
   PasswordInput,
   AuthAlert,
   OAuthButtons,
+  useAuthMethods,
+  safeCallback,
   callAuthFlow,
 } from '@/components/auth';
 
 function SignupForm() {
+  const methods = useAuthMethods();
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
@@ -78,6 +81,8 @@ function SignupForm() {
       {/* Primary OAuth Actions */}
       <OAuthButtons mode="signup" callbackUrl="/app/tables" />
 
+      {methods.password && (
+      <>
       {/* Divider */}
       <div className="relative my-6 text-center">
         <div className="absolute inset-0 flex items-center">
@@ -129,6 +134,8 @@ function SignupForm() {
           {isSubmitting ? 'Creating account...' : 'Create Workspace'}
         </Button>
       </form>
+      </>
+      )}
 
       <div className="mt-6 text-center">
         <span className="text-xs text-text-secondary">
