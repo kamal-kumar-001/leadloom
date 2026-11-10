@@ -28,3 +28,5 @@ CREATE TABLE email_otps (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX email_otps_user_purpose ON email_otps (user_id, purpose, created_at DESC);
+-- At most one live code per account and purpose, enforced by the database.
+CREATE UNIQUE INDEX email_otps_one_live ON email_otps (user_id, purpose) WHERE consumed_at IS NULL;

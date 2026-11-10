@@ -23,10 +23,14 @@ export interface PasswordAccountStore {
   createPasswordAccount(input: { email: string; name: string | null; workspaceName: string; passwordHash: string }): Promise<{ userId: string } | null>;
   /** Unverified account only: replace its password (the mailbox owner proves the address next). Returns the user id, or null when none applies. */
   replaceUnverifiedPassword(email: string, passwordHash: string): Promise<string | null>;
-  /** Supersedes any unused code of the same purpose for the user. */
-  putOtp(input: { userId: string; purpose: OtpPurpose; codeHash: string; expiresAt: Date }): Promise<void>;
-  /** True when a code of this purpose was created for the user in the last `seconds`. */
-  otpSentWithin(userId: string, purpose: OtpPurpose, seconds: number): Promise<boolean>;
+  /**
+   * Atomically: unless a code of this purpose was created for the user within
+   * `cooldownSeconds`, supersede any unused code and store this one. Returns
+   * false (nothing stored) inside the cooldown. Concurrent calls store at most one.
+   */
+  putOtpUnlessRecent(input: { userId: string; purpose: OtpPurpose; codeHash: string; expiresAt: Date }, cooldownSeconds: number): Promise<boolean>;
+  /** Removes the unused code of this purpose (used when the mail could not be handed to the provider). */
+  discardOtp(userId: string, purpose: OtpPurpose): Promise<void>;
   /**
    * Checks the latest unused, unexpired code. A wrong guess counts an attempt;
    * at `maxAttempts` the code is dead. A right guess consumes it. Atomic.
@@ -88,11 +92,14 @@ export class PasswordAccountService {
   }
 
   private async issue(userId: string, email: string, purpose: OtpPurpose): Promise<void> {
-    if (await this.store.otpSentWithin(userId, purpose, this.cfg.resendCooldownSeconds ?? RESEND_COOLDOWN_SECONDS)) return; // silent: a code was just sent
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-    await this.store.putOtp({ userId, purpose, codeHash: this.codeHash(userId, purpose, code), expiresAt: new Date(this.now() + OTP_TTL_MINUTES * 60_000) });
-    const res = await this.mailer.send(renderOtpEmail(purpose, code, email));
-    if (!res.sent) throw new MailUnavailableError();
+    const stored = await this.store.putOtpUnlessRecent(
+      { userId, purpose, codeHash: this.codeHash(userId, purpose, code), expiresAt: new Date(this.now() + OTP_TTL_MINUTES * 60_000) },
+      this.cfg.resendCooldownSeconds ?? RESEND_COOLDOWN_SECONDS);
+    if (!stored) return; // silent: a code was just sent
+    let sent = false;
+    try { sent = (await this.mailer.send(renderOtpEmail(purpose, code, email))).sent; } catch { sent = false; }
+    if (!sent) { await this.store.discardOtp(userId, purpose); throw new MailUnavailableError(); } // no dead code, no cooldown lock-out
   }
 
   /** Same outcome for new and existing emails so the response cannot be used to list accounts. */

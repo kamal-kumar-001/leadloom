@@ -19,8 +19,12 @@ class MemStore implements PasswordAccountStore {
     return { userId: id };
   }
   async replaceUnverifiedPassword(e: string, h: string) { const u = [...this.users.values()].find(x => x.email === e && !x.verified && x.active); if (!u) return null; u.passwordHash = h; return u.id; }
-  async putOtp(i: any) { this.otps = this.otps.filter(o => !(o.userId === i.userId && o.purpose === i.purpose && !o.used)); this.otps.push({ userId: i.userId, purpose: i.purpose, hash: i.codeHash, exp: i.expiresAt, used: false, attempts: 0, at: this.clock() }); }
-  async otpSentWithin(id: string, p: string, s: number) { return this.otps.some(o => o.userId === id && o.purpose === p && this.clock() - o.at < s * 1000); }
+  async putOtpUnlessRecent(i: any, cd: number) {
+    if (this.otps.some(o => o.userId === i.userId && o.purpose === i.purpose && this.clock() - o.at < cd * 1000)) return false;
+    this.otps = this.otps.filter(o => !(o.userId === i.userId && o.purpose === i.purpose && !o.used));
+    this.otps.push({ userId: i.userId, purpose: i.purpose, hash: i.codeHash, exp: i.expiresAt, used: false, attempts: 0, at: this.clock() }); return true;
+  }
+  async discardOtp(id: string, p: string) { this.otps = this.otps.filter(o => !(o.userId === id && o.purpose === p && !o.used)); }
   async checkOtp(id: string, p: string, h: string, max: number) {
     const o = [...this.otps].reverse().find(x => x.userId === id && x.purpose === p && !x.used && x.exp.getTime() > this.clock());
     if (!o || o.attempts >= max) return false;
@@ -194,5 +198,15 @@ describe('PasswordAccountService (emailed codes)', () => {
     await svc.register('v@example.com', PW);
     await svc.claimByProvider('V@Example.com');
     await expect(svc.authenticate('v@example.com', PW)).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+  it('a failed mail send discards the code, so an immediate retry is not locked out by the cooldown', async () => {
+    const s = new MemStore(); let fail = true;
+    const mailer: TransactionalEmail = { async send(m) { return fail ? { sent: false as const, reason: 'provider_error' as const } : { sent: true as const, providerId: 'x' }; } };
+    const svc = new PasswordAccountService(s, mailer, { otpKey: randomBytes(32) });
+    await expect(svc.register('a@example.com', PW)).rejects.toBeInstanceOf(MailUnavailableError);
+    expect(s.otps.filter(o => !o.used)).toHaveLength(0);
+    fail = false;
+    await svc.resendVerification('a@example.com');
+    expect(s.otps.filter(o => !o.used)).toHaveLength(1);
   });
 });

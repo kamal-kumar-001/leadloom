@@ -37,17 +37,21 @@ export class PrismaPasswordStore implements PasswordAccountStore {
     return rows[0]?.id ?? null;
   }
 
-  async putOtp(i: { userId: string; purpose: 'signup' | 'reset'; codeHash: string; expiresAt: Date }) {
-    await this.prisma.$transaction(async (tx: any) => {
+  async putOtpUnlessRecent(i: { userId: string; purpose: 'signup' | 'reset'; codeHash: string; expiresAt: Date }, cooldownSeconds: number) {
+    return this.prisma.$transaction(async (tx: any) => {
+      // Serialize per account and purpose: concurrent resends queue here, so the cooldown check and the insert are one step.
+      await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, `${i.userId}:${i.purpose}`);
+      const recent: Array<{ n: number }> = await tx.$queryRawUnsafe(
+        `SELECT count(*)::int AS n FROM email_otps WHERE user_id = $1::uuid AND purpose = $2 AND created_at > now() - make_interval(secs => $3::int)`, i.userId, i.purpose, cooldownSeconds);
+      if ((recent[0]?.n ?? 0) > 0) return false;
       await tx.$executeRawUnsafe(`DELETE FROM email_otps WHERE user_id = $1::uuid AND purpose = $2 AND consumed_at IS NULL`, i.userId, i.purpose);
       await tx.$executeRawUnsafe(`INSERT INTO email_otps (user_id, purpose, code_hash, expires_at) VALUES ($1::uuid, $2, $3, $4)`, i.userId, i.purpose, i.codeHash, i.expiresAt);
+      return true;
     });
   }
 
-  async otpSentWithin(userId: string, purpose: 'signup' | 'reset', seconds: number) {
-    const rows: Array<{ n: number }> = await this.prisma.$queryRawUnsafe(
-      `SELECT count(*)::int AS n FROM email_otps WHERE user_id = $1::uuid AND purpose = $2 AND created_at > now() - make_interval(secs => $3::int)`, userId, purpose, seconds);
-    return (rows[0]?.n ?? 0) > 0;
+  async discardOtp(userId: string, purpose: 'signup' | 'reset') {
+    await this.prisma.$executeRawUnsafe(`DELETE FROM email_otps WHERE user_id = $1::uuid AND purpose = $2 AND consumed_at IS NULL`, userId, purpose);
   }
 
   async checkOtp(userId: string, purpose: 'signup' | 'reset', candidateHash: string, maxAttempts: number) {
