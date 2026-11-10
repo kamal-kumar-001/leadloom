@@ -8,3 +8,4 @@ export * from './adapters/apollo.adapter';
 export * from './adapters/hunter.adapter';
 export * from './adapters/dropcontact.adapter';
 export * from './adapters/mock.adapter';
+export * from './connectors';
