@@ -39,3 +39,16 @@ Release still needs native PostgreSQL16/Prisma concurrency tests, full auth issu
 real queue lifecycle/transport/reply integration, safe send-boundary suppression
 checks, Docker builds/health/load tests and verification on the actual live URL.
 No remote push or deployment is included in this checkpoint.
+
+## Production smoke regression
+
+After any build that ships to the lab PC, run the browser smoke before pushing:
+
+    npm run build --workspace @leadloom/web
+    npm run smoke:production --workspace @leadloom/web
+
+It boots `next start` and loads `/` and `/workspace` in headless Chrome
+(`--chrome` or `CHROME_PATH` to override the binary), failing on any
+client-side exception, error boundary, or missing key element. Build success
+is not render success - the React 18/fiber-8 crash passed `next build` and
+broke every client (2026-11-10).
