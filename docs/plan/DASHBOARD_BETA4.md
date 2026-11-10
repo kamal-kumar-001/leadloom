@@ -14,3 +14,9 @@ Only where it is cheap: replace hand-rolled empty/loading blocks with EmptyState
 
 ## Done means
 tsc and next build pass, checker at 0, you looked at settings in dark and light at 1280 and 390, commit hashes reported. Pull --rebase before each push.
+
+## Corrections (binding, supersede the text above)
+- Engine roles are only `admin` and `member`. There is no `owner`. Add/delete are admin-only on the SERVER (authorize(..., true)); hiding the controls for members is cosmetic only. Show the server's 403/error honestly via notify.
+- No optimistic updates. A save or delete shows pending, and only after the engine returns success you refetch the list. A failed or pending request never shows success or a phantom row.
+- Never test with real keys or call any provider. Plaintext is never returned, logged, toasted or kept in state after submit. A saved entry means "Saved", never "connected" or "verified".
+- This is a bounded Settings card. No connector catalog, no provider calls.
