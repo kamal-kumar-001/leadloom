@@ -48,6 +48,7 @@ export class SmtpTransport implements OutboundTransport {
     const headers: Record<string, string> = { ...(this.options.unsubscribe
       ? buildListUnsubscribeHeaders({
           baseUrl: this.options.unsubscribe.baseUrl,
+          workspaceId: reservation.workspaceId,
           campaignId: message.campaignId,
           recipientEmail: message.to,
           signingKey: this.options.unsubscribe.signingKey,

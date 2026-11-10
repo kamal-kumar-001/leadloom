@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { OutreachReplyClassification } from '@leadloom/contracts';
 
 /**
@@ -10,6 +10,7 @@ import type { OutreachReplyClassification } from '@leadloom/contracts';
 export interface UnsubscribeLinkInput {
   /** Public base URL of the suppression endpoint, e.g. https://api.example.com/outbound/unsubscribe */
   baseUrl: string;
+  workspaceId: string;
   campaignId: string;
   recipientEmail: string;
   /** HMAC key so suppression links are unforgeable without a login. */
@@ -18,14 +19,32 @@ export interface UnsubscribeLinkInput {
 
 export function buildUnsubscribeToken(input: UnsubscribeLinkInput): string {
   if (input.signingKey.length < 16) throw new Error('Unsubscribe signing key must have at least 16 bytes');
-  const payload = `${input.campaignId}:${input.recipientEmail.toLowerCase()}`;
+  const payload = `${input.workspaceId}:${input.campaignId}:${input.recipientEmail.toLowerCase()}`;
   return createHmac('sha256', input.signingKey).update(payload).digest('base64url');
 }
 
+export function verifyUnsubscribeToken(input: Omit<UnsubscribeLinkInput, 'baseUrl'>, token: string): boolean {
+  let expected: string;
+  try {
+    expected = buildUnsubscribeToken({ ...input, baseUrl: '' });
+  } catch {
+    return false;
+  }
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * RFC 8058 one-click headers. Receivers additionally require BOTH headers to
+ * be covered by the message's DKIM signature (RFC 8058 section 4); that is a
+ * sending-infrastructure duty of the mailbox's SMTP path, documented here so
+ * it is not dropped at the transport layer.
+ */
 export function buildListUnsubscribeHeaders(input: UnsubscribeLinkInput): Record<string, string> {
   const token = buildUnsubscribeToken(input);
   const email = encodeURIComponent(input.recipientEmail.toLowerCase());
-  const url = `${input.baseUrl}?c=${encodeURIComponent(input.campaignId)}&e=${email}&t=${token}`;
+  const url = `${input.baseUrl}?w=${encodeURIComponent(input.workspaceId)}&c=${encodeURIComponent(input.campaignId)}&e=${email}&t=${token}`;
   return {
     'List-Unsubscribe': `<${url}>`,
     'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',

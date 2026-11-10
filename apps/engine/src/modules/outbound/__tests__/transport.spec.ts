@@ -47,7 +47,7 @@ describe('smtp transport', () => {
     expect(msg.from).toBe('sender@example.com');
     expect(msg.to).toBe('lead@example.com');
     expect(msg.headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
-    expect(msg.headers['List-Unsubscribe']).toMatch(/^<https:\/\/api\.example\.com\/unsubscribe\?c=.+&e=.+&t=.+>$/);
+    expect(msg.headers['List-Unsubscribe']).toMatch(/^<https:\/\/api\.example\.com\/unsubscribe\?w=.+&c=.+&e=.+&t=.+>$/);
   });
 
   it('omits unsubscribe headers when not configured', async () => {

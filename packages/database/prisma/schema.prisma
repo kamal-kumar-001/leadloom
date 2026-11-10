@@ -291,6 +291,7 @@ model Mailbox {
 
   workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   events    OutreachEvent[]
+  syncState MailboxSyncState?
 
   campaigns CampaignMailbox[]
 
@@ -395,4 +396,14 @@ model MailboxDailyUsage {
 
   @@id([mailboxId, day])
   @@map("mailbox_daily_usage")
+}
+
+model MailboxSyncState {
+  mailboxId      String   @id @map("mailbox_id") @db.Uuid
+  lastInboundUid Int      @default(0) @map("last_inbound_uid")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  mailbox Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@map("mailbox_sync_state")
 }

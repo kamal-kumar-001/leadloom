@@ -6,6 +6,7 @@ import { issueSession } from './modules/auth/issuer';
 import { verifyPassword } from './modules/auth/password';
 import type { UserDirectory } from './modules/auth/user-directory';
 import { PrismaUserDirectory } from './modules/auth/user-directory';
+import { verifyUnsubscribeToken } from './modules/outbound/transport/unsubscribe';
 import { CredentialService } from './modules/vault/credential.service';
 import { VaultService } from './modules/vault/vault.service';
 import { PrismaCredentialRepository } from './modules/vault/prisma-credential.repository';
@@ -29,6 +30,7 @@ export interface RuntimeServices {
  outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'>;
  sessionKey: Buffer;
  userDirectory?: UserDirectory;
+ unsubscribeKey?: Buffer;
 }
 export async function createApplication(services?:RuntimeServices) {
  const app=await NestFactory.create<NestFastifyApplication>(RuntimeModule,new FastifyAdapter({bodyLimit:65536}),{logger:['error','warn']});
@@ -73,6 +75,25 @@ export async function createApplication(services?:RuntimeServices) {
    if(!email.success)return reply.code(400).send({error:'Invalid suppression request'});
    await services.outbound.suppress(session.workspaceId,email.data.email);return {suppressed:true};
   });
+  // RFC 8058 one-click unsubscribe. Public by design: no session, no cookies,
+  // no redirect, secured only by the HMAC token in the signed link. Mounted
+  // only when an unsubscribe signing key is configured. GET never mutates
+  // (link-scanner/prefetch safe); POST performs the suppression.
+  if(services.unsubscribeKey) {
+   const UQuery=z.object({w:z.string().uuid(),c:z.string().uuid(),e:z.string().email().max(320),t:z.string().min(10).max(256)}).strict();
+   const verifyU=(q:{w:string;c:string;e:string;t:string})=>verifyUnsubscribeToken({workspaceId:q.w,campaignId:q.c,recipientEmail:q.e,signingKey:services.unsubscribeKey!},q.t);
+   fastify.get('/outbound/unsubscribe',async(request:any,reply:any)=>{
+    const parsed=UQuery.safeParse(request.query);
+    if(!parsed.success||!verifyU(parsed.data)) return reply.code(400).type('text/plain').send('Invalid unsubscribe link');
+    return reply.type('text/html').send('<!doctype html><html><body style="font-family:sans-serif;text-align:center;padding:3rem"><p>Confirm unsubscribe for '+parsed.data.e.replace(/[<>&"]/g,'')+'</p><form method="post"><button type="submit" style="padding:.75rem 2rem">Unsubscribe</button></form></body></html>');
+   });
+   fastify.post('/outbound/unsubscribe',async(request:any,reply:any)=>{
+    const parsed=UQuery.safeParse(request.query);
+    if(!parsed.success||!verifyU(parsed.data)) return reply.code(400).type('text/plain').send('Invalid unsubscribe link');
+    await services.outbound.suppress(parsed.data.w,parsed.data.e);
+    return reply.code(200).type('text/plain').send('Unsubscribed');
+   });
+  }
   // Planned login issuer (PRD users.password_hash). Mounted ONLY when a user
   // directory is provided AND the issuer is explicitly enabled via env, so the
   // public deployment posture never changes silently. No other login method is
@@ -118,7 +139,9 @@ if(require.main===module) {
    const key=Buffer.from(process.env.LEADLOOM_SESSION_KEY,'base64');
    if(key.length<32)throw new Error('Invalid session signing key');
    prisma=new PrismaClient();await prisma.$connect();vault=VaultService.fromEnv();
-   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma)};
+   const unsubscribeKey=process.env.LEADLOOM_UNSUBSCRIBE_KEY?Buffer.from(process.env.LEADLOOM_UNSUBSCRIBE_KEY,'base64'):undefined;
+   if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
+   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
   }
   const app=await createApplication(services);
   const close=async()=>{await app.close();await prisma?.$disconnect();vault?.destroy();};
