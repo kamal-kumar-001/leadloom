@@ -18,6 +18,10 @@ const Claims = z.object({
   aud: z.literal(BRIDGE_AUDIENCE),
   email: z.string().email().max(320),
   email_verified: z.literal(true),
+  // Only identity providers that verify the email may mint a bridge token.
+  // A password/credentials login never qualifies, so a web-side bug cannot
+  // turn an unverified email into an engine session.
+  idp: z.enum(['google', 'github']),
   exp: z.number().int().positive(),
   iat: z.number().int().positive().optional(),
 }).strict();
@@ -40,9 +44,9 @@ export function verifyBridgeToken(token: string, key: Buffer, now = Date.now()):
 }
 
 /** Test and web-side reference minting; the production minter lives in apps/web. */
-export function mintBridgeToken(input: { email: string }, key: Buffer, ttlSeconds = 900, now = Date.now()): string {
+export function mintBridgeToken(input: { email: string; idp?: string }, key: Buffer, ttlSeconds = 900, now = Date.now()): string {
   const iat = Math.floor(now / 1000);
   const head = b64({ alg: 'HS256', typ: 'JWT' });
-  const body = b64({ iss: BRIDGE_ISSUER, aud: BRIDGE_AUDIENCE, email: input.email, email_verified: true, iat, exp: iat + ttlSeconds });
+  const body = b64({ iss: BRIDGE_ISSUER, aud: BRIDGE_AUDIENCE, email: input.email, email_verified: true, idp: input.idp ?? 'google', iat, exp: iat + ttlSeconds });
   return `${head}.${body}.${createHmac('sha256', key).update(`${head}.${body}`).digest('base64url')}`;
 }

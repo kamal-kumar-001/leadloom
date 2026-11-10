@@ -26,6 +26,18 @@ const signRaw = (payload: object) => {
 const exp = () => Math.floor(Date.now() / 1000) + 60;
 
 describe('nextauth bridge token', () => {
+  it('rejects tokens without a verifying identity provider (credentials login never qualifies)', () => {
+    for (const idp of [undefined, 'credentials', 'email', 'GOOGLE']) {
+      const t = mintBridgeToken({ email: 'rw@example.invalid', idp: idp as string }, bridgeKey);
+      if (idp === undefined) continue; // helper defaults to google
+      expect(() => verifyBridgeToken(t, bridgeKey)).toThrow();
+    }
+    const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const body = Buffer.from(JSON.stringify({ iss: 'leadloom-web', aud: 'leadloom-engine', email: 'rw@example.invalid', email_verified: true, exp: Math.floor(Date.now() / 1000) + 600 })).toString('base64url');
+    const sig = require('node:crypto').createHmac('sha256', bridgeKey).update(`${head}.${body}`).digest('base64url');
+    expect(() => verifyBridgeToken(`${head}.${body}.${sig}`, bridgeKey)).toThrow();
+  });
+
   it('round-trips a verified email only', () => {
     expect(verifyBridgeToken(mintBridgeToken({ email: 'RW@Example.invalid' }, bridgeKey), bridgeKey).email).toBe('rw@example.invalid');
   });
