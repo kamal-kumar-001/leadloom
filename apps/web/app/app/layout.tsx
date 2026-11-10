@@ -108,6 +108,7 @@ export default function AppLayout({
 
   return (
     <div className="flex h-screen bg-canvas overflow-hidden font-sans">
+      <div role="status" className="fixed bottom-2 right-2 z-50 rounded-md border border-brand-loom/30 bg-canvas-surface/90 px-2 py-1 text-[10px] font-mono text-text-muted select-none pointer-events-none">Sample workspace data - not live results</div>
       {/* Desktop Sidebar */}
       <div className="hidden md:flex">
         <AppSidebar />

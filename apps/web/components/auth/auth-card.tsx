@@ -28,7 +28,7 @@ export function AuthCard({ title, subtitle, children }: AuthCardProps) {
 
       <div className="flex items-center justify-center gap-2 mt-6 text-xs text-text-muted">
         <ShieldCheck className="w-4 h-4 text-signal-verified" />
-        <span>Tenant-isolated workspaces • Bring your own keys</span>
+        <span>Isolated workspaces • Bring your own keys</span>
       </div>
     </div>
   );

@@ -113,7 +113,7 @@ export function ByokVaultModal({
             <Lock className="w-4 h-4 text-brand-loom shrink-0 mt-0.5" />
             <div className="text-xs">
               <span className="font-semibold text-text-primary block mb-0.5">
-                Zero-Knowledge Envelope Vault
+                Encrypted Key Vault
               </span>
               <p className="text-text-muted leading-relaxed">
                 Keys are encrypted via AES-256-GCM with a unique 12-byte IV and 16-byte authentication tag in Gamma&apos;s isolated vault service. Decryption occurs strictly inside execution loops; plaintext keys are never returned to the browser.
