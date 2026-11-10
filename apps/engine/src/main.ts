@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { PrismaClient } from '@leadloom/database';
 import { verifySession } from './modules/auth/session';
+import { verifyBridgeToken } from './modules/auth/nextauth-bridge';
 import { canWrite } from './modules/auth/rbac';
 import { issueSession } from './modules/auth/issuer';
 import { verifyPassword } from './modules/auth/password';
@@ -31,6 +32,8 @@ export interface RuntimeServices {
  credentials: Pick<CredentialService,'save'|'list'|'delete'>;
  outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'>;
  sessionKey: Buffer;
+ /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
+ nextAuthBridgeKey?: Buffer;
  userDirectory?: UserDirectory;
  unsubscribeKey?: Buffer;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
@@ -44,7 +47,9 @@ export async function createApplication(services?:RuntimeServices) {
   const authorize=(request:any,reply:any,write=false)=>{
    try {
     const token=String(request.headers.authorization??'').replace(/^Bearer /,'');
-    const claims=verifySession(token,services.sessionKey);
+    let claims;
+    try {claims=verifySession(token,services.sessionKey);}
+    catch(e) {if(!services.nextAuthBridgeKey) throw e; claims=verifyBridgeToken(token,services.nextAuthBridgeKey);}
     if(write && !canWrite(claims)) {reply.code(403).send({error:'Read-only workspace role'});return null;}
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
@@ -186,6 +191,11 @@ if(require.main===module) {
    const unsubscribeKey=process.env.LEADLOOM_UNSUBSCRIBE_KEY?Buffer.from(process.env.LEADLOOM_UNSUBSCRIBE_KEY,'base64'):undefined;
    if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
    services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
+   if(process.env.LEADLOOM_NEXTAUTH_BRIDGE_ENABLED==='true') {
+    const bridge=process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET?Buffer.from(process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET,'base64'):undefined;
+    if(!bridge||bridge.length<32)throw new Error('LEADLOOM_NEXTAUTH_BRIDGE_SECRET (base64, >=32 bytes) required when bridge enabled');
+    services.nextAuthBridgeKey=bridge;
+   }
    // Opt-in product APIs, default OFF in every environment. Each requires an
    // explicit env flag; providers still need per-workspace BYOK keys at call
    // time, so mounting never implies provider access.
