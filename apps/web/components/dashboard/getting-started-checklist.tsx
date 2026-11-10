@@ -12,6 +12,8 @@ interface ChecklistStep {
   href: string;
   actionText: string;
   isComplete: boolean;
+  /** false when the engine has no endpoint that can prove this step, so no status is claimed. */
+  tracked: boolean;
 }
 
 interface GettingStartedChecklistProps {
@@ -31,29 +33,33 @@ export function GettingStartedChecklist({
       title: 'Add a provider key',
       description: 'Connect your Apollo, Hunter, or Dropcontact API key to enable waterfall enrichment at wholesale cost.',
       href: '/app/connectors',
-      actionText: hasProviderKeys ? 'Manage Keys' : 'Connect Key',
+      actionText: 'Open connectors',
       isComplete: hasProviderKeys,
+      tracked: true,
     },
     {
       id: 'mailboxes',
       title: 'Connect a mailbox',
       description: 'Configure custom domain SPF/DKIM DNS records to route outbound steps with jittered delivery.',
       href: '/app/mailboxes',
-      actionText: hasMailboxes ? 'View Pool' : 'Connect Mailbox',
-      isComplete: hasMailboxes,
+      actionText: 'Open sample page',
+      isComplete: false,
+      tracked: false,
     },
     {
       id: 'tables',
       title: 'Create a table',
       description: 'Import target prospect accounts into the high-density virtual grid loom.',
       href: '/app/tables',
-      actionText: hasTables ? 'View Tables' : 'Open Tables',
-      isComplete: hasTables,
+      actionText: 'Open sample page',
+      isComplete: false,
+      tracked: false,
     },
   ];
 
-  const completedCount = steps.filter((s) => s.isComplete).length;
-  const progressPercent = Math.round((completedCount / steps.length) * 100);
+  const trackedSteps = steps.filter((s) => s.tracked);
+  const completedCount = trackedSteps.filter((s) => s.isComplete).length;
+  const progressPercent = Math.round((completedCount / trackedSteps.length) * 100);
 
   return (
     <Card className="p-5 sm:p-6 space-y-5">
@@ -64,11 +70,11 @@ export function GettingStartedChecklist({
               Get Started Checklist
             </h2>
             <Badge variant="subtle" className="text-[11px] font-mono">
-              {completedCount} of {steps.length} completed
+              {completedCount} of {trackedSteps.length} verified
             </Badge>
           </div>
           <p className="text-xs text-text-secondary mt-1">
-            Core setup steps driven by verified workspace state.
+            Only steps the workspace can verify are counted. Others are not tracked yet.
           </p>
         </div>
         <div className="w-full sm:w-36 space-y-1.5 self-center">
@@ -118,6 +124,11 @@ export function GettingStartedChecklist({
                   >
                     {step.title}
                   </span>
+                  {!step.tracked && (
+                    <Badge variant="muted" className="text-[10px] py-0 px-1.5 font-mono">
+                      Not tracked yet
+                    </Badge>
+                  )}
                   {step.isComplete && (
                     <Badge variant="verified" className="text-[10px] py-0 px-1.5 font-mono">
                       Verified

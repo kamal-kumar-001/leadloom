@@ -4,11 +4,12 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import { ThemeToggle } from './theme-toggle';
 import { Badge } from '@leadloom/ui';
-import { Key, Bell, Search, Terminal, Sparkles } from 'lucide-react';
 
 interface AppTopbarProps {
   onToggleMobileMenu?: () => void;
 }
+
+const SAMPLE_ROUTES = ['/app/tables', '/app/connectors', '/app/mailboxes', '/app/campaigns', '/app/validator'];
 
 export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
   const pathname = usePathname();
@@ -19,7 +20,7 @@ export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
     if (pathname.includes('/mailboxes')) return 'Outbound Mailbox Pool';
     if (pathname.includes('/campaigns')) return 'Multi-Step Sequences';
     if (pathname.includes('/validator')) return 'Idea Smoke-Test Validator';
-    if (pathname.includes('/settings')) return 'Workspace Settings & Plan Limits';
+    if (pathname.includes('/settings')) return 'Settings';
     return 'Dashboard';
   };
 
@@ -44,12 +45,12 @@ export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
       </div>
 
       <div className="flex items-center gap-2.5">
-        {/* Explicit Demo Data badge mandated by ALPHA_BRIEF.md Item 5 */}
-        <Badge variant="matrix" className="text-xs py-1 px-2.5 font-mono flex items-center gap-1.5">
-          <Key className="w-3 h-3 text-signal-verified" />
-          <span>Demo data</span>
-          <span className="hidden sm:inline text-text-muted">• No live keys connected</span>
-        </Badge>
+        {/* Pages that still render fixture data say so. Real pages (overview, settings) show nothing. */}
+        {SAMPLE_ROUTES.some((r) => pathname.startsWith(r)) && (
+          <Badge variant="matrix" className="text-xs py-1 px-2.5 font-mono">
+            Sample data on this page
+          </Badge>
+        )}
 
         <div className="h-4 w-px bg-border-subtle mx-1 hidden sm:block" />
 

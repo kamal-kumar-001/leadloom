@@ -6,21 +6,16 @@ import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import {
   Table2,
+  LayoutDashboard,
   Plug,
   Mail,
   Send,
   FlaskConical,
   Settings,
-  ShieldAlert,
   LogOut,
-  ExternalLink,
-  ChevronRight,
-  Database,
-  Cpu,
 } from 'lucide-react';
 import { WorkspaceSwitcher } from './workspace-switcher';
 import { useShellIdentity } from './identity';
-import { Badge } from '@leadloom/ui';
 
 interface NavItem {
   name: string;
@@ -30,11 +25,12 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { name: 'Tables', href: '/app/tables', icon: Table2, badge: '50k virtual' },
-  { name: 'Connectors', href: '/app/connectors', icon: Plug, badge: 'BYOK' },
-  { name: 'Mailboxes', href: '/app/mailboxes', icon: Mail, badge: 'SPF/DKIM' },
+  { name: 'Overview', href: '/app', icon: LayoutDashboard },
+  { name: 'Tables', href: '/app/tables', icon: Table2 },
+  { name: 'Connectors', href: '/app/connectors', icon: Plug },
+  { name: 'Mailboxes', href: '/app/mailboxes', icon: Mail },
   { name: 'Campaigns', href: '/app/campaigns', icon: Send },
-  { name: 'Validator', href: '/app/validator', icon: FlaskConical, badge: 'Smoke' },
+  { name: 'Validator', href: '/app/validator', icon: FlaskConical },
   { name: 'Settings & Plans', href: '/app/settings', icon: Settings },
 ];
 
@@ -46,7 +42,7 @@ export function AppSidebar() {
     <aside className="w-64 bg-canvas-surface border-r border-border-subtle flex flex-col shrink-0 select-none h-screen">
       {/* Brand Header */}
       <div className="p-4 border-b border-border-subtle flex items-center justify-between">
-        <Link href="/app/tables" className="flex items-center gap-2.5 group">
+        <Link href="/app" className="flex items-center gap-2.5 group">
           <div className="w-7 h-7 rounded-lg bg-brand-loom/20 border border-brand-loom/40 flex items-center justify-center text-sm text-brand-loom font-bold shadow-glow group-hover:scale-105 transition-transform">
             🧵
           </div>
@@ -55,9 +51,6 @@ export function AppSidebar() {
             <span className="text-[10px] text-text-muted font-mono mt-0.5">Signal Engine</span>
           </div>
         </Link>
-        <Badge variant="subtle" className="text-[10px] px-1.5 py-0.5 font-mono">
-          v1.0
-        </Badge>
       </div>
 
       {/* Workspace Switcher */}
@@ -71,7 +64,7 @@ export function AppSidebar() {
           Platform Navigation
         </div>
         {NAV_ITEMS.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          const isActive = item.href === '/app' ? pathname === '/app' : pathname.startsWith(item.href);
           const Icon = item.icon;
 
           return (
@@ -103,23 +96,6 @@ export function AppSidebar() {
           );
         })}
 
-        <div className="pt-4 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-text-muted">
-          Operator Tools
-        </div>
-        <Link
-          href="/admin"
-          className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-            pathname.startsWith('/admin')
-              ? 'bg-signal-catchall/15 text-signal-catchall border border-signal-catchall/30'
-              : 'text-text-secondary hover:text-text-primary hover:bg-canvas-elevated'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-signal-catchall" />
-            <span>Platform Admin</span>
-          </div>
-          <ChevronRight className="w-3.5 h-3.5 text-text-muted" />
-        </Link>
       </nav>
 
       {/* Footer Profile & Session */}
