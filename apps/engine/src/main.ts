@@ -1,6 +1,11 @@
 import 'reflect-metadata';
 import { PrismaClient } from '@leadloom/database';
 import { verifySession } from './modules/auth/session';
+import { canWrite } from './modules/auth/rbac';
+import { issueSession } from './modules/auth/issuer';
+import { verifyPassword } from './modules/auth/password';
+import type { UserDirectory } from './modules/auth/user-directory';
+import { PrismaUserDirectory } from './modules/auth/user-directory';
 import { CredentialService } from './modules/vault/credential.service';
 import { VaultService } from './modules/vault/vault.service';
 import { PrismaCredentialRepository } from './modules/vault/prisma-credential.repository';
@@ -23,6 +28,7 @@ export interface RuntimeServices {
  credentials: Pick<CredentialService,'save'|'list'|'delete'>;
  outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'>;
  sessionKey: Buffer;
+ userDirectory?: UserDirectory;
 }
 export async function createApplication(services?:RuntimeServices) {
  const app=await NestFactory.create<NestFastifyApplication>(RuntimeModule,new FastifyAdapter({bodyLimit:65536}),{logger:['error','warn']});
@@ -32,7 +38,7 @@ export async function createApplication(services?:RuntimeServices) {
    try {
     const token=String(request.headers.authorization??'').replace(/^Bearer /,'');
     const claims=verifySession(token,services.sessionKey);
-    if(write && claims.role==='read_only') {reply.code(403).send({error:'Read-only workspace role'});return null;}
+    if(write && !canWrite(claims)) {reply.code(403).send({error:'Read-only workspace role'});return null;}
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
   };
@@ -67,6 +73,35 @@ export async function createApplication(services?:RuntimeServices) {
    if(!email.success)return reply.code(400).send({error:'Invalid suppression request'});
    await services.outbound.suppress(session.workspaceId,email.data.email);return {suppressed:true};
   });
+  // Planned login issuer (PRD users.password_hash). Mounted ONLY when a user
+  // directory is provided AND the issuer is explicitly enabled via env, so the
+  // public deployment posture never changes silently. No other login method is
+  // mounted; OAuth/magic-link methods plug into the UserDirectory port later.
+  if(services.userDirectory && process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true') {
+   const attempts=new Map<string,number[]>();
+   const WINDOW_MS=5*60*1000,MAX_ATTEMPTS=5;
+   const Login=z.object({email:z.string().email().max(320),password:z.string().min(1).max(256)}).strict();
+   // Precomputed dummy keeps unknown-user timing close to wrong-password timing.
+   const DUMMY_HASH='scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+   fastify.post('/auth/login',async(request:any,reply:any)=>{
+    const ip=String(request.ip??'unknown');
+    const now=Date.now();
+    const recent=(attempts.get(ip)??[]).filter((t:number)=>now-t<WINDOW_MS);
+    if(recent.length>=MAX_ATTEMPTS) return reply.code(429).send({error:'Too many login attempts'});
+    attempts.set(ip,[...recent,now]);
+    const parsed=Login.safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:'Invalid login request'});
+    const user=await services.userDirectory!.findByEmail(parsed.data.email);
+    if(!user || !user.passwordHash) {
+      await verifyPassword(parsed.data.password,DUMMY_HASH); // timing normalization
+      return reply.code(401).send({error:'Invalid credentials'});
+    }
+    const ok=await verifyPassword(parsed.data.password,user.passwordHash);
+    if(!ok) return reply.code(401).send({error:'Invalid credentials'});
+    const {token,claims}=issueSession({userId:user.id,workspaceId:user.workspaceId,role:user.role},services.sessionKey,12*60*60);
+    return {token,expiresAt:new Date(claims.exp*1000).toISOString()};
+   });
+  }
  }
  fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false}));
  fastify.get('/ready',async(_request:any,reply:any)=>reply.code(503).send({status:'not-ready',reason:'Database/auth/provider workers are not mounted'}));
@@ -83,7 +118,7 @@ if(require.main===module) {
    const key=Buffer.from(process.env.LEADLOOM_SESSION_KEY,'base64');
    if(key.length<32)throw new Error('Invalid session signing key');
    prisma=new PrismaClient();await prisma.$connect();vault=VaultService.fromEnv();
-   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key};
+   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma)};
   }
   const app=await createApplication(services);
   const close=async()=>{await app.close();await prisma?.$disconnect();vault?.destroy();};
