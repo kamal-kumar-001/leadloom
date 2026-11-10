@@ -205,3 +205,16 @@
 - Verified: `npx tsc --noEmit` and `next build` pass cleanly across all routes.
 - Screenshot verified: 1280px and 390px in dark and light themes captured with headless Chromium and visually verified.
 
+---
+
+### [2026-11-11T00:55:00+05:30] Team Beta | apps/web settings page & components | Non-Breaking
+- Built production Settings page in `apps/web/app/app/settings/page.tsx` and `apps/web/components/settings/*` per `docs/plan/DASHBOARD_BETA2.md`:
+  - `account-settings-card.tsx`: Verified signed-in user email, workspace ID, role badge from `useShellIdentity()`, and Sign Out button via `signOut({ callbackUrl: '/login' })`.
+  - `appearance-settings-card.tsx`: Interactive dark and light theme selection using `@leadloom/ui`'s `useTheme()` hook with active check indicators.
+  - `plan-limits-card.tsx`: Read-only list of contractual product limits (`seats`, `mailboxes`, `tables`, `enrichment_credits_per_month`, `emails_per_month`) from `packages/contracts/src/entitlements.contract.ts`. Clear banner: "Limits are defined but not enforced yet" (engine health reports `not_enforced`). Zero invented usage bars or numbers.
+  - `team-settings-card.tsx`: Displays only the verified current user with an honest `@leadloom/ui` `EmptyState` stating "Inviting teammates is not available yet" (zero invented team members).
+- All styling strictly conforms to design tokens (`tokens.css`) with 0 hex/color overrides.
+- Verified: `npx tsc --noEmit` and `next build` pass cleanly (18/18 static/dynamic routes compiled).
+- Screenshot verified: 1280px and 390px in dark and light themes visually verified via headless browser.
+
+
