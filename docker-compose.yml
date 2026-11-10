@@ -83,6 +83,17 @@ services:
       PORT: 4000
       HOST: 0.0.0.0
       LEADLOOM_SESSION_KEY: ${LEADLOOM_SESSION_KEY:-}
+      APP_BASE_URL: ${APP_BASE_URL:-https://leadloom.dmpilot.org}
+      # Web sign-in bridge (Google/GitHub). Both must be set or the bridge stays off.
+      LEADLOOM_NEXTAUTH_BRIDGE_ENABLED: ${LEADLOOM_NEXTAUTH_BRIDGE_ENABLED:-false}
+      LEADLOOM_NEXTAUTH_BRIDGE_SECRET: ${LEADLOOM_NEXTAUTH_BRIDGE_SECRET:-}
+      LEADLOOM_SELF_SIGNUP_ENABLED: ${LEADLOOM_SELF_SIGNUP_ENABLED:-false}
+      LEADLOOM_SIGNUP_HOURLY_CAP: ${LEADLOOM_SIGNUP_HOURLY_CAP:-20}
+      # Email + password with emailed one-time codes. Needs the transactional mail settings below.
+      LEADLOOM_PASSWORD_AUTH_ENABLED: ${LEADLOOM_PASSWORD_AUTH_ENABLED:-false}
+      LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED: ${LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED:-false}
+      LEADLOOM_RESEND_API_KEY: ${LEADLOOM_RESEND_API_KEY:-}
+      LEADLOOM_EMAIL_FROM: ${LEADLOOM_EMAIL_FROM:-}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -103,6 +114,17 @@ services:
       NODE_OPTIONS: --max-old-space-size=384
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
       PORT: 3000
+      # Server-side only: the browser reaches the engine through the web app's own /api/engine proxy.
+      ENGINE_URL: http://api:4000
+      AUTH_URL: ${APP_BASE_URL:-https://leadloom.dmpilot.org}
+      AUTH_TRUST_HOST: 'true'
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      LEADLOOM_NEXTAUTH_BRIDGE_SECRET: ${LEADLOOM_NEXTAUTH_BRIDGE_SECRET:-}
+      AUTH_GITHUB_ID: ${AUTH_GITHUB_ID:-}
+      AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET:-}
+      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
+      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+      LEADLOOM_PASSWORD_AUTH_ENABLED: ${LEADLOOM_PASSWORD_AUTH_ENABLED:-false}
     depends_on: [api]
     networks: [egress]
     ports: ['127.0.0.1:${WEB_PORT:-3000}:3000']
