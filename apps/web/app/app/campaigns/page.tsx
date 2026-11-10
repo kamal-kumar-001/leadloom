@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { MOCK_TABLE_METADATA } from '@leadloom/contracts';
-import { Button, Badge } from '@leadloom/ui';
+import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
 import { notify } from '@/lib/notify';
 import {
   Send,
@@ -112,7 +112,7 @@ export default function CampaignsPage() {
       </div>
 
       {/* Campaign Metadata Card */}
-      <div className="p-5 rounded-xl bg-canvas-surface border border-border-subtle shadow-sm">
+      <Card className="p-5 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
           <div>
             <span className="text-[10px] font-mono text-text-muted uppercase">Active Target Table</span>
@@ -160,51 +160,60 @@ export default function CampaignsPage() {
             <div className="text-lg font-bold text-signal-verified mt-1">60.0% (6/10)</div>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Sequence Timeline */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-text-primary">Sequence Step Flow</h2>
 
-        <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-border-subtle">
-          {MOCK_CAMPAIGN_STEPS.map((step) => (
-            <div key={step.step} className="relative group">
-              <div className="absolute -left-6 top-3 w-5 h-5 rounded-full bg-canvas-elevated border-2 border-brand-loom flex items-center justify-center text-[10px] font-bold text-brand-loom">
-                {step.step}
-              </div>
+        {MOCK_CAMPAIGN_STEPS.length === 0 ? (
+          <EmptyState
+            icon={<Send className="w-5 h-5 text-text-muted" />}
+            title="No sequence steps"
+            description="Add outreach steps to choreograph your multi-channel sequence."
+            className="py-8"
+          />
+        ) : (
+          <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-border-subtle">
+            {MOCK_CAMPAIGN_STEPS.map((step) => (
+              <div key={step.step} className="relative group">
+                <div className="absolute -left-6 top-3 w-5 h-5 rounded-full bg-canvas-elevated border-2 border-brand-loom flex items-center justify-center text-[10px] font-bold text-brand-loom">
+                  {step.step}
+                </div>
 
-              <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle hover:border-border-muted transition-all shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-text-primary">
-                      Step {step.step}: Outbound Email
-                    </span>
-                    {step.delayDays > 0 ? (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-canvas-elevated text-brand-weave flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> Wait {step.delayDays} business days
+                <Card className="p-4 hover:border-border-muted transition-all shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-text-primary">
+                        Step {step.step}: Outbound Email
                       </span>
-                    ) : (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-canvas-elevated text-signal-verified">
-                        Instant dispatch
-                      </span>
-                    )}
+                      {step.delayDays > 0 ? (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-canvas-elevated text-brand-weave flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> Wait {step.delayDays} business days
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-canvas-elevated text-signal-verified">
+                          Instant dispatch
+                        </span>
+                      )}
+                    </div>
+                    <Badge variant="subtle" className="text-[10px] font-mono">
+                      Demo data
+                    </Badge>
                   </div>
-                  <Badge variant="subtle" className="text-[10px] font-mono">
-                    Demo data
-                  </Badge>
-                </div>
 
-                <div className="text-xs font-semibold text-text-secondary mb-1.5 font-mono">
-                  Subject: <span className="text-text-primary font-sans">{step.subject}</span>
-                </div>
+                  <div className="text-xs font-semibold text-text-secondary mb-1.5 font-mono">
+                    Subject: <span className="text-text-primary font-sans">{step.subject}</span>
+                  </div>
 
-                <p className="text-xs text-text-muted italic bg-canvas-elevated/40 p-2.5 rounded-lg border border-border-subtle">
-                  &ldquo;{step.bodySnippet}&rdquo;
-                </p>
+                  <p className="text-xs text-text-muted italic bg-canvas-elevated/40 p-2.5 rounded-lg border border-border-subtle">
+                    &ldquo;{step.bodySnippet}&rdquo;
+                  </p>
+                </Card>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

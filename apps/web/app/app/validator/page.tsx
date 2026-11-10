@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { MOCK_VALIDATION_SCORECARD } from '@leadloom/contracts';
 import { ValidationRadarCard } from '../../../components/validation/validation-radar-card';
 import { NewExperimentModal } from '../../../components/validation/new-experiment-modal';
-import { Badge, Button } from '@leadloom/ui';
+import { Badge, Button, Card } from '@leadloom/ui';
 import {
   FlaskConical,
   Sparkles,
@@ -66,7 +66,7 @@ export default function ValidatorPage() {
       </div>
 
       {/* Active Hypothesis Card */}
-      <div className="p-5 rounded-xl bg-canvas-surface border border-border-subtle shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <Card className="p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <span className="text-[10px] font-mono text-text-muted uppercase">Active Experiment</span>
           <h2 className="text-base font-bold text-text-primary mt-0.5">
@@ -83,7 +83,7 @@ export default function ValidatorPage() {
             Status: {MOCK_VALIDATION_SCORECARD.verdict.toUpperCase()}
           </Badge>
         </div>
-      </div>
+      </Card>
 
       {/* Analytics Radar Card */}
       <ValidationRadarCard scorecard={MOCK_VALIDATION_SCORECARD} />

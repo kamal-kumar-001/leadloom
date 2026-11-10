@@ -252,3 +252,14 @@
 - Verified: `node scripts/check-design.mjs --strict`, `npx tsc --noEmit`, and `npm run build --workspace @leadloom/web` pass with 0 errors.
 - Visual inspection: dark and light screenshots at 1280px and 390px captured and verified.
 
+---
+
+### [2026-11-11T02:18:00+05:30] Team Beta | apps/web honest fixture pages (Part B) | Non-Breaking
+- Refactored fixture pages (`tables`, `mailboxes`, `campaigns`, `validator`) to standardize container and empty/loading states using `@leadloom/ui` primitives:
+  - `apps/web/app/app/tables/page.tsx`: Added `@leadloom/ui` `EmptyState` when table row count is 0. Preserved all sample data labels and toolbar actions.
+  - `apps/web/app/app/mailboxes/page.tsx`: Replaced hand-rolled overview card divs and sender item containers with `@leadloom/ui` `Card`, added `EmptyState` for empty mailbox pool. Preserved `Demo data` badge and `[Sample]` notices.
+  - `apps/web/app/app/campaigns/page.tsx`: Replaced hand-rolled campaign metadata and sequence step cards with `@leadloom/ui` `Card`, added `EmptyState` when sequence steps are empty. Preserved `Demo data` badge and `(simulated)` notices.
+  - `apps/web/app/app/validator/page.tsx`: Replaced hand-rolled active hypothesis container with `@leadloom/ui` `Card`. Preserved `Demo data` badge.
+  - Connectors page untouched. Zero functionality added or modified.
+- Verified: `node scripts/check-design.mjs --strict`, `npx tsc --noEmit`, and `npm run build --workspace @leadloom/web` (18/18 routes compiled) pass cleanly with 0 violations.
+

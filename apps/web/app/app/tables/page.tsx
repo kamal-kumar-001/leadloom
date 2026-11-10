@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button, Badge } from '@leadloom/ui';
+import { Button, Badge, EmptyState } from '@leadloom/ui';
 import { LoomVirtualGrid } from '../../../components/grid/loom-virtual-grid';
 import { PreFlightBar } from '../../../components/grid/pre-flight-bar';
 import { ThreadInspector } from '../../../components/grid/drawers/thread-inspector';
@@ -100,10 +100,22 @@ export default function TablesPage() {
 
       {/* Main Table Canvas Area */}
       <div className="flex-1 flex overflow-hidden p-3 relative">
-        <LoomVirtualGrid />
-        <PreFlightBar />
-        <ThreadInspector />
-        <LoomViewDrawer />
+        {table.rowCount === 0 ? (
+          <div className="flex-1 flex items-center justify-center p-8">
+            <EmptyState
+              icon={<Layers className="w-6 h-6 text-text-muted" />}
+              title="No rows in this table"
+              description="Import a CSV or configure waterfall enrichment columns to populate leads."
+            />
+          </div>
+        ) : (
+          <>
+            <LoomVirtualGrid />
+            <PreFlightBar />
+            <ThreadInspector />
+            <LoomViewDrawer />
+          </>
+        )}
       </div>
 
       {/* Modals */}

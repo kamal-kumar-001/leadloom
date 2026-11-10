@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { MOCK_MAILBOX_HEALTH } from '@leadloom/contracts';
-import { Button, Badge } from '@leadloom/ui';
+import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
 import { notify } from '@/lib/notify';
 import {
   Mail,
@@ -89,51 +89,59 @@ export default function MailboxesPage() {
 
       {/* Overview Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle">
+        <Card className="p-4">
           <div className="text-xs text-text-muted">Total Connected Senders</div>
           <div className="text-2xl font-bold text-text-primary mt-1">{mailboxes.length}</div>
           <div className="text-[11px] text-signal-verified mt-1 flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" /> Warm-up cycle active
           </div>
-        </div>
+        </Card>
 
-        <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle">
+        <Card className="p-4">
           <div className="text-xs text-text-muted">Aggregate Daily Quota</div>
           <div className="text-2xl font-bold text-text-primary mt-1">
             {mailboxes.reduce((acc, m) => acc + m.sentToday, 0)} /{' '}
             {mailboxes.reduce((acc, m) => acc + m.dailySendLimit, 0)}
           </div>
           <div className="text-[11px] text-text-muted mt-1">Safe volume threshold</div>
-        </div>
+        </Card>
 
-        <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle">
+        <Card className="p-4">
           <div className="text-xs text-text-muted">Average Health Score</div>
           <div className="text-2xl font-bold text-signal-verified mt-1">98%</div>
           <div className="text-[11px] text-signal-verified mt-1 flex items-center gap-1">
             <ShieldCheck className="w-3 h-3" /> 100% DNS record alignment
           </div>
-        </div>
+        </Card>
 
-        <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle">
+        <Card className="p-4">
           <div className="text-xs text-text-muted">Dispatch Jitter Timing</div>
           <div className="text-2xl font-bold text-text-primary mt-1">45-180s</div>
           <div className="text-[11px] text-brand-weave mt-1 flex items-center gap-1">
             <Clock className="w-3 h-3" /> Anti-spam rate spreading
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Mailbox List */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-text-primary">Sender Health & Record Validation</h2>
 
-        {mailboxes.map((m) => {
-          const domain = m.email.split('@')[1] || 'loom-outreach.dev';
-          return (
-            <div
-              key={m.id}
-              className="p-5 rounded-xl bg-canvas-surface border border-border-subtle hover:border-border-muted transition-all shadow-sm"
-            >
+        {mailboxes.length === 0 ? (
+          <EmptyState
+            icon={<Mail className="w-5 h-5 text-text-muted" />}
+            title="No mailboxes connected"
+            description="Connect Google Workspace or Microsoft 365 to start warming up outbound senders."
+            className="py-10"
+          />
+        ) : (
+          mailboxes.map((m) => {
+            const domain = m.email.split('@')[1] || 'loom-outreach.dev';
+            return (
+              <Card
+                key={m.id}
+                className="p-5 hover:border-border-muted transition-all shadow-sm"
+              >
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div className="flex items-start gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-brand-loom/20 border border-brand-loom/30 flex items-center justify-center shrink-0">
@@ -188,9 +196,10 @@ export default function MailboxesPage() {
                   </Button>
                 </div>
               </div>
-            </div>
+            </Card>
           );
-        })}
+        })
+      )}
       </div>
 
       {/* DNS Inspector Modal */}
