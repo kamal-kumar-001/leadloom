@@ -12,7 +12,7 @@ import {
   Database,
   Sparkles,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 
 interface CsvImporterModalProps {
   isOpen: boolean;
@@ -34,6 +34,18 @@ export function CsvImporterModal({
   const [step, setStep] = useState<'upload' | 'mapping' | 'preview'>('upload');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const parseCsvText = (text: string) => {
@@ -43,7 +55,7 @@ export function CsvImporterModal({
       .filter((line) => line.length > 0);
 
     if (lines.length < 2) {
-      toast.error('CSV file must have at least a header row and one data row.');
+      notify.error('CSV file must have at least a header row and one data row.');
       return;
     }
 
@@ -120,7 +132,7 @@ export function CsvImporterModal({
   const handleProceedToPreview = (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyCol || !domainCol) {
-      toast.error('Please map both Company and Domain columns.');
+      notify.error('Please map both Company and Domain columns.');
       return;
     }
     setStep('preview');
@@ -129,14 +141,19 @@ export function CsvImporterModal({
   const handleExecuteImport = () => {
     const mapped = getMappedRows();
     onImport(mapped);
-    toast.success(`Successfully imported ${mapped.length} targets into virtual grid.`);
+    notify.success(`Successfully imported ${mapped.length} targets into virtual grid.`);
     onClose();
   };
 
   const mappedPreview = getMappedRows().slice(0, 5);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="csv-importer-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans"
+    >
       <div className="bg-canvas-surface border border-border-strong rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-canvas-muted/40">

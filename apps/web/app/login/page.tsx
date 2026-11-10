@@ -14,6 +14,7 @@ import {
   useAuthMethods,
   safeCallback,
 } from '@/components/auth';
+import { FormField } from '@/components/feedback';
 
 function LoginForm() {
   const methods = useAuthMethods();
@@ -26,14 +27,20 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setFieldErrors({});
 
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !password) {
-      setErrorMessage('Email and password are required');
+    const errors: { email?: string; password?: string } = {};
+    if (!cleanEmail) errors.email = 'Work email is required';
+    if (!password) errors.password = 'Password is required';
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
 
@@ -121,34 +128,40 @@ function LoginForm() {
 
       {/* Email / Password Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1.5 text-left">
-          <label htmlFor="email" className="block text-xs font-medium text-text-secondary">
-            Work Email
-          </label>
+        <FormField id="email" label="Work Email" error={fieldErrors.email} required>
           <input
             id="email"
             type="email"
             autoComplete="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+            }}
             placeholder="you@company.com"
             disabled={isSubmitting}
             className="w-full bg-canvas-subtle border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 text-xs font-sans transition-colors"
           />
-        </div>
+        </FormField>
 
         <div>
-          <PasswordInput
-            id="password"
-            label="Password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••••••"
-            disabled={isSubmitting}
-          />
+          <FormField id="password" label="Password" error={fieldErrors.password} required>
+            <PasswordInput
+              id="password"
+              label=""
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+              placeholder="••••••••••••"
+              disabled={isSubmitting}
+              error={fieldErrors.password}
+            />
+          </FormField>
           <div className="text-right mt-1.5">
             <Link
               href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ''}`}

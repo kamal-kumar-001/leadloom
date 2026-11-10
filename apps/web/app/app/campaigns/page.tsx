@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { MOCK_TABLE_METADATA } from '@leadloom/contracts';
 import { Button, Badge } from '@leadloom/ui';
-import { toast } from 'sonner';
+import { notify } from '@/lib/notify';
 import {
   Send,
   Plus,
@@ -56,7 +56,7 @@ export default function CampaignsPage() {
 
   const toggleCampaign = () => {
     setIsRunning(!isRunning);
-    toast.info(
+    notify.info(
       isRunning
         ? 'Sequence paused (simulated)'
         : 'Sequence scheduled with jittered dispatch (simulated demo mode)'
@@ -102,7 +102,7 @@ export default function CampaignsPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => toast.info('New campaign template created (demo)')}
+            onClick={() => notify.info('[Sample] New campaign template created (demo)')}
             className="text-xs"
           >
             <Plus className="w-3.5 h-3.5" />

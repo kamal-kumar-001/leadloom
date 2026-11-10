@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { MOCK_MAILBOX_HEALTH } from '@leadloom/contracts';
 import { Button, Badge } from '@leadloom/ui';
-import { toast } from 'sonner';
+import { notify } from '@/lib/notify';
 import {
   Mail,
   ShieldCheck,
@@ -28,12 +28,12 @@ export default function MailboxesPage() {
   const handleRunHealthCheck = async () => {
     setChecking(true);
     await new Promise((r) => setTimeout(r, 600));
-    toast.success('DNS SPF/DKIM/DMARC records re-verified against live recursive resolvers');
+    notify.info('[Sample] Simulated DNS SPF/DKIM/DMARC health verification complete');
     setChecking(false);
   };
 
   const handleConnectProvider = (providerName: string) => {
-    toast.info(`[OAuth2 Bridge] Redirecting to ${providerName} workspace consent screen...`);
+    notify.info(`[Sample] Simulated OAuth2 bridge redirect to ${providerName} consent screen`);
   };
 
   return (

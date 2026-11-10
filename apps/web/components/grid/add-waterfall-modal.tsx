@@ -14,7 +14,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { BYOKProvider } from '@leadloom/contracts';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 
 interface AddWaterfallModalProps {
   isOpen: boolean;
@@ -45,6 +45,18 @@ export function AddWaterfallModal({
   const [selectedTiers, setSelectedTiers] = useState<string[]>(['apollo', 'hunter', 'dropcontact']);
   const [exitPredicate, setExitPredicate] = useState('deliverable');
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const moveTier = (index: number, direction: 'up' | 'down') => {
@@ -59,7 +71,7 @@ export function AddWaterfallModal({
 
   const removeTier = (id: string) => {
     if (selectedTiers.length <= 1) {
-      toast.error('A waterfall must contain at least one tier.');
+      notify.error('A waterfall must contain at least one tier.');
       return;
     }
     setSelectedTiers(selectedTiers.filter((t) => t !== id));
@@ -73,15 +85,15 @@ export function AddWaterfallModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!columnName.trim()) {
-      toast.error('Column name is required');
+      notify.error('Column name is required');
       return;
     }
     if (selectedTiers.length === 0) {
-      toast.error('Select at least one enrichment tier');
+      notify.error('Select at least one enrichment tier');
       return;
     }
     onAddColumn(columnName.trim(), selectedTiers, exitPredicate);
-    toast.success(`Waterfall column "${columnName}" added to grid.`);
+    notify.success(`Waterfall column "${columnName}" added to grid.`);
     onClose();
   };
 
@@ -92,7 +104,12 @@ export function AddWaterfallModal({
   }, 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-waterfall-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans"
+    >
       <div className="bg-canvas-surface border border-border-strong rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-canvas-muted/40">
@@ -101,7 +118,7 @@ export function AddWaterfallModal({
               <Layers className="w-4 h-4" />
             </span>
             <div>
-              <h3 className="font-bold text-text-primary text-sm">
+              <h3 id="add-waterfall-title" className="font-bold text-text-primary text-sm">
                 Add Waterfall Enrichment Column
               </h3>
               <p className="text-[11px] text-text-muted">

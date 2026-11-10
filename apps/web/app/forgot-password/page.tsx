@@ -13,6 +13,7 @@ import {
   AuthAlert,
   callAuthFlow,
 } from '@/components/auth';
+import { FormField } from '@/components/feedback';
 
 function ForgotPasswordForm() {
   const router = useRouter();
@@ -26,15 +27,18 @@ function ForgotPasswordForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const handleRequestCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setInfoMessage(null);
+    setEmailError(null);
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
-      setErrorMessage('Please enter your work email address');
+      setEmailError('Please enter your work email address');
       return;
     }
 
@@ -63,6 +67,7 @@ function ForgotPasswordForm() {
     e.preventDefault();
     setErrorMessage(null);
     setInfoMessage(null);
+    setPasswordError(null);
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanCode = code.trim();
@@ -76,7 +81,11 @@ function ForgotPasswordForm() {
       return;
     }
     if (!password) {
-      setErrorMessage('Please enter a new password (min. 10 characters)');
+      setPasswordError('Please enter a new password');
+      return;
+    }
+    if (password.length < 10) {
+      setPasswordError('Password must be at least 10 characters long');
       return;
     }
 
@@ -179,16 +188,28 @@ function ForgotPasswordForm() {
           </div>
 
           <div>
-            <PasswordInput
+            <FormField
               id="new-password"
               label="New Password"
-              autoComplete="new-password"
+              hint="Must be at least 10 characters long"
+              error={passwordError}
               required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min. 10 characters"
-              disabled={isSubmitting}
-            />
+            >
+              <PasswordInput
+                id="new-password"
+                label=""
+                autoComplete="new-password"
+                required
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError(null);
+                }}
+                placeholder="Min. 10 characters"
+                disabled={isSubmitting}
+                error={passwordError || undefined}
+              />
+            </FormField>
           </div>
 
           <Button
@@ -211,6 +232,8 @@ function ForgotPasswordForm() {
                 setStep('request');
                 setErrorMessage(null);
                 setInfoMessage(null);
+                setEmailError(null);
+                setPasswordError(null);
               }}
               className="text-xs text-text-muted hover:text-text-primary transition-colors inline-block"
             >
@@ -236,22 +259,22 @@ function ForgotPasswordForm() {
       )}
 
       <form onSubmit={handleRequestCode} className="space-y-4">
-        <div className="space-y-1.5 text-left">
-          <label htmlFor="reset-email" className="block text-xs font-medium text-text-secondary">
-            Work Email
-          </label>
+        <FormField id="reset-email" label="Work Email" error={emailError} required>
           <input
             id="reset-email"
             type="email"
             autoComplete="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) setEmailError(null);
+            }}
             placeholder="you@company.com"
             disabled={isSubmitting}
             className="w-full bg-canvas-subtle border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 text-xs font-sans transition-colors"
           />
-        </div>
+        </FormField>
 
         <Button
           type="submit"

@@ -7,6 +7,7 @@ import { IdentityProvider, type ShellIdentity } from '../../components/shell/ide
 import { fetchAuthMe, provisionWorkspace } from '../../lib/engine-client';
 import { Badge, Button } from '@leadloom/ui';
 import { ShieldAlert, RefreshCw, AlertCircle } from 'lucide-react';
+import { OfflineBanner } from '../../components/feedback';
 
 export default function AppLayout({
   children,
@@ -137,6 +138,7 @@ export default function AppLayout({
 
       {/* Main Workspace Frame */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <OfflineBanner />
         <AppTopbar onToggleMobileMenu={() => setMobileMenuOpen(true)} />
         <main className="flex-1 overflow-auto bg-canvas relative">
           {children}

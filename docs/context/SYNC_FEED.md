@@ -218,3 +218,23 @@
 - Screenshot verified: 1280px and 390px in dark and light themes visually verified via headless browser.
 
 
+---
+
+### [2026-11-11T01:35:00+05:30] Team Beta | apps/web UI foundations & shared feedback | Non-Breaking
+- Completed Part A (commit \`30f296e\`): Audited real \`apps/web\` source against WAI-ARIA and Sonner docs, creating \`docs/plan/UI_FOUNDATIONS.md\` with concrete gap matrix (status, owner, location, fix).
+- Completed Part B:
+  - \`apps/web/lib/notify.ts\`: Central wrapper over sonner with message deduplication hashing, HTTP/EngineClientError plain language error mapping, persistent duration for actionable errors.
+  - \`apps/web/components/feedback/form-field.tsx\`: Accessible wrapper binding \`label\`, \`hint\`, inline error (\`role="alert"\`), \`id\`, \`aria-describedby\`, and \`aria-invalid\`.
+  - \`apps/web/components/feedback/confirm-dialog.tsx\`: WAI-ARIA alertdialog modal with Tab focus trap, Escape cancel, focus restoration to trigger element, token styling.
+  - \`apps/web/components/feedback/offline-banner.tsx\`: Client component monitoring \`navigator.onLine\` and \`online\`/\`offline\` window events, rendering non-intrusive \`role="status"\` banner. Mounted with single line in \`app/app/layout.tsx\`.
+  - \`apps/web/app/error.tsx\`: Root client error boundary with sanitized message and retry action.
+  - \`apps/web/app/not-found.tsx\`: Custom 404 page styled with design tokens and \`@leadloom/ui\` EmptyState.
+  - \`apps/web/app/app/error.tsx\`: In-workspace error boundary with retry view and overview link.
+  - \`apps/web/app/app/loading.tsx\`: Route loading skeleton for \`/app/*\` with pulse animations and token cards.
+  - \`apps/web/app/layout.tsx\`: Updated Sonner \`<Toaster>\` block with tokens (\`--bg-elevated\`, \`--border-subtle\`, \`--text-primary\`), \`bottom-right\` positioning, closeButton.
+  - \`apps/web/app/{login,signup,forgot-password,verify-email}/page.tsx\`: Integrated \`FormField\` with inline validation errors on email/password/code inputs without altering auth flow.
+  - Replaced all direct \`sonner\` imports across \`apps/web\` with \`notify\`, adding \`[Sample]\` disclaimer to simulated actions on fixture/demo pages. Added \`Escape\` and dialog roles to existing modals.
+- All styling strictly conforms to design tokens (\`tokens.css\`) with 0 hex/color overrides.
+- Verified: \`node scripts/check-design.mjs --strict\`, \`npx tsc --noEmit\`, and \`npm run build --workspace @leadloom/web\` (18/18 routes compiled) pass with 0 errors.
+- Visual inspection: dark and light screenshots at 1280px and 390px (toast showing, error page, offline banner) captured and inspected.
+

@@ -19,11 +19,13 @@ export function PasswordInput({
 
   return (
     <div className="space-y-1.5 text-left">
-      <div className="flex items-center justify-between">
-        <label htmlFor={id} className="block text-xs font-medium text-text-secondary">
-          {label}
-        </label>
-      </div>
+      {label && (
+        <div className="flex items-center justify-between">
+          <label htmlFor={id} className="block text-xs font-medium text-text-secondary">
+            {label}
+          </label>
+        </div>
+      )}
       <div className="relative">
         <input
           {...props}

@@ -19,11 +19,13 @@ export default function RootLayout({
         <ThemeProvider defaultTheme="dark">
           {children}
           <Toaster
-            position="top-right"
+            position="bottom-right"
+            closeButton
+            richColors={false}
             toastOptions={{
               style: {
                 background: 'var(--bg-elevated)',
-                borderColor: 'var(--border-muted)',
+                borderColor: 'var(--border-subtle)',
                 color: 'var(--text-primary)',
               },
             }}

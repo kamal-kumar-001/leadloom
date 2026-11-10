@@ -16,7 +16,6 @@ import { ConnectorCard, ConnectorMeta } from '../../../components/connectors/con
 import { ByokVaultModal } from '../../../components/connectors/byok-vault-modal';
 import { fetchVaultCredentials } from '../../../lib/engine-client';
 import { MaskedBYOKCredential, BYOKProvider } from '@leadloom/contracts';
-import { toast } from 'sonner';
 
 const ALL_CONNECTORS: ConnectorMeta[] = [
   {

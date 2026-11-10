@@ -15,7 +15,7 @@ import {
 import { ConnectorMeta } from './connector-card';
 import { saveVaultCredential } from '../../lib/engine-client';
 import { MaskedBYOKCredential } from '@leadloom/contracts';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 
 interface ByokVaultModalProps {
   connector: ConnectorMeta;
@@ -37,6 +37,18 @@ export function ByokVaultModal({
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !saving) {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, saving, onClose]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,7 +56,7 @@ export function ByokVaultModal({
 
     const isOllama = connector.id === ('ollama' as unknown);
     if (!isOllama && apiKey.trim().length < 8) {
-      toast.error('API key must be at least 8 characters long');
+      notify.error('API key must be at least 8 characters long');
       return;
     }
 
@@ -60,16 +72,15 @@ export function ByokVaultModal({
         label: label.trim() || undefined,
       });
 
-      toast.success(
+      notify.success(
         isMock
-          ? `[Demo mode] ${connector.name} key stored in encrypted vault simulation`
+          ? `[Sample] ${connector.name} key stored in encrypted vault simulation`
           : `[Vault] ${connector.name} key encrypted and saved successfully`
       );
       onSuccess(credential);
       onClose();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to save credential';
-      toast.error(message);
+      notify.error(err);
     } finally {
       setSaving(false);
     }
@@ -78,7 +89,12 @@ export function ByokVaultModal({
   const isOllama = connector.id === ('ollama' as unknown);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="byok-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans"
+    >
       <div className="bg-canvas-surface border border-border-strong rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
         {/* Modal Header */}
         <div className="px-6 py-5 border-b border-border-subtle flex items-center justify-between bg-canvas-muted/50">
@@ -88,7 +104,7 @@ export function ByokVaultModal({
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-text-primary text-base">
+                <h3 id="byok-modal-title" className="font-bold text-text-primary text-base">
                   Connect {connector.name}
                 </h3>
                 <Badge variant="matrix" className="text-[10px] font-mono">

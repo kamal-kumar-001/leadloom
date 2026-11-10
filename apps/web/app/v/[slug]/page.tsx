@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Badge } from '@leadloom/ui';
 import { CheckCircle2, ArrowRight, ShieldCheck, Sparkles, Send } from 'lucide-react';
-import { toast } from 'sonner';
+import { notify } from '@/lib/notify';
 
 export default function SmokeTestPage({ params }: { params: Promise<{ slug: string }> }) {
   const [email, setEmail] = useState('');
@@ -21,7 +21,7 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
   const handleInitialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !email.includes('@')) {
-      toast.error('Please enter a valid work email');
+      notify.error('Please enter a valid work email');
       return;
     }
     setShowSurvey(true);
@@ -41,25 +41,25 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
       });
 
       if (res.status === 429) {
-        toast.error('Submission rate limit exceeded. Please try again later.');
+        notify.error('Submission rate limit exceeded. Please try again later.');
         return;
       }
 
       if (!res.ok) {
-        toast.error('Failed to submit waitlist registration.');
+        notify.error('Failed to submit waitlist registration.');
         return;
       }
 
       const data = await res.json();
-      toast.success(
+      notify.success(
         data.isMock
-          ? 'Demo preview: waitlist spot reserved and intent score recorded!'
+          ? '[Sample] Demo preview: waitlist spot reserved and intent score recorded!'
           : 'Waitlist spot reserved! Thank you for validating this idea.'
       );
       setPreviewNotice(true);
       setShowSurvey(false);
-    } catch {
-      toast.error('Network error during waitlist submission.');
+    } catch (err: unknown) {
+      notify.error(err);
     } finally {
       setIsSubmitting(false);
     }

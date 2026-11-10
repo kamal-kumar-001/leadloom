@@ -4,7 +4,7 @@ import React from 'react';
 import { Button, Badge } from '@leadloom/ui';
 import { X, Send, Sparkles, CheckCircle, ShieldCheck } from 'lucide-react';
 import { useLoomStore } from '../../store/loom-store';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 
 export function LoomViewDrawer() {
   const isSequencerOpen = useLoomStore((state) => state.isSequencerOpen);
@@ -12,6 +12,18 @@ export function LoomViewDrawer() {
   const activeCell = useLoomStore((state) => state.activeCell);
   const rowsById = useLoomStore((state) => state.rowsById);
   const selectedRowIds = useLoomStore((state) => state.selectedRowIds);
+
+  React.useEffect(() => {
+    if (!isSequencerOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        toggleSequencer(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSequencerOpen, toggleSequencer]);
 
   if (!isSequencerOpen) return null;
 
@@ -24,7 +36,7 @@ export function LoomViewDrawer() {
   const targetEmail = waterfallCell?.value || 'prospect@target.com';
 
   const handleDispatch = () => {
-    toast.success(`Queued ${selectedRowIds.size} personalized emails into Outbound Pool`, {
+    notify.info(`[Sample] Queued ${selectedRowIds.size} personalized emails into Outbound Pool (simulated)`, {
       description: 'Human jitter delay active (45s–180s between dispatches).',
     });
     toggleSequencer(false);

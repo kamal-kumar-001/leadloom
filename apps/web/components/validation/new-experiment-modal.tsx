@@ -11,7 +11,7 @@ import {
   DollarSign,
   Globe,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 
 interface NewExperimentModalProps {
   isOpen: boolean;
@@ -36,6 +36,18 @@ export function NewExperimentModal({
   const [targetIcp, setTargetIcp] = useState('DevOps Leads & Platform Engineers');
   const [priceAnchorUSD, setPriceAnchorUSD] = useState(299);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleTitleChange = (val: string) => {
@@ -50,7 +62,7 @@ export function NewExperimentModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !hypothesis) {
-      toast.error('Title and core hypothesis are required');
+      notify.error('Title and core hypothesis are required');
       return;
     }
     onCreate({
@@ -60,12 +72,17 @@ export function NewExperimentModal({
       targetIcp,
       priceAnchorUSD,
     });
-    toast.success(`Experiment "${title}" created at /v/${slug || 'new-experiment'}`);
+    notify.success(`Experiment "${title}" created at /v/${slug || 'new-experiment'}`);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-experiment-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans"
+    >
       <div className="bg-canvas-surface border border-border-strong rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-canvas-muted/40">

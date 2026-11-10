@@ -6,7 +6,6 @@ import { MOCK_VALIDATION_SCORECARD } from '@leadloom/contracts';
 import { ValidationRadarCard } from '../../../components/validation/validation-radar-card';
 import { NewExperimentModal } from '../../../components/validation/new-experiment-modal';
 import { Badge, Button } from '@leadloom/ui';
-import { toast } from 'sonner';
 import {
   FlaskConical,
   Sparkles,

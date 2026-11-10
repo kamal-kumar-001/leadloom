@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { MaskedBYOKCredential, BYOKProvider } from '@leadloom/contracts';
 import { testConnectorPing } from '../../lib/engine-client';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 
 export interface ConnectorMeta {
   id: BYOKProvider;
@@ -53,12 +53,12 @@ export function ConnectorCard({
       const res = await testConnectorPing(meta.id);
       setTestResult({ latencyMs: res.latencyMs, success: res.success });
       if (res.success) {
-        toast.success(`[${meta.name}] Handshake verified (${res.latencyMs}ms)`);
+        notify.success(`[${meta.name}] Handshake verified (${res.latencyMs}ms)`);
       } else {
-        toast.error(`[${meta.name}] Verification failed: ${res.message}`);
+        notify.error(`[${meta.name}] Verification failed: ${res.message}`);
       }
-    } catch {
-      toast.error(`[${meta.name}] Network connection error`);
+    } catch (err: unknown) {
+      notify.error(err);
     } finally {
       setTesting(false);
     }

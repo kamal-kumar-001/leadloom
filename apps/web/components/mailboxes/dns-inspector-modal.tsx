@@ -12,7 +12,7 @@ import {
   ExternalLink,
   Info,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 
 interface DnsInspectorModalProps {
   domain: string;
@@ -34,6 +34,18 @@ export function DnsInspectorModal({
   onClose,
 }: DnsInspectorModalProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -71,12 +83,17 @@ export function DnsInspectorModal({
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
-    toast.success('Record copied to clipboard');
+    notify.success('Record copied to clipboard');
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dns-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-sm animate-fade-in font-sans"
+    >
       <div className="bg-canvas-surface border border-border-strong rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-5 border-b border-border-subtle flex items-center justify-between bg-canvas-muted/40">

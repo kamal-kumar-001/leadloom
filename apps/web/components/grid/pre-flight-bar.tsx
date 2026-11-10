@@ -4,7 +4,7 @@ import React from 'react';
 import { Button } from '@leadloom/ui';
 import { Play, Mail, ShieldCheck, Clock, DollarSign } from 'lucide-react';
 import { useLoomStore } from '../../store/loom-store';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 
 export function PreFlightBar() {
   const selectedRowIds = useLoomStore((state) => state.selectedRowIds);
@@ -21,7 +21,7 @@ export function PreFlightBar() {
 
   const handleRun = () => {
     runWaterfallForSelected();
-    toast.info(`Demo simulation for ${selectedCount} rows`, {
+    notify.info(`[Sample] Demo simulation for ${selectedCount} rows`, {
       description: `Synthetic results only. No provider call or charge.`,
     });
   };

@@ -12,6 +12,7 @@ import {
   AuthAlert,
   callAuthFlow,
 } from '@/components/auth';
+import { FormField } from '@/components/feedback';
 
 function VerifyEmailForm() {
   const router = useRouter();
@@ -23,6 +24,7 @@ function VerifyEmailForm() {
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(
     reason === 'unverified'
       ? 'Your email address is not yet verified. Please enter the verification code sent to your inbox.'
@@ -33,12 +35,13 @@ function VerifyEmailForm() {
     e.preventDefault();
     setErrorMessage(null);
     setInfoMessage(null);
+    setEmailError(null);
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanCode = code.trim();
 
     if (!cleanEmail) {
-      setErrorMessage('Please provide your email address');
+      setEmailError('Please provide your email address');
       return;
     }
     if (cleanCode.length !== 6) {
@@ -104,22 +107,22 @@ function VerifyEmailForm() {
       )}
 
       <form onSubmit={handleVerify} className="space-y-5">
-        <div className="space-y-1.5 text-left">
-          <label htmlFor="verify-email" className="block text-xs font-medium text-text-secondary">
-            Account Email
-          </label>
+        <FormField id="verify-email" label="Account Email" error={emailError} required>
           <input
             id="verify-email"
             type="email"
             autoComplete="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) setEmailError(null);
+            }}
             placeholder="you@company.com"
             disabled={isSubmitting}
             className="w-full bg-canvas-subtle border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 text-xs font-sans transition-colors"
           />
-        </div>
+        </FormField>
 
         <div>
           <OtpInput
