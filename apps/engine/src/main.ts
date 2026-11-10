@@ -24,6 +24,7 @@ import { AtomicDispatchRepository } from './modules/outbound/atomic-dispatch.rep
 import { PrismaDispatchDatabase } from './modules/outbound/prisma-database';
 import type { WaterfallController } from './modules/waterfall/waterfall.controller';
 import type { ValidatorController } from './modules/validator/validator.controller';
+import { WorkspaceReadService } from './modules/workspace-read/workspace-read.service';
 import { z } from 'zod';
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -51,6 +52,8 @@ export interface RuntimeServices {
  /** Optional: email+password accounts with verified email (default off; main gates it behind LEADLOOM_PASSWORD_AUTH_ENABLED). */
  passwordAccounts?: PasswordAccountService;
  unsubscribeKey?: Buffer;
+ /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
+ reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listMailboxes'|'listCampaigns'>;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
@@ -117,6 +120,13 @@ export async function createApplication(services?:RuntimeServices) {
    reply.code(403).send({error:'Not available on the current plan',reason:decision.reason,feature});
    return false;
   };
+  if(services.reads){
+   const reads=services.reads;
+   fastify.get('/workspace/summary',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.summary(s.workspaceId);});
+   fastify.get('/workspace/tables',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listTables(s.workspaceId);});
+   fastify.get('/workspace/mailboxes',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listMailboxes(s.workspaceId);});
+   fastify.get('/workspace/campaigns',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listCampaigns(s.workspaceId);});
+  }
   fastify.get('/vault/credentials',async(request:any,reply:any)=>{
    const session=await authorize(request,reply);if(!session)return;
    return services.credentials.list(session.workspaceId);
@@ -326,6 +336,7 @@ if(require.main===module) {
    if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
    services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
    services.accessGuard=new PrismaAccessGuard(prisma);
+   services.reads=new WorkspaceReadService(prisma as any);
    if(process.env.LEADLOOM_ENTITLEMENTS_ENFORCED==='true') {
     const {EntitlementService}=await import('./modules/entitlements/entitlements.service.js');
     const {PrismaEntitlementStore}=await import('./modules/entitlements/prisma-entitlement-store.js');

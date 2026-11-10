@@ -13,6 +13,14 @@ interface CachedToken {
 
 let memoryTokenCache: CachedToken | null = null;
 
+/**
+ * Sample-data fallback for local UI work only. It fails closed: a production
+ * build never serves sample data, even if the flag is set by mistake.
+ */
+export function mockFallbackAllowed(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_ENGINE_MOCK_FALLBACK === 'true';
+}
+
 export class EngineClientError extends Error {
   constructor(
     message: string,
@@ -87,7 +95,7 @@ export async function engineFetch<T>(
     const message = err instanceof Error ? err.message : String(err);
     // Never fail silently into mock mode after a live call fails.
     // If mock fallback is explicitly turned on for offline demo, allow it for read routes only.
-    if (process.env.NEXT_PUBLIC_ENGINE_MOCK_FALLBACK === 'true' && options.method !== 'POST') {
+    if (mockFallbackAllowed() && options.method !== 'POST') {
       return {
         data: null,
         isMock: true,
@@ -166,7 +174,7 @@ export async function fetchVaultCredentials(): Promise<{
   }
 
   // Display demo sample data if engine mock fallback enabled
-  if (process.env.NEXT_PUBLIC_ENGINE_MOCK_FALLBACK === 'true') {
+  if (mockFallbackAllowed()) {
     const fallback: MaskedBYOKCredential[] = [
       {
         id: '00000000-0000-4000-8000-000000001001',
@@ -269,3 +277,56 @@ export async function estimateWaterfallCost(
 ): Promise<PreFlightEstimateResponse> {
   return MOCK_PREFLIGHT_RESPONSE;
 }
+
+/**
+ * Workspace read views (engine GET /workspace/*). Real persisted data only,
+ * scoped by the server to the session's workspace. Failures return an error
+ * and null data: callers show an honest error or empty state, never samples.
+ */
+export interface WorkspaceSummary {
+  tables: number;
+  mailboxes: number;
+  campaigns: number;
+  suppressions: number;
+  experiments: number;
+  providerKeys: number;
+}
+export interface WorkspaceTableRow {
+  id: string;
+  name: string;
+  rowCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface WorkspaceMailboxRow {
+  id: string;
+  email: string;
+  spfStatus: string;
+  dkimStatus: string;
+  dmarcStatus: string;
+  healthScore: number;
+  dailySendLimit: number;
+  sentToday: number;
+  isPaused: boolean;
+  lastHealthCheckAt: string | null;
+  createdAt: string;
+}
+export interface WorkspaceCampaignRow {
+  id: string;
+  name: string;
+  status: string;
+  dailyLimitTotal: number;
+  scheduleTimezone: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+async function workspaceRead<T>(path: string): Promise<{ data: T | null; error?: string }> {
+  const result = await engineFetch<T>(path, { method: 'GET' });
+  if (result.data !== null && result.data !== undefined && !result.isMock) return { data: result.data };
+  return { data: null, error: result.error || 'The workspace data could not be loaded.' };
+}
+export const fetchWorkspaceSummary = () => workspaceRead<WorkspaceSummary>('/workspace/summary');
+export const fetchWorkspaceTables = () => workspaceRead<WorkspaceTableRow[]>('/workspace/tables');
+export const fetchWorkspaceMailboxes = () => workspaceRead<WorkspaceMailboxRow[]>('/workspace/mailboxes');
+export const fetchWorkspaceCampaigns = () => workspaceRead<WorkspaceCampaignRow[]>('/workspace/campaigns');
