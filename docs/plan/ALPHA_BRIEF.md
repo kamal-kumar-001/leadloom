@@ -20,6 +20,8 @@ Done means: `next build` passes, light and dark screenshots at 390px and 1280px,
 
 ---
 
+> Stage 1 update: email/password is now engine-backed (see docs/plan/STAGES.md, Stage 1). Credentials `authorize()` must call engine `/auth/login`; GitHub is configured, Google comes later.
+
 ## Gamma review of Alpha Phase 1 (6c75e47, ec069b2) - BLOCKING before any deploy or Phase 2 wiring
 
 These are release blockers. Fix them in Alpha-owned paths. Gamma has changed only the engine side (below).
