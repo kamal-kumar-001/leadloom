@@ -37,10 +37,22 @@ export function OfflineBanner() {
     <aside
       role="status"
       aria-live="polite"
-      className="w-full bg-signal-catchall/15 border-b border-signal-catchall/30 px-4 py-2 flex items-center justify-center gap-2 text-xs font-medium text-signal-catchall z-50 select-none animate-fade-in"
+      aria-atomic="true"
+      className="w-full bg-signal-catchall/15 border-b border-signal-catchall/30 px-4 py-2 flex items-center justify-center gap-2 text-xs font-medium text-signal-catchall z-50 select-none animate-fade-in motion-reduce:animate-none"
     >
       <WifiOff className="w-3.5 h-3.5 shrink-0" />
       <span>You are currently offline. Changes will not sync until connection is restored.</span>
+      <button
+        type="button"
+        onClick={() => {
+          if (typeof navigator !== 'undefined') {
+            setIsOnline(navigator.onLine);
+          }
+        }}
+        className="ml-2 underline underline-offset-2 text-text-primary hover:text-signal-catchall transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom focus-visible:ring-offset-1 focus-visible:ring-offset-canvas rounded px-1 motion-reduce:transition-none"
+      >
+        Check connection
+      </button>
     </aside>
   );
 }

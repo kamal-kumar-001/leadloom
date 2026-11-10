@@ -45,7 +45,9 @@ export function ConfirmDialog({
       }, 50);
       return () => clearTimeout(timer);
     } else if (triggerRef.current) {
-      triggerRef.current.focus();
+      if (typeof triggerRef.current.focus === 'function' && document.contains(triggerRef.current)) {
+        triggerRef.current.focus();
+      }
       triggerRef.current = null;
     }
   }, [isOpen]);
@@ -57,25 +59,33 @@ export function ConfirmDialog({
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         onCancel();
         return;
       }
 
       if (e.key === 'Tab' && dialogRef.current) {
         const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
         );
-        if (focusable.length === 0) return;
+        if (focusable.length === 0) {
+          e.preventDefault();
+          return;
+        }
 
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
 
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
+        if (e.shiftKey) {
+          if (document.activeElement === first || !dialogRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last || !dialogRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+          }
         }
       }
     }
@@ -88,7 +98,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-xs font-sans"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-xs font-sans motion-reduce:transition-none"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isLoading) onCancel();
       }}
@@ -99,7 +109,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-description"
-        className="bg-canvas-surface border border-border-subtle rounded-2xl w-full max-w-md p-6 shadow-2xl relative"
+        className="bg-canvas-surface border border-border-subtle rounded-2xl w-full max-w-md p-6 shadow-2xl relative motion-reduce:animate-none motion-reduce:transition-none"
       >
         <div className="flex items-start gap-3.5">
           {variant === 'danger' && (
@@ -131,7 +141,7 @@ export function ConfirmDialog({
             size="sm"
             onClick={onCancel}
             disabled={isLoading}
-            className="text-xs"
+            className="text-xs focus-visible:ring-2 focus-visible:ring-brand-loom focus-visible:ring-offset-2 focus-visible:ring-offset-canvas motion-reduce:transition-none"
           >
             {cancelLabel}
           </Button>
@@ -141,7 +151,7 @@ export function ConfirmDialog({
               type="button"
               onClick={onConfirm}
               disabled={isLoading}
-              className="inline-flex items-center justify-center text-xs px-3 py-1.5 font-medium rounded-md bg-signal-failed text-text-onAccent hover:opacity-90 transition-opacity disabled:opacity-50 select-none focus:outline-none focus:ring-2 focus:ring-signal-failed focus:ring-offset-2 focus:ring-offset-canvas"
+              className="inline-flex items-center justify-center text-xs px-3 py-1.5 font-medium rounded-md bg-signal-failed text-text-onAccent hover:opacity-90 transition-opacity disabled:opacity-50 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-failed focus-visible:ring-offset-2 focus-visible:ring-offset-canvas motion-reduce:transition-none"
             >
               {isLoading ? 'Processing...' : confirmLabel}
             </button>
@@ -151,7 +161,7 @@ export function ConfirmDialog({
               size="sm"
               onClick={onConfirm}
               disabled={isLoading}
-              className="text-xs"
+              className="text-xs focus-visible:ring-2 focus-visible:ring-brand-loom focus-visible:ring-offset-2 focus-visible:ring-offset-canvas motion-reduce:transition-none"
             >
               {isLoading ? 'Processing...' : confirmLabel}
             </Button>

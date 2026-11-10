@@ -281,4 +281,15 @@
   - `apps/web/app/app/campaigns/page.tsx`: Shows real workspace campaigns list from `fetchWorkspaceCampaigns` with status, daily limits, timezone (or `EmptyState` "No campaigns yet"), keeping sequence steps below under a clearly marked "Sample preview" Card.
 - Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (clean), `npm run build --workspace @leadloom/web` (18/18 routes static/dynamic compiled).
 
+---
+
+### [2026-11-11T03:45:00+05:30] Team Beta | apps/web shared a11y & feedback hardening (Part B) | Non-Breaking
+- Hardened accessibility in `components/feedback` and owned files:
+  - `confirm-dialog.tsx`: Implemented robust focus return to trigger element on close (`document.contains(triggerRef.current)`), Tab and Shift+Tab focus trap cycling through focusable elements, Escape dismissal with event propagation stopped, token focus rings (`focus-visible:ring-2 focus-visible:ring-brand-loom` and `focus-visible:ring-signal-failed`), and `motion-reduce:animate-none motion-reduce:transition-none`.
+  - `offline-banner.tsx`: Added `aria-atomic="true"` with `aria-live="polite"` and `role="status"`, accessible connection re-test button with token focus ring, and `motion-reduce:animate-none`.
+  - `form-field.tsx`: Added `aria-live="polite"` and `aria-atomic="true"` to error messages with `motion-reduce:animate-none`.
+  - `components/settings/provider-keys.tsx`: Added visible token focus rings (`focus-visible:ring-2 focus-visible:ring-brand-loom` and `focus-visible:ring-signal-failed`) and `motion-reduce:transition-none` across inputs, select, and action buttons.
+- Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (0 errors), `npm run build --workspace @leadloom/web` (18/18 routes compiled clean). Visual verification completed in dark and light themes at 1280px and 390px.
+
+
 

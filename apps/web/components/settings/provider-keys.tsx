@@ -197,7 +197,7 @@ export function ProviderKeysCard() {
                 setFieldErrors({});
               }}
               disabled={isSubmitting}
-              className="text-xs text-text-muted hover:text-text-primary"
+              className="text-xs text-text-muted hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom rounded px-1 motion-reduce:transition-none"
             >
               Cancel
             </button>
@@ -214,7 +214,7 @@ export function ProviderKeysCard() {
                 value={provider}
                 onChange={(e) => setProvider(e.target.value as BYOKProvider)}
                 disabled={isSubmitting}
-                className="w-full bg-canvas-surface border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-loom focus:border-brand-loom"
+                className="w-full bg-canvas-surface border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom focus:border-brand-loom motion-reduce:transition-none"
               >
                 {PROVIDERS.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -237,7 +237,7 @@ export function ProviderKeysCard() {
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="Optional identifier"
                 disabled={isSubmitting}
-                className="w-full bg-canvas-surface border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-brand-loom focus:border-brand-loom"
+                className="w-full bg-canvas-surface border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom focus:border-brand-loom motion-reduce:transition-none"
               />
             </FormField>
           </div>
@@ -257,7 +257,7 @@ export function ProviderKeysCard() {
               placeholder="Enter API key"
               disabled={isSubmitting}
               autoComplete="new-password"
-              className="w-full bg-canvas-surface border border-border-subtle rounded-lg px-3 py-2 text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-brand-loom focus:border-brand-loom"
+              className="w-full bg-canvas-surface border border-border-subtle rounded-lg px-3 py-2 text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-loom focus:border-brand-loom motion-reduce:transition-none"
             />
           </FormField>
 
@@ -370,7 +370,7 @@ export function ProviderKeysCard() {
                       type="button"
                       onClick={() => setDeleteTarget(k)}
                       aria-label={`Delete ${k.label || getProviderLabel(k.provider)} key`}
-                      className="p-1.5 rounded-md text-text-muted hover:text-signal-failed hover:bg-canvas-surface transition-colors"
+                      className="p-1.5 rounded-md text-text-muted hover:text-signal-failed hover:bg-canvas-surface transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-failed focus-visible:ring-offset-1 focus-visible:ring-offset-canvas motion-reduce:transition-none"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

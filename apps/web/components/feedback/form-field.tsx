@@ -72,7 +72,7 @@ export function FormField({
       )}
 
       {error && (
-        <p id={errorId} role="alert" className="text-[11px] text-signal-failed font-medium">
+        <p id={errorId} role="alert" aria-live="polite" aria-atomic="true" className="text-[11px] text-signal-failed font-medium motion-reduce:animate-none">
           {error}
         </p>
       )}
