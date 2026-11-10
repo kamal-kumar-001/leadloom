@@ -61,3 +61,5 @@ Files: `waterfall/credentials/*` (own AES-GCM sealer, port, in-memory store), `w
 - Nothing imports these from a route or from `main.ts`. They are not part of login or the dashboard and must not be wired now.
 - `credential-sealer.ts` duplicates what `apps/engine/src/modules/vault` (VaultService, `docs/adr/001-byok-encryption.md`, `LEADLOOM_MASTER_KEY`, `key_version`) already does. In stage 3 it is reconciled onto the existing vault (thin write-only facade) rather than shipping a second key system. Do not use the sealer for real keys.
 - Kept, not deleted: tests pass and the catalog and raw allowlists are reusable.
+
+- Stage 4 (after 1-3 verified): landing page and mega menus, see `LANDING.md`. LeadLoom is proprietary: no open-source positioning anywhere.

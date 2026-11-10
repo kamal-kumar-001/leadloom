@@ -406,16 +406,16 @@ To guarantee that the 3D visual upgrades **cost $0 extra in infrastructure** and
 ### 6.5 Full Landing Page Section Blueprint
 
 #### Section 1: Hero Section (Above the Fold) `[Recommended Skill: landing-page-design]`
-- **Eyebrow Badge:** `🧵 Open-Core Signal Engine • Apache 2.0 / MIT Licensed`
+- **Eyebrow Badge:** `🧵 Signal-driven outbound with your own keys`
 - **H1 Headline:** **Weave buying signals into qualified revenue. Stop paying middleman markups on data.**
-- **Subheadline:** The self-hostable alternative to hosted GTM platforms. Connect your own Apollo, Hunter, and OpenAI keys to enrich leads, validate startup hypotheses, and sequence cold email at pure wholesale API cost.
+- **Subheadline:** Bring your own provider keys. Connect your own Apollo, Hunter, and OpenAI keys to enrich leads, validate startup hypotheses, and sequence cold email at pure wholesale API cost.
 - **Magnetic CTAs:**
   - `[ Launch Free Cloud Trial ]` (Indigo Glow, Magnetic 20px radius).
-  - `$ docker compose up -d leadloom` (Monospace 1-click copy with Sonner toast).
+  - Email field plus button (see `LANDING.md` for purpose, consent and storage).
 - **Interactive Focal Visual:** `<LivingLoomCanvas/>` with cursor-reactive 3D Loom Core & fiber threads.
 
-#### Section 2: Social Proof & OSS Trust Bar
-- **Proof:** `3.8k+ GitHub Stars`, `100% Self-Hostable`, `Docker Single-Command Deploy`.
+#### Section 2: Trust bar (real facts only)
+- **Proof:** only measured, sourced facts. No invented counts (the earlier "GitHub stars" line was a placeholder and is removed). Not open source.
 - **Logos:** Vercel, Supabase, Railway, Resend, Docker, PostHog.
 
 #### Section 3: "Validate Before You Build" (Idea Validator Showcase) `[Recommended Skill: landing-page-design]`
@@ -427,18 +427,18 @@ To guarantee that the 3D visual upgrades **cost $0 extra in infrastructure** and
 #### Section 4: The "Markup Exposed" Interactive Calculator `[Recommended Skill: landing-page-design]`
 - **Interactive Range Slider:** $1,000$ to $100,000$ monthly contacts.
 - **Card A (incumbents):** `$1,200/mo` with predatory credit markups.
-- **Card B (LeadLoom Self-Hosted):** `$74/mo` direct API cost (**Save $13,512/year**).
+- **Card B (LeadLoom):** computed from the user's own inputs and sourced provider prices. No fixed savings claim until the math and sources are shown.
 
 #### Section 5: The 3-Pillar Asymmetric Bento Grid `[Recommended Skill: apple-design]`
 - **Bento Card 1:** Real-Time Intent Signal Listeners (GitHub stars, hiring events, tech stack changes).
 - **Bento Card 2:** DAG Adaptive Waterfall Engine (Early-exit short-circuiting).
 - **Bento Card 3:** Integrated Multi-Inbox Sequencer with SPF/DKIM health gauges.
 
-#### Section 6: Built for Engineers (Docker & Architecture Transparency)
+#### Section 6: Security and architecture (what is true today)
 - Interactive tabbed viewer: `docker-compose.yml`, `CustomProvider.ts`, `Security.md`.
 
 #### Section 7: Transparent Pricing Matrix
-- **Community Edition:** $0 Forever (Self-hosted, unlimited rows, Docker).
+- **Free tier:** defined by central pricing config (`FOUNDATIONS.md`), not hardcoded on the page.
 - **Cloud Pro:** $49 / month (Managed cloud, residential proxy pool, warmup network).
 
 #### Section 8: Final High-Conversion CTA Block

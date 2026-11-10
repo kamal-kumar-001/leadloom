@@ -1,11 +1,11 @@
 # Product Requirements Document (PRD) — LeadLoom Core
 
-**Product Name:** **LeadLoom** *(The Open-Core Signal-to-Revenue Engine)*  
+**Product Name:** **LeadLoom** *(The Signal-to-Revenue Engine)*  
 **Document Version:** 2.1 (Idea Validator & 3D WebGL Upgrade)  
 **Author:** Principal Staff Engineer & Product Architect  
-**Target Release:** v0.1 (Self-Hosted OSS Core & Developer Preview)  
-**Primary Repository:** `github.com/leadloom/leadloom`  
-**License:** Open-Core (Apache 2.0 / MIT Core with Commercial Cloud Extensions)  
+**Target Release:** v0.1 (Proprietary product; hosted by us)  
+**Primary Repository:** private repository (not public)  
+**License:** Proprietary. All rights reserved. LeadLoom is not an open-source project (Kamal, 2026-11-10). Third-party dependencies keep their own licenses; do not remove their notices.  
 
 ---
 
@@ -19,7 +19,7 @@ Modern outbound Go-To-Market (GTM) engines like the leading hosted GTM platforms
 4. **The "Pre-Product" Premature Build Trap:** Founders and product teams spend months building SaaS software nobody wants because validating market demand and capturing buyer waitlists requires assembling 5 separate landing page, scraping, and sequencing tools.
 
 ### 1.2 The LeadLoom Vision
-**LeadLoom** is an open-core, unified GTM orchestration engine that merges **multi-signal intent detection**, **bring-your-own-key (BYOK) adaptive enrichment cascades**, **pre-product idea validation (smoke-testing)**, and **native multi-channel outbound sequencing** into a single self-hostable workspace. It allows growth teams, developers, and founders to run enterprise-grade data enrichment and market validation at pure wholesale API cost while maintaining complete sovereignty over their data.
+**LeadLoom** is a proprietary, unified GTM orchestration engine that merges **multi-signal intent detection**, **bring-your-own-key (BYOK) adaptive enrichment cascades**, **pre-product idea validation (smoke-testing)**, and **native multi-channel outbound sequencing** into a single self-hostable workspace. It allows growth teams, developers, and founders to run enterprise-grade data enrichment and market validation at pure wholesale API cost while maintaining complete sovereignty over their data.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -54,7 +54,7 @@ Modern outbound Go-To-Market (GTM) engines like the leading hosted GTM platforms
 ## 2. Product Positioning & Value Propositions `[Recommended Skill: landing-page-design]`
 
 * **Tagline:** *Zero-markup, signal-driven outbound engine with instant idea validation.*
-* **Positioning:** The developer-first, self-hostable alternative to hosted GTM platforms and manual pre-product smoke-testing.
+* **Positioning:** A bring-your-own-key GTM platform and manual pre-product smoke-testing.
 * **Core Value Pillars:**
   1. **Zero Data Markup (BYOK):** Plug in your raw Apollo, Hunter, Anymail Finder, Dropcontact, Perplexity, or OpenAI keys. Pay providers directly; LeadLoom takes zero commission on API calls.
   2. **Adaptive DAG Waterfalls:** Short-circuit expensive enrichment tiers as soon as a low-cost tier returns a verified, deliverable email.

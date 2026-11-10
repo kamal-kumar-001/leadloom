@@ -60,3 +60,6 @@ Evidence required for Stage 1 done: a recorded browser run (GitHub sign-in, firs
 Item 2 above is a measured failure. A page on `http://127.0.0.1:3000` calling the local engine (`http://127.0.0.1:4100`) with an `Authorization` header in headless Chrome got: "blocked by CORS policy: Response to preflight request doesn't pass access control check". A plain GET to `/health` was blocked too (no `Access-Control-Allow-Origin`). The engine answers OPTIONS with 404. So `engineFetch` from the browser cannot work as written. Fix it on the web side with a same-origin proxy. Do not add a wildcard CORS rule to the engine; Gamma will not open the engine to browsers.
 
 Stage 1 readiness checklist (all must hold, fail closed on every one): engine error or unreachable -> error screen, never the app; no session -> redirect to /login; no identity claim without a verified provider email; no mock fallback on auth paths; no work on Phase 2 until Stage 1 evidence is recorded.
+
+---
+**Update 2026-11-10 22:45 IST (Kamal): proprietary, not open source.** Do L0 in `LANDING.md` now (text removal only), after the Stage 1 fixes list above. The landing redesign (light theme, gradients, hero email CTA, mega menus) is Stage 4; read `LANDING.md` for the rules (honest links, no fake capture success, no invented numbers). No new Phase 2 work.

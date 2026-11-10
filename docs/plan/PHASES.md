@@ -47,3 +47,5 @@ Every phase ends with: engine tests, tsc, isolated PG16 run (gated spec), migrat
 
 ## What Kamal needs to provide (short)
 Only when a phase reaches it. See `ACCESS_NEEDS.md`.
+
+> Landing and nav direction (2026-11-10 22:40): see `LANDING.md`. Product is proprietary.
