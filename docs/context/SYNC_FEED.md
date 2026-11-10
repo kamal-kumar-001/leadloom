@@ -291,5 +291,16 @@
   - `components/settings/provider-keys.tsx`: Added visible token focus rings (`focus-visible:ring-2 focus-visible:ring-brand-loom` and `focus-visible:ring-signal-failed`) and `motion-reduce:transition-none` across inputs, select, and action buttons.
 - Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (0 errors), `npm run build --workspace @leadloom/web` (18/18 routes compiled clean). Visual verification completed in dark and light themes at 1280px and 390px.
 
+---
+
+### [2026-11-11T04:55:00+05:30] Team Beta | apps/web suppressions card on mailboxes (Part A) | Non-Breaking
+- Added read-only "Suppression list" card below the mailbox pool on `/app/mailboxes` (`apps/web/app/app/mailboxes/page.tsx`):
+  - Consumes `fetchWorkspaceSuppressions` (`WorkspaceSuppressionRow`) with skeleton loading, error with retry, and empty state (`EmptyState` "No suppressed contacts yet").
+  - Columns / attributes: Address hash (`hashPrefix` rendered in mono font, never implying it is an email address), reason (`Badge variant="subtle"`), source, and formatted added date.
+  - Zero address reconstruction, zero exports, zero add/delete mutations.
+  - Desktop table view with responsive stacked mobile view to guarantee no horizontal overflow at 390px.
+- Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (0 errors), `npm run build --workspace @leadloom/web` (18/18 routes compiled).
+
+
 
 

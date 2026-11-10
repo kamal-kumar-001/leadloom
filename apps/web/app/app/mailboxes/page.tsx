@@ -2,11 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
-import { fetchWorkspaceMailboxes, type WorkspaceMailboxRow } from '../../../lib/engine-client';
+import {
+  fetchWorkspaceMailboxes,
+  fetchWorkspaceSuppressions,
+  type WorkspaceMailboxRow,
+  type WorkspaceSuppressionRow,
+} from '../../../lib/engine-client';
 import { notify } from '@/lib/notify';
 import {
   Mail,
   ShieldCheck,
+  ShieldAlert,
   CheckCircle2,
   AlertCircle,
   Plus,
@@ -50,6 +56,11 @@ export default function MailboxesPage() {
   const [mailboxes, setMailboxes] = useState<WorkspaceMailboxRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [suppressions, setSuppressions] = useState<WorkspaceSuppressionRow[]>([]);
+  const [suppressionsLoading, setSuppressionsLoading] = useState(true);
+  const [suppressionsError, setSuppressionsError] = useState<string | null>(null);
+
   const [activeDnsDomain, setActiveDnsDomain] = useState<string | null>(null);
 
   const loadMailboxes = useCallback(async () => {
@@ -69,9 +80,32 @@ export default function MailboxesPage() {
     }
   }, []);
 
+  const loadSuppressions = useCallback(async () => {
+    setSuppressionsLoading(true);
+    setSuppressionsError(null);
+    try {
+      const res = await fetchWorkspaceSuppressions();
+      if (res.data) {
+        setSuppressions(res.data);
+      } else {
+        setSuppressionsError(res.error || 'Failed to fetch suppressions');
+      }
+    } catch (err: unknown) {
+      setSuppressionsError(err instanceof Error ? err.message : 'Engine connection error');
+    } finally {
+      setSuppressionsLoading(false);
+    }
+  }, []);
+
+  const handleRefreshAll = useCallback(() => {
+    loadMailboxes();
+    loadSuppressions();
+  }, [loadMailboxes, loadSuppressions]);
+
   useEffect(() => {
     loadMailboxes();
-  }, [loadMailboxes]);
+    loadSuppressions();
+  }, [loadMailboxes, loadSuppressions]);
 
   const handleConnectProvider = (providerName: string) => {
     notify.info(`OAuth2 bridge redirect to ${providerName} consent screen`);
@@ -86,7 +120,7 @@ export default function MailboxesPage() {
       : '—';
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -102,11 +136,11 @@ export default function MailboxesPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={loadMailboxes}
-            disabled={isLoading}
-            className="text-xs gap-1.5"
+            onClick={handleRefreshAll}
+            disabled={isLoading || suppressionsLoading}
+            className="text-xs gap-1.5 focus-visible:ring-2 focus-visible:ring-brand-loom"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${(isLoading || suppressionsLoading) ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </Button>
 
@@ -271,6 +305,138 @@ export default function MailboxesPage() {
               </Card>
             );
           })
+        )}
+      </div>
+
+      {/* Suppression list */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-text-primary">Suppression list</h2>
+            <ShieldAlert className="w-4 h-4 text-text-muted" />
+          </div>
+          {!suppressionsLoading && !suppressionsError && (
+            <span className="text-xs text-text-muted font-mono">
+              {suppressions.length} {suppressions.length === 1 ? 'record' : 'records'}
+            </span>
+          )}
+        </div>
+
+        {suppressionsLoading ? (
+          <Card className="p-6 animate-pulse space-y-3">
+            <div className="h-4 w-48 bg-canvas-elevated rounded" />
+            <div className="h-4 w-32 bg-canvas-elevated rounded" />
+          </Card>
+        ) : suppressionsError ? (
+          <Card className="p-6 border-signal-failed/30 bg-signal-failed/5 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-signal-failed">Failed to load suppressions</p>
+              <p className="text-xs text-text-muted mt-0.5">{suppressionsError}</p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={loadSuppressions}
+              className="text-xs focus-visible:ring-2 focus-visible:ring-brand-loom"
+            >
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+              <span>Retry</span>
+            </Button>
+          </Card>
+        ) : suppressions.length === 0 ? (
+          <Card className="p-8">
+            <EmptyState
+              icon={<ShieldAlert className="w-6 h-6 text-text-muted" />}
+              title="No suppressed contacts yet"
+              description="Opted-out or bounced recipient addresses are recorded as non-reversible hashes to prevent future sends."
+            />
+          </Card>
+        ) : (
+          <Card className="overflow-hidden p-0 border border-border-subtle shadow-sm">
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border-subtle bg-canvas-surface/80 text-text-muted font-mono">
+                    <th className="py-2.5 px-4 font-medium">Address hash</th>
+                    <th className="py-2.5 px-4 font-medium">Reason</th>
+                    <th className="py-2.5 px-4 font-medium">Source</th>
+                    <th className="py-2.5 px-4 font-medium text-right">Added date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle font-sans">
+                  {suppressions.map((s) => (
+                    <tr key={s.id} className="hover:bg-canvas-elevated/40 transition-colors">
+                      <td className="py-3 px-4 font-mono text-text-primary">
+                        <span className="bg-canvas-elevated border border-border-subtle px-2 py-0.5 rounded text-[11px] font-mono">
+                          {s.hashPrefix}…
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-text-secondary">
+                        {s.reason ? (
+                          <Badge variant="subtle" className="text-[10px] font-mono">
+                            {s.reason}
+                          </Badge>
+                        ) : (
+                          <span className="text-text-muted">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-text-secondary">
+                        {s.source || <span className="text-text-muted">—</span>}
+                      </td>
+                      <td className="py-3 px-4 text-right text-text-muted font-mono text-[11px]">
+                        {new Date(s.createdAt).toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Stacked View (no horizontal scroll at 390px) */}
+            <div className="sm:hidden divide-y divide-border-subtle">
+              {suppressions.map((s) => (
+                <div key={s.id} className="p-3.5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-mono text-text-muted">Address hash</span>
+                    <span className="font-mono bg-canvas-elevated border border-border-subtle px-1.5 py-0.5 rounded text-[11px] text-text-primary">
+                      {s.hashPrefix}…
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-mono text-text-muted">Reason</span>
+                    <span className="text-text-secondary">
+                      {s.reason ? (
+                        <Badge variant="subtle" className="text-[10px] font-mono">
+                          {s.reason}
+                        </Badge>
+                      ) : (
+                        '—'
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-mono text-text-muted">Source</span>
+                    <span className="text-text-secondary">{s.source || '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-mono text-text-muted">Added date</span>
+                    <span className="text-text-muted font-mono text-[11px]">
+                      {new Date(s.createdAt).toLocaleDateString(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
         )}
       </div>
 
