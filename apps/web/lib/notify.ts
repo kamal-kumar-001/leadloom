@@ -54,7 +54,7 @@ const CODE_MESSAGES: Record<string, string> = {
  * - network aborts: a fixed connectivity sentence.
  * - anything else: a generic sentence.
  * Strings passed directly to notify.error are caller-authored messages, not caught errors.
- * The raw error goes to the browser console for diagnostics only (never into the UI).
+ * Diagnostics are a redacted id/class/status/code line only (see logDiagnostic).
  */
 export function mapErrorMessage(error: unknown): string {
   if (typeof error === 'string') return error.trim() || GENERIC;
@@ -75,6 +75,19 @@ export function mapErrorMessage(error: unknown): string {
     return 'Unable to reach the server. Check your connection and try again.';
   }
   return GENERIC;
+}
+
+/**
+ * Redacted diagnostics. The browser console is user-visible, so only a short
+ * id, the error class, the HTTP status and the error code are logged. Never the
+ * message, stack, request body, headers or any payload.
+ */
+function logDiagnostic(error: unknown): void {
+  if (typeof console === 'undefined') return;
+  const e = error as { name?: unknown; statusCode?: unknown; code?: unknown } | null;
+  const id = Math.random().toString(36).slice(2, 8);
+  const pick = (v: unknown, max: number) => (typeof v === 'string' || typeof v === 'number' ? String(v).slice(0, max) : undefined);
+  console.debug('[notify] error', { id, name: pick(e?.name, 40), status: pick(e?.statusCode, 5), code: pick(e?.code, 40) });
 }
 
 export const notify = {
@@ -107,7 +120,7 @@ export const notify = {
 
   error(errorOrMessage: unknown, options?: NotifyOptions): string | number {
     const message = mapErrorMessage(errorOrMessage);
-    if (typeof errorOrMessage !== 'string' && typeof console !== 'undefined') console.debug('[notify]', errorOrMessage);
+    if (typeof errorOrMessage !== 'string') logDiagnostic(errorOrMessage);
     const id = options?.id || hashMessage('error', message, options?.description);
 
     // Errors with an interactive action (e.g. Retry) must stay until dismissed

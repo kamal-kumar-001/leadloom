@@ -15,7 +15,7 @@ export default function RootError({
 }) {
   useEffect(() => {
     // Log sanitized error locally for diagnostic review
-    console.error('Unhandled application error:', error);
+    console.error('[app-error]', { name: error.name, digest: error.digest });
   }, [error]);
 
   const friendlyMessage = mapErrorMessage(error);

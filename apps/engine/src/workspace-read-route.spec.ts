@@ -10,11 +10,11 @@ describe('workspace read routes',()=>{
  it('require a session and use only the session workspace id',async()=>{
   const credentials={save:vi.fn(),list:vi.fn(async()=>[]),delete:vi.fn()} as any;
   const outbound={enqueue:vi.fn(),suppress:vi.fn()} as any;
-  const reads={summary:vi.fn(async()=>({tables:1,mailboxes:0,campaigns:0,suppressions:0,experiments:0,providerKeys:0})),listTables:vi.fn(async()=>[]),listMailboxes:vi.fn(async()=>[]),listCampaigns:vi.fn(async()=>[])};
+  const reads={summary:vi.fn(async()=>({tables:1,mailboxes:0,campaigns:0,suppressions:0,experiments:0,providerKeys:0})),listTables:vi.fn(async()=>[]),listMailboxes:vi.fn(async()=>[]),listCampaigns:vi.fn(async()=>[]),listSuppressions:vi.fn(async()=>[]),listExperiments:vi.fn(async()=>[])};
   const app=await createApplication({credentials,outbound,sessionKey:key,reads});
   try{
    const s=app.getHttpAdapter().getInstance();
-   for(const u of ['summary','tables','mailboxes','campaigns']){
+   for(const u of ['summary','tables','mailboxes','campaigns','suppressions','experiments']){
     expect((await s.inject({method:'GET',url:'/workspace/'+u})).statusCode).toBe(401);
    }
    const r=await s.inject({method:'GET',url:'/workspace/summary?workspaceId='+randomUUID(),headers:{authorization:'Bearer '+token()}});

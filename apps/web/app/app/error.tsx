@@ -14,7 +14,7 @@ export default function AppError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('Workspace runtime error:', error);
+    console.error('[workspace-error]', { name: error.name, digest: error.digest });
   }, [error]);
 
   const friendlyMessage = mapErrorMessage(error);

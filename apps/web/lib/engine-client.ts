@@ -330,3 +330,22 @@ export const fetchWorkspaceSummary = () => workspaceRead<WorkspaceSummary>('/wor
 export const fetchWorkspaceTables = () => workspaceRead<WorkspaceTableRow[]>('/workspace/tables');
 export const fetchWorkspaceMailboxes = () => workspaceRead<WorkspaceMailboxRow[]>('/workspace/mailboxes');
 export const fetchWorkspaceCampaigns = () => workspaceRead<WorkspaceCampaignRow[]>('/workspace/campaigns');
+
+export interface WorkspaceSuppressionRow {
+  id: string;
+  /** First 8 hex chars of the stored hash. The address itself is never available. */
+  hashPrefix: string;
+  reason: string | null;
+  source: string | null;
+  createdAt: string;
+}
+export interface WorkspaceExperimentRow {
+  id: string;
+  /** Truncated to 140 characters by the server. */
+  hypothesis: string;
+  verdict: string;
+  verdictScore: number | null;
+  createdAt: string;
+}
+export const fetchWorkspaceSuppressions = () => workspaceRead<WorkspaceSuppressionRow[]>('/workspace/suppressions');
+export const fetchWorkspaceExperiments = () => workspaceRead<WorkspaceExperimentRow[]>('/workspace/experiments');

@@ -53,7 +53,7 @@ export interface RuntimeServices {
  passwordAccounts?: PasswordAccountService;
  unsubscribeKey?: Buffer;
  /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
- reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listMailboxes'|'listCampaigns'>;
+ reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listMailboxes'|'listCampaigns'|'listSuppressions'|'listExperiments'>;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
@@ -125,6 +125,8 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.get('/workspace/summary',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.summary(s.workspaceId);});
    fastify.get('/workspace/tables',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listTables(s.workspaceId);});
    fastify.get('/workspace/mailboxes',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listMailboxes(s.workspaceId);});
+   fastify.get('/workspace/suppressions',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listSuppressions(s.workspaceId);});
+   fastify.get('/workspace/experiments',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listExperiments(s.workspaceId);});
    fastify.get('/workspace/campaigns',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listCampaigns(s.workspaceId);});
   }
   fastify.get('/vault/credentials',async(request:any,reply:any)=>{

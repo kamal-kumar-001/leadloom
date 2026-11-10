@@ -8,8 +8,8 @@ export interface WorkspaceReadDb {
   table: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   mailbox: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   campaign: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
-  suppressionList: { count(a: any): Promise<number> };
-  validationExperiment: { count(a: any): Promise<number> };
+  suppressionList: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
+  validationExperiment: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   byokCredential: { count(a: any): Promise<number> };
 }
 
@@ -60,5 +60,33 @@ export class WorkspaceReadService {
       orderBy: { createdAt: 'desc' },
       take: LIMIT,
     });
+  }
+
+  /** Suppressions: a short hash prefix, reason and source only. The raw address is never stored and never reconstructed. */
+  async listSuppressions(workspaceId: string) {
+    const rows = await this.db.suppressionList.findMany({
+      where: { workspaceId },
+      select: { id: true, emailHash: true, reason: true, source: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: LIMIT,
+    });
+    return rows.map((r: any) => ({ id: r.id, hashPrefix: String(r.emailHash).slice(0, 8), reason: r.reason, source: r.source, createdAt: r.createdAt }));
+  }
+
+  /** Experiments: status metadata plus a truncated hypothesis. No ICP spec, sequence copy or page content. */
+  async listExperiments(workspaceId: string) {
+    const rows = await this.db.validationExperiment.findMany({
+      where: { workspaceId },
+      select: { id: true, hypothesis: true, verdict: true, verdictScore: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: LIMIT,
+    });
+    return rows.map((r: any) => ({
+      id: r.id,
+      hypothesis: String(r.hypothesis).slice(0, 140),
+      verdict: r.verdict,
+      verdictScore: r.verdictScore,
+      createdAt: r.createdAt,
+    }));
   }
 }
