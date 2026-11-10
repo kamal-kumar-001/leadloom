@@ -190,7 +190,9 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
           linkedinUrl: record?.linkedin_url ?? null,
           confidence,
         },
-        raw: json as Record<string, unknown>,
+        raw: {
+          status: json.status ?? 200,
+        },
       };
     } catch (err) {
       return {

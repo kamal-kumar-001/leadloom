@@ -182,11 +182,6 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
       const mxFound = json.mx_found === true || json.mx_found === 'true';
       const freeEmail = json.free_email === true || json.free_email === 'true';
 
-      const sanitizedRaw = JSON.parse(redactSecrets(JSON.stringify(json), [ctx.apiKey])) as Record<
-        string,
-        unknown
-      >;
-
       return {
         success: true,
         latencyMs,
@@ -200,7 +195,13 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
           mxFound,
           confidence,
         },
-        raw: sanitizedRaw,
+        raw: {
+          status,
+          subStatus: json.sub_status,
+          domain: json.domain,
+          freeEmail,
+          mxFound,
+        },
       };
     } catch (err) {
       return {

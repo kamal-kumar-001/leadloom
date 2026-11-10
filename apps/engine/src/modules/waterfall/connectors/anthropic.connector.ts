@@ -172,7 +172,12 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
               }
             : undefined,
         },
-        raw: json as Record<string, unknown>,
+        raw: {
+          id: json.id,
+          model: json.model ?? model,
+          stopReason: json.stop_reason,
+          usage: json.usage,
+        },
       };
     } catch (err) {
       return {

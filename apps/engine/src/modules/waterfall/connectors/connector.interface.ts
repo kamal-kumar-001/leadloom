@@ -36,7 +36,8 @@ export interface ConnectorError {
     | 'NETWORK_ERROR'
     | 'TIMEOUT'
     | 'NETWORK_DISABLED'
-    | 'INVALID_BASE_URL';
+    | 'INVALID_BASE_URL'
+    | 'NOT_READY';
   message: string;
   status?: number;
   retryable?: boolean;

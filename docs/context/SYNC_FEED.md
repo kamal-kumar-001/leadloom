@@ -118,5 +118,13 @@
 - Waterfall entitlement fail-closed enforcement: `WaterfallService.assertEntitlements` rejects missing `workspaceId` (scoped tenant required) and rejects missing `EntitlementPort` whenever `LEADLOOM_ENTITLEMENTS_ENFORCED=true`.
 - Confirmed zero exposure of raw payloads in logs (no console/logger calls in waterfall module) or API contracts (`DispatchWaterfallResponse` and `WaterfallCellPayload` schemas have no raw fields). All 31 engine test files (186 passed, 8 skipped) and `tsc --noEmit` pass cleanly.
 
+---
+
+### [2026-11-10T20:40:00Z] Team Beta | apps/engine/src/modules/waterfall/connectors | Non-Breaking
+- Added retryable `NOT_READY` connector error handling for Dropcontact: checks `success: false` on both batch submission (`POST /v1/enrich/all`) and polling fetch (`GET /v1/enrich/all/{id}`), returning `{ code: 'NOT_READY', retryable: true }` instead of treating unready polling results as a successful match with null email. Added corresponding unit tests.
+- Sanitized `raw` payload across all connectors returning provider JSON (Dropcontact, Hunter, PDL, ZeroBounce, NeverBounce, Serper, Anthropic): dropped PII and strictly allowlisted non-personal diagnostic metadata (status, counts, usage, request identifiers). Added unit tests verifying zero email addresses or API keys in `raw`.
+- All 31 engine test files (195 passed, 8 skipped) and `tsc --noEmit` pass cleanly.
+
+
 
 

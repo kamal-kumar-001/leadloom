@@ -350,6 +350,62 @@ describe('Documented Vendor Fixtures & Endpoint Contracts', () => {
     expect(res.data?.confidence).toBe(0.98);
   });
 
+  it('Dropcontact: returns retryable NOT_READY when submit returns HTTP 200 with success: false', async () => {
+    const mockFetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: false,
+        error: 'Batch queued or processing',
+      }),
+    }));
+
+    const dropcontact = new DropcontactConnector();
+    const res = await dropcontact.run(
+      { firstName: 'Alexandre', lastName: 'Cormier', domain: 'dropcontact.com' },
+      { apiKey: 'drop_token_xyz', fetch: mockFetch as any }
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('NOT_READY');
+    expect(res.error?.retryable).toBe(true);
+    expect(res.data).toBeUndefined();
+  });
+
+  it('Dropcontact: returns retryable NOT_READY when fetch returns HTTP 200 with success: false (never success with null email)', async () => {
+    const mockFetch = vi.fn(async (_url: string, init: RequestInit) => {
+      if (init.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            request_id: 'c62e584f-723a-48a8-b615-ca8f8c25785f',
+            success: true,
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: false,
+          error: 'Dropcontact results not ready (wait 30s)',
+        }),
+      };
+    });
+
+    const dropcontact = new DropcontactConnector();
+    const res = await dropcontact.run(
+      { firstName: 'Alexandre', lastName: 'Cormier', domain: 'dropcontact.com' },
+      { apiKey: 'drop_token_xyz', fetch: mockFetch as any }
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('NOT_READY');
+    expect(res.error?.retryable).toBe(true);
+    expect(res.data).toBeUndefined();
+  });
+
   it('NeverBounce: verifies GET https://api.neverbounce.com/v4.2/single/check with documented fixture', async () => {
     let capturedUrl = '';
 
@@ -632,5 +688,246 @@ describe('Documented Vendor Fixtures & Endpoint Contracts', () => {
     expect(res.success).toBe(true);
     expect(res.costMicrocents).toBe(0);
     expect(res.data?.content).toBe('Local model summary');
+  });
+
+  describe('Raw Payload Privacy & PII Isolation', () => {
+    const testApiKey = 'secret_test_key_xyz987';
+    const testEmail = 'lead.target@enterprise.com';
+
+    it('Dropcontact: raw contains only allowlisted non-personal metadata, no email or key', async () => {
+      const dropcontact = new DropcontactConnector();
+      const mockFetch = vi.fn(async (_url: string, init: RequestInit) => {
+        if (init.method === 'POST') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              request_id: 'c62e584f-723a-48a8-b615-ca8f8c25785f',
+              success: true,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: [
+              {
+                first_name: 'Alexandre',
+                last_name: 'Cormier',
+                email: [{ email: testEmail, qualification: 'nominative' }],
+              },
+            ],
+          }),
+        };
+      });
+
+      const res = await dropcontact.run(
+        { email: testEmail, company: 'Acme' },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({
+        success: true,
+        requestId: 'c62e584f-723a-48a8-b615-ca8f8c25785f',
+      });
+    });
+
+    it('Hunter: raw contains only allowlisted non-personal metadata, no email or key', async () => {
+      const hunter = new HunterConnector();
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            first_name: 'John',
+            last_name: 'Doe',
+            email: testEmail,
+            score: 85,
+            verification: { status: 'valid' },
+            sources: [],
+          },
+        }),
+      }));
+
+      const res = await hunter.run(
+        { domain: 'enterprise.com', firstName: 'John', lastName: 'Doe' },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({
+        score: 85,
+        verificationStatus: 'valid',
+      });
+    });
+
+    it('People Data Labs: raw contains only allowlisted non-personal metadata, no email or key', async () => {
+      const pdl = new PdlConnector();
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 200,
+          data: {
+            full_name: 'John Doe',
+            work_email: testEmail,
+            personal_emails: ['personal@gmail.com'],
+          },
+        }),
+      }));
+
+      const res = await pdl.run(
+        { email: testEmail },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({ status: 200 });
+    });
+
+    it('ZeroBounce: raw contains only allowlisted non-personal metadata, no email or key', async () => {
+      const zb = new ZeroBounceConnector();
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          address: testEmail,
+          account: 'lead.target',
+          domain: 'enterprise.com',
+          status: 'valid',
+          sub_status: '',
+          free_email: false,
+          mx_found: 'true',
+        }),
+      }));
+
+      const res = await zb.run(
+        { email: testEmail },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({
+        status: 'valid',
+        subStatus: '',
+        domain: 'enterprise.com',
+        freeEmail: false,
+        mxFound: true,
+      });
+    });
+
+    it('NeverBounce: raw contains only allowlisted non-personal metadata, no email or key', async () => {
+      const nb = new NeverBounceConnector();
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'success',
+          result: 'valid',
+          flags: ['has_dns_mx'],
+          suggested_correction: 'corrected@enterprise.com',
+          execution_time: 120,
+        }),
+      }));
+
+      const res = await nb.run(
+        { email: testEmail },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({
+        status: 'success',
+        result: 'valid',
+        flags: ['has_dns_mx'],
+        executionTime: 120,
+      });
+    });
+
+    it('Serper: raw contains only allowlisted non-personal metadata, no email or key', async () => {
+      const serper = new SerperConnector();
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          searchParameters: { q: `find ${testEmail}` },
+          organic: [{ title: 'Profile', link: 'https://example.com' }],
+        }),
+      }));
+
+      const res = await serper.run(
+        { query: `find ${testEmail}` },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({ totalResults: 1 });
+    });
+
+    it('Anthropic: raw contains only allowlisted non-personal metadata, no prompt/email or key', async () => {
+      const anthropic = new AnthropicConnector();
+      const mockFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'msg_123',
+          model: 'claude-3-5-sonnet-20241022',
+          content: [{ type: 'text', text: `Lead email is ${testEmail}` }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 10, output_tokens: 20 },
+        }),
+      }));
+
+      const res = await anthropic.run(
+        { messages: [{ role: 'user', content: `Analyze ${testEmail}` }] },
+        { apiKey: testApiKey, fetch: mockFetch as any }
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.raw).toBeDefined();
+      const rawStr = JSON.stringify(res.raw);
+      expect(rawStr).not.toContain(testEmail);
+      expect(rawStr).not.toContain('@');
+      expect(rawStr).not.toContain(testApiKey);
+      expect(res.raw).toEqual({
+        id: 'msg_123',
+        model: 'claude-3-5-sonnet-20241022',
+        stopReason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 20 },
+      });
+    });
   });
 });

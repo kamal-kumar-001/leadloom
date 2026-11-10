@@ -133,6 +133,7 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
         result?: string;
         flags?: string[];
         suggested_correction?: string;
+        execution_time?: number;
       };
 
       let result: NeverBounceOutput['result'] = 'unknown';
@@ -160,12 +161,6 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
           confidence = 0.3;
       }
 
-      // Redact any possible key echoes in raw payload
-      const sanitizedRaw = JSON.parse(redactSecrets(JSON.stringify(json), [ctx.apiKey])) as Record<
-        string,
-        unknown
-      >;
-
       return {
         success: true,
         latencyMs,
@@ -175,7 +170,12 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
           suggestedCorrection: json.suggested_correction || null,
           confidence,
         },
-        raw: sanitizedRaw,
+        raw: {
+          status: json.status,
+          result,
+          flags: json.flags ?? [],
+          executionTime: json.execution_time,
+        },
       };
     } catch (err) {
       return {

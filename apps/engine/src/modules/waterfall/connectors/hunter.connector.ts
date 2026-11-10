@@ -160,7 +160,11 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
             verificationStatus: null,
             confidence: 0,
           },
-          raw: json as Record<string, unknown>,
+          raw: {
+            score: 0,
+            status: 'not_found',
+            verificationStatus: null,
+          },
         };
       }
 
@@ -185,7 +189,10 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
           company: data.company,
           confidence,
         },
-        raw: json as Record<string, unknown>,
+        raw: {
+          score: rawScore,
+          verificationStatus,
+        },
       };
     } catch (err) {
       return {

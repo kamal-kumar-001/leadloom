@@ -156,6 +156,18 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
         error?: string;
       };
 
+      if (submitJson.success === false) {
+        return {
+          success: false,
+          latencyMs: Date.now() - start,
+          error: {
+            code: 'NOT_READY',
+            message: submitJson.error ?? 'Dropcontact submission not ready / queued',
+            retryable: true,
+          },
+        };
+      }
+
       const requestId = submitJson.request_id;
       if (!requestId) {
         return {
@@ -200,6 +212,7 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
 
       const resultJson = (await resultResponse.json()) as {
         success?: boolean;
+        error?: string;
         data?: Array<{
           first_name?: string;
           last_name?: string;
@@ -209,6 +222,18 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
           phone?: string;
         }>;
       };
+
+      if (resultJson.success === false) {
+        return {
+          success: false,
+          latencyMs,
+          error: {
+            code: 'NOT_READY',
+            message: resultJson.error ?? 'Dropcontact enrichment results not ready (wait 30s)',
+            retryable: true,
+          },
+        };
+      }
 
       const record = resultJson.data?.[0];
       const primaryEmail = record?.email?.[0];
@@ -237,7 +262,10 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
           requestId,
           confidence,
         },
-        raw: resultJson as Record<string, unknown>,
+        raw: {
+          success: resultJson.success,
+          requestId,
+        },
       };
     } catch (err) {
       return {

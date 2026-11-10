@@ -179,7 +179,9 @@ export class SerperConnector implements Connector<SerperInput, SerperOutput> {
           knowledgeGraph: json.knowledgeGraph,
           totalResults: organic.length,
         },
-        raw: json as Record<string, unknown>,
+        raw: {
+          totalResults: organic.length,
+        },
       };
     } catch (err) {
       return {
