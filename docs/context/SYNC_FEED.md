@@ -178,3 +178,10 @@
 - GitHub now requires a live primary+verified email from `/user/emails` (scope `read:user user:email`). Build-time secret literal removed. Dev admin needs `LEADLOOM_DEV_ADMIN_ENABLED=true` and is refused in production.
 - `/app` layout fails closed: renders only after the engine returned a userId; every other state shows an error or a loading screen.
 - Verified locally (real HTTP through Next on :3000 + engine harness): register, wrong and right login, unverified login redirect `code=email_not_verified`, session JSON has no token, proxy `/auth/me` 200, no-session proxy 401, POST without Origin 403, login path blocked 404, no password or code in logs. `tsc` and `next build` clean.
+
+---
+
+### [2026-11-10T23:25:00Z] Team Beta | apps/web auth screens | Non-Breaking
+- Built Stage 1 email/password and 6-digit OTP verification/reset screens in `apps/web`: `components/auth/**` (shared `AuthCard`, `PasswordInput` with show/hide, `OtpInput`, `ResendCountdown` with 60s cooldown, `AuthAlert`, `OAuthButtons`), `app/login/page.tsx` (`signIn('credentials')` with generic credential errors & unverified routing), `app/signup/page.tsx`, `app/verify-email/page.tsx`, and `app/forgot-password/page.tsx` (request, 6-digit code, new password).
+- All screens use theme tokens (0 hardcoded colors) and call same-origin `/api/auth-flow/<action>`. `tsc --noEmit` and `next build` (19/19 routes) pass cleanly.
+
