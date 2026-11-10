@@ -168,3 +168,13 @@
   - Gated `/app` on engine identity (`GET /auth/me`) and first-time provisioning (`POST /auth/provision`).
   - Added strict transparent error handling in `apps/web/lib/engine-client.ts`: live engine failures throw `EngineClientError` without silently masking failures as mock successes.
   - Clean `next build` across all 17 routes with 0 errors.
+
+---
+
+### [2026-11-10T17:50:00Z] Team Gamma | apps/web auth paths | Revised ownership + Non-Breaking
+- Gamma now owns `apps/web/auth.ts`, `auth.config.ts`, `app/api/**`, `app/app/layout.tsx`, `lib/engine-client.ts`, `lib/engine-server.ts` (was Alpha; Alpha's work preserved, pull before editing these). Beta owns the email/password and OTP screens (see BETA_BRIEF.md). Alpha: L0 text removal and dashboard shell.
+- Browser never calls the engine directly (measured CORS failure). Same-origin `/api/engine/*` proxy attaches the credential from the server session; `/api/auth-flow/<action>` forwards the public OTP steps. `/api/engine-token` removed (the browser no longer needs a token). Server env: `ENGINE_URL` (default http://127.0.0.1:4010), `LEADLOOM_PASSWORD_AUTH_ENABLED` (default off).
+- Credentials provider (flag-gated) calls the engine `/auth/login`; engine session token lives only in the encrypted Auth.js cookie, never in `/api/auth/session`. A credentials session can never mint a bridge token. Error codes via `signIn`: `email_not_verified`, `invalid_credentials`.
+- GitHub now requires a live primary+verified email from `/user/emails` (scope `read:user user:email`). Build-time secret literal removed. Dev admin needs `LEADLOOM_DEV_ADMIN_ENABLED=true` and is refused in production.
+- `/app` layout fails closed: renders only after the engine returned a userId; every other state shows an error or a loading screen.
+- Verified locally (real HTTP through Next on :3000 + engine harness): register, wrong and right login, unverified login redirect `code=email_not_verified`, session JSON has no token, proxy `/auth/me` 200, no-session proxy 401, POST without Origin 403, login path blocked 404, no password or code in logs. `tsc` and `next build` clean.

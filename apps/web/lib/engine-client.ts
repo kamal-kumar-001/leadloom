@@ -32,68 +32,25 @@ export interface EngineAuthMe {
 }
 
 /**
- * Fetch the short-lived HS256 bridge JWT minted by apps/web/app/api/engine-token
- */
-export async function getEngineToken(): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
-
-  const now = Date.now();
-  if (memoryTokenCache && memoryTokenCache.expiresAt - now > 60_000) {
-    return memoryTokenCache.token;
-  }
-
-  try {
-    const res = await fetch('/api/engine-token', {
-      method: 'GET',
-      headers: { 'Cache-Control': 'no-cache' },
-    });
-
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) return null;
-      throw new EngineClientError('Failed to retrieve bridge token', res.status);
-    }
-
-    const data = await res.json();
-    if (data.token) {
-      memoryTokenCache = {
-        token: data.token,
-        expiresAt: now + 840_000,
-      };
-      return data.token;
-    }
-    return null;
-  } catch (err) {
-    if (err instanceof EngineClientError) throw err;
-    return null;
-  }
-}
-
-/**
  * Unified fetch wrapper communicating with apps/engine
  */
 export async function engineFetch<T>(
   path: string,
   options: RequestInit = {}
-): Promise<{ data: T | null; isMock: boolean; error?: string }> {
-  const engineBaseUrl =
-    process.env.NEXT_PUBLIC_ENGINE_URL || 'http://127.0.0.1:4100';
-  const token = await getEngineToken();
-
+): Promise<{ data: T | null; isMock: boolean; error?: string; status?: number }> {
+  // Same-origin proxy: the server attaches the engine credential from the session cookie.
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const res = await fetch(`${engineBaseUrl}${path}`, {
+    const res = await fetch(`/api/engine${path}`, {
       ...options,
+      credentials: 'same-origin',
       headers,
       signal: controller.signal,
     });
@@ -142,6 +99,7 @@ export async function engineFetch<T>(
       data: null,
       isMock: false,
       error: message,
+      status: err instanceof EngineClientError ? err.statusCode : undefined,
     };
   }
 }
@@ -149,9 +107,9 @@ export async function engineFetch<T>(
 /**
  * Verified WhoAmI check: queries GET /auth/me on engine to verify identity, workspace and role
  */
-export async function fetchAuthMe(): Promise<{ data: EngineAuthMe | null; error?: string }> {
+export async function fetchAuthMe(): Promise<{ data: EngineAuthMe | null; error?: string; status?: number }> {
   const res = await engineFetch<EngineAuthMe>('/auth/me', { method: 'GET' });
-  return { data: res.data, error: res.error };
+  return { data: res.data, error: res.error, status: res.status };
 }
 
 /**
@@ -162,21 +120,11 @@ export async function provisionWorkspace(name?: string): Promise<{
   status: 'created' | 'already_exists' | 'rate_limited' | 'error';
   error?: string;
 }> {
-  const token = await getEngineToken();
-  if (!token) {
-    return { success: false, status: 'error', error: 'Authentication bridge token required' };
-  }
-
-  const engineBaseUrl =
-    process.env.NEXT_PUBLIC_ENGINE_URL || 'http://127.0.0.1:4100';
-
   try {
-    const res = await fetch(`${engineBaseUrl}/auth/provision`, {
+    const res = await fetch('/api/engine/auth/provision', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: name || null }),
     });
 

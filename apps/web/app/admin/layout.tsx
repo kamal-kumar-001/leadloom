@@ -16,7 +16,7 @@ export default function AdminLayout({
 
   // Platform admin table does not exist in the engine yet.
   // Gated strictly closed (deny) outside explicit dev flag.
-  const isDevAdmin = process.env.NEXT_PUBLIC_DEV_ADMIN_ENABLED === 'true';
+  const isDevAdmin = process.env.NEXT_PUBLIC_DEV_ADMIN_ENABLED === 'true' && process.env.NODE_ENV !== 'production';
 
   if (!isDevAdmin) {
     return (

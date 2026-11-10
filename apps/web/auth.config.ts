@@ -20,7 +20,7 @@ export const authConfig = {
         // Platform privileges must never come from a self-asserted email string.
         // Admin access is decided by the engine from its own tables.
         // Until a platform-admin table exists, /admin stays closed (deny) outside an explicit dev flag.
-        if (process.env.LEADLOOM_DEV_ADMIN_ENABLED === 'true') {
+        if (process.env.LEADLOOM_DEV_ADMIN_ENABLED === 'true' && process.env.NODE_ENV !== 'production') {
           return true;
         }
         return false;

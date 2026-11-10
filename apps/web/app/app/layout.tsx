@@ -20,45 +20,49 @@ export default function AppLayout({
 
   useEffect(() => {
     let mounted = true;
+    // Fail closed: the app renders only after the engine itself returned a userId for this session.
     async function checkEngineIdentity() {
       try {
-        const { data, error } = await fetchAuthMe();
+        let me = await fetchAuthMe();
         if (!mounted) return;
-
-        if (data?.userId) {
+        if (me.data?.userId) {
           setEngineState({ status: 'verified' });
           return;
         }
 
-        // If engine session is unauthorized, attempt self-provisioning via bridge token
-        if (error?.includes('401') || error?.includes('Authentication required')) {
+        if (me.status === 401) {
+          // Signed in on the web but unknown to the engine: first sign-in provisions a workspace.
           setEngineState({ status: 'provisioning' });
-          const provRes = await provisionWorkspace();
+          const prov = await provisionWorkspace();
           if (!mounted) return;
-
-          if (provRes.success || provRes.status === 'already_exists') {
-            setEngineState({ status: 'verified' });
-          } else if (provRes.status === 'rate_limited') {
+          if (prov.status === 'rate_limited') {
             setEngineState({
               status: 'error',
-              error: 'Signup rate limit exceeded on engine (hourly cap active). Please try again later.',
+              error: 'Sign-up rate limit reached. Please try again later.',
             });
-          } else {
-            setEngineState({
-              status: 'error',
-              error: provRes.error || 'Failed to auto-provision workspace in engine.',
-            });
+            return;
           }
+          // Whatever provisioning said, trust only a fresh answer from the engine.
+          me = await fetchAuthMe();
+          if (!mounted) return;
+          if (me.data?.userId) {
+            setEngineState({ status: 'verified' });
+            return;
+          }
+          setEngineState({
+            status: 'error',
+            error: prov.error || 'Your session could not be verified. Please sign in again.',
+          });
           return;
         }
 
-        // Fallback for offline dev
-        setEngineState({ status: 'verified' });
-      } catch (err: unknown) {
+        setEngineState({
+          status: 'error',
+          error: me.error || 'The service is unavailable right now. Please retry.',
+        });
+      } catch {
         if (mounted) {
-          setEngineState({
-            status: 'verified', // Render offline demo UI
-          });
+          setEngineState({ status: 'error', error: 'The service is unavailable right now. Please retry.' });
         }
       }
     }
@@ -90,6 +94,14 @@ export default function AppLayout({
           <RefreshCw className="w-3.5 h-3.5" />
           <span>Retry Connection</span>
         </Button>
+      </div>
+    );
+  }
+
+  if (engineState.status !== 'verified') {
+    return (
+      <div className="min-h-screen bg-canvas flex items-center justify-center font-sans text-xs text-text-muted">
+        {engineState.status === 'provisioning' ? 'Setting up your workspace…' : 'Verifying your session…'}
       </div>
     );
   }
