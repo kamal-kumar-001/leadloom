@@ -16,23 +16,18 @@ Done: `npx vitest run` and `npx tsc --noEmit` pass in `apps/engine`.
 
 
 ---
-## Beta: bounded Stage 1 login task (2026-11-10 22:45 IST, from Kamal's "assign some tasks to team B")
-This is the only active task. Connectors, waterfall, Stage 2 and 3 stay parked. Rules: `git pull --rebase origin main` before every push, never force-push, rerun checks after any merge, commit as Kamal, main only, never touch `.env`, never run update.sh, no deploy, no real email, no provider calls, no secrets in code or logs.
+## Beta: Stage 1 login screens (re-scoped 2026-11-10 23:15 IST; Kamal does the detailed testing, so this is BUILD work, no test matrix)
+Replaces the earlier test-suite task. Connectors stay parked. Rules: `git pull --rebase origin main` before every push, no force-push, rerun `tsc` and `next build` after any merge, commit as Kamal, main only, never touch `.env`, never run update.sh, no deploy, no real email, no secrets in code or logs, no mock success: a failed call shows the engine's real error.
 
-**Goal: an independent black-box login test suite**, so Stage 1 is judged by someone other than the author. You write tests only. Do not edit `apps/engine/src/modules/auth/**` (Gamma), `apps/web/**` (Alpha) or `packages/database/**`. If a test finds a bug, report it in `docs/context/SYNC_FEED.md` with the request, the actual response and the expected one. Do not fix it yourself.
+Build the email/password and emailed-OTP screens in `apps/web`, matching the current theme tokens (no hard-coded colors, light and dark) and reusing `@leadloom/ui`. Same step pattern as BakeryPOS `apps/web/app/forgot-password/page.tsx` (email, then 6-digit code with resend countdown, then new password with show/hide). One shared component set for signup verification and reset.
 
-Write only in `tests/login-e2e/**` (new directory) plus your SYNC_FEED entry.
-1. Read the contract in `docs/plan/STAGES.md` (Stage 1, engine endpoints `/auth/register`, `/auth/verify-email`, `/auth/resend-verification`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/me`, `/auth/provision`).
-2. Start the engine only with `DATABASE_URL=postgresql://...@localhost/<throwaway db> sh scripts/dev/stage1-harness.sh up` (refuses non-local DBs; mail goes to a local file sink, no mail is sent; stop it with `down`). Use a throwaway local Postgres you create yourself. If none is available, say so in SYNC_FEED and stop; do not fake results.
-3. Tests (plain Node `fetch` over HTTP, `node --test` or vitest, whichever the repo already uses), each asserting status and body shape:
-   - signup then wrong code, right code, reused code, expired code (set the TTL by env if supported, else mark "not covered");
-   - login before verification is refused; after verification returns a session; wrong password gives the same generic error as an unknown email (no account enumeration; compare bodies);
-   - resend cooldown and attempt cap;
-   - reset: wrong code, right code, old session rejected afterwards;
-   - signup code cannot be used for reset;
-   - `/auth/me` with no token, a malformed token, a token signed with the wrong key: all 401;
-   - a password-session token must be refused by `/auth/provision` (it must never act as a bridge token);
-   - rate limits return 429 and do not lock out a different email;
-   - the response bodies and the engine log contain neither the code nor the password.
-4. Output: a short `tests/login-e2e/README.md` with how to run it and a results table (test, pass/fail, evidence line from the actual run with timestamp). Anything not run is marked "not run", never "pass".
-5. Report in `docs/context/SYNC_FEED.md` when pushed.
+Your files (create or edit only these): `apps/web/components/auth/**` (new), `apps/web/app/login/page.tsx`, `apps/web/app/signup/page.tsx`, `apps/web/app/forgot-password/page.tsx` (new), `apps/web/app/verify-email/page.tsx` (new). Keep the existing Google and GitHub buttons.
+Gamma builds (do not touch): `apps/web/auth.ts`, `auth.config.ts`, `app/api/**`, `app/app/layout.tsx`, `lib/engine-client.ts`.
+Alpha keeps: dashboard shell and the L0 text removal in marketing files (see `LANDING.md`). Do not edit those.
+
+Contracts you call:
+- Login: `signIn('credentials', { email, password, redirect: false })` from `next-auth/react`. Gamma wires the provider. Show "Email not verified" and send the user to the verify step when the result error code is `email_not_verified`. Any other failure shows one generic message ("Email or password is incorrect"). Never reveal whether the email exists.
+- Everything else goes to the same-origin route `POST /api/auth-flow/<action>` with a JSON body, where action is one of `register`, `verify-email`, `resend-verification`, `forgot-password`, `reset-password`. Bodies are exactly the engine's: register `{email,password}` (read `apps/engine/src/modules/auth/` routes and `docs/plan/STAGES.md` for exact fields and response codes), verify-email `{email,code}`, resend-verification `{email}`, forgot-password `{email}`, reset-password `{email,code,password}`. The browser never calls the engine directly (it would fail on CORS).
+- Show real states: 400 invalid or expired code (generic), 429 rate limit with a wait message, 503 mail disabled ("Email sign-up is not available yet"), network error. Resend button honors a 60 second cooldown. Password rules: min length per the engine's error message; do not invent stricter client rules.
+- No mock data, no fake success, no "check your inbox" screen when the engine said it could not send.
+Done: `npx tsc --noEmit` and `next build` pass in `apps/web`. Report in `docs/context/SYNC_FEED.md`, one short entry.

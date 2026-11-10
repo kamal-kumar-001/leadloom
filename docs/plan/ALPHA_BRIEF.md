@@ -63,3 +63,6 @@ Stage 1 readiness checklist (all must hold, fail closed on every one): engine er
 
 ---
 **Update 2026-11-10 22:45 IST (Kamal): proprietary, not open source.** Do L0 in `LANDING.md` now (text removal only), after the Stage 1 fixes list above. The landing redesign (light theme, gradients, hero email CTA, mega menus) is Stage 4; read `LANDING.md` for the rules (honest links, no fake capture success, no invented numbers). No new Phase 2 work.
+
+---
+**Update 23:15 IST: ownership split for Stage 1 login.** Gamma now edits `apps/web/auth.ts`, `auth.config.ts`, `app/api/**`, `app/app/layout.tsx` and `lib/engine-client.ts` (items 1, 2, 4, 5, 6 above). Beta builds the email/password and OTP screens (`components/auth/**`, login, signup, forgot-password and verify-email pages), item 3. Alpha: do not edit those files; do L0 text removal in marketing and connector files, then the dashboard shell. Pull --rebase before every push.
