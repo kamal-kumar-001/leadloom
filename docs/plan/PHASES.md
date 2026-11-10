@@ -1,3 +1,5 @@
+> **Superseded for ordering by `STAGES.md` (2026-11-10 21:53 IST).** Work is now strictly sequential: login, then dashboard, then connectors. Ground rules below still apply.
+
 # LeadLoom: Working-Product Plan (phases and teams)
 
 Direction from Kamal (2026-11-10): functionality first. Design polish comes later. Everything below keeps the main-only workflow. All new capability ships default-off behind flags. Nothing here implies a deploy, real provider calls, real sends or spend.

@@ -1,3 +1,5 @@
+> **Paused (2026-11-10 21:53 IST).** See `STAGES.md`. Connectors come in stage 3, after login and dashboard work. Finish only in-flight work that is safe to stop.
+
 # Team Beta brief (Antigravity, lab PC)
 
 Read first: `docs/plan/PHASES.md`, `docs/plan/CONNECTORS.md`, `docs/context/TEAM_CONTEXT_BETA.md`.

@@ -1,3 +1,5 @@
+> **Read `STAGES.md` first.** Current job: stage 1 login end to end. Pause connector hub, CSV import, DNS inspector and other Phase 2 items. The blockers section at the bottom is the stage 1 checklist.
+
 # Team Alpha brief (for Kamal to assign)
 
 Read first: `docs/plan/PHASES.md`, `docs/context/TEAM_CONTEXT_ALPHA.md`, last 20 lines of `docs/context/SYNC_FEED.md`.
@@ -25,7 +27,7 @@ These are release blockers. Fix them in Alpha-owned paths. Gamma has changed onl
 1. **Credentials login accepts any email with no password check** (`apps/web/auth.ts`). Anyone can sign in as any address. Remove the Credentials provider from anything that can reach production, or put it behind an explicit dev-only flag that is off by default and refuses to start when `NODE_ENV=production`. No password handling without real verification.
 2. **Role from an email string.** `operator@leadloom.dev` and `admin@leadloom.dev` become `platform_admin` by string match (`auth.ts`, `auth.config.ts`). Platform privileges must never come from a self-asserted email. Admin access is decided by the engine from its own tables. Until a platform admin table exists, `/admin` stays closed (deny) outside a dev flag. UI role checks are display only, the engine decides.
 3. **Hardcoded fallback secrets** (`NEXTAUTH_SECRET` and the engine-token bridge key fall back to a literal in source). Fail closed: if the secret is missing, refuse to start and refuse to mint. No fallback literal.
-4. **`/api/engine-token` hardcodes `email_verified: true`.** It must mint only for a session whose provider verified the email (Google or GitHub), and must include the claim `idp` set to `google` or `github`. The engine now REQUIRES `idp` in {google, github} and rejects anything else, so tokens from the credentials provider can never be accepted. Do not pad or derive the key from a short secret: reject a bridge secret shorter than 32 bytes.
+4. **`/api/engine-token` hardcodes `email_verified: true`.** It must mint only for a session whose provider verified the email (Google or GitHub), and must include the claim `idp` set to `google` or `github`, both taken from the authenticated provider account (`account.provider` and the provider's own verified-email signal), never defaulted. Fail closed when unavailable. The engine now REQUIRES `idp` in {google, github} and rejects anything else, so tokens from the credentials provider can never be accepted. Do not pad or derive the key from a short secret: reject a bridge secret shorter than 32 bytes.
 5. **Mock vs live.** Any mock fallback in the engine client must be explicit and visible in the UI (a "demo data" badge). It must never run silently after a live call fails, and must never imply a save or a Test Connection succeeded.
 6. **Phase 2 plan checks** (planned, not built):
    - Inventory: Beta ships 10 connectors (apollo, hunter, dropcontact, pdl, zerobounce, neverbounce, serper, openai, anthropic, ollama). Say 10, not 11, until an eleventh exists.
