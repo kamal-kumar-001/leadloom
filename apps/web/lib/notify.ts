@@ -30,63 +30,51 @@ function hashMessage(type: string, message: string, description?: string): strin
 }
 
 /**
- * Maps raw exceptions, EngineClientError, HTTP status codes, and network failures
- * into short, human-friendly plain sentences. Never leaks stacks or internal engine details.
+ * A message authored in our own code that is safe to show a user as-is.
+ * This is the ONLY way an Error's text reaches the screen.
+ */
+export class UserMessageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UserMessageError';
+  }
+}
+
+const GENERIC = 'Something went wrong. Please try again.';
+
+/** Allowlist of engine-client error codes with fixed, user-safe wording. */
+const CODE_MESSAGES: Record<string, string> = {
+  VAULT_UNAVAILABLE: 'The vault is unavailable right now. No changes were made.',
+};
+
+/**
+ * Explicit safe-message contract. Thrown errors are never shown by their own text:
+ * - UserMessageError: its authored message.
+ * - EngineClientError: an allowlisted code message, else wording chosen by HTTP status.
+ * - network aborts: a fixed connectivity sentence.
+ * - anything else: a generic sentence.
+ * Strings passed directly to notify.error are caller-authored messages, not caught errors.
+ * The raw error goes to the browser console for diagnostics only (never into the UI).
  */
 export function mapErrorMessage(error: unknown): string {
-  if (!error) {
-    return 'An unexpected issue occurred. Please try again.';
-  }
-
-  // Already an EngineClientError instance with status code
+  if (typeof error === 'string') return error.trim() || GENERIC;
+  if (error instanceof UserMessageError) return error.message;
   if (error instanceof EngineClientError) {
-    if (error.statusCode === 401) {
-      return 'Your session has expired. Please sign in again.';
-    }
-    if (error.statusCode === 403) {
-      return 'You do not have permission to perform this action.';
-    }
-    if (error.statusCode === 404) {
-      return 'The requested resource was not found.';
-    }
-    if (error.statusCode === 409) {
-      return 'This record already exists or conflicts with current state.';
-    }
-    if (error.statusCode === 429) {
-      return 'Rate limit reached. Please wait a moment before trying again.';
-    }
-    if (error.statusCode && error.statusCode >= 500) {
-      return 'The service is temporarily unavailable. Please try again shortly.';
-    }
-    if (error.message && !error.message.includes('\n') && !error.message.includes('{')) {
-      return error.message;
-    }
-    return 'Service error occurred. Please try again.';
+    if (error.code && CODE_MESSAGES[error.code]) return CODE_MESSAGES[error.code];
+    const status = error.statusCode;
+    if (status === 401) return 'Your session has expired. Please sign in again.';
+    if (status === 403) return 'You do not have permission to do this.';
+    if (status === 404) return 'That item was not found.';
+    if (status === 409) return 'This conflicts with the current state. Refresh and try again.';
+    if (status === 400 || status === 422) return 'The request was not accepted. Check the values and try again.';
+    if (status === 429) return 'Too many requests. Please wait a moment and try again.';
+    if (status && status >= 500) return 'The service is temporarily unavailable. Please try again shortly.';
+    return GENERIC;
   }
-
-  if (error instanceof Error) {
-    const msg = error.message;
-    if (error.name === 'AbortError' || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('connection error')) {
-      return 'Unable to connect to the server. Please check your network.';
-    }
-    // Reject strings with stack traces, raw json, or file paths
-    if (msg.includes('\n') || msg.includes('{') || msg.includes('at ') || msg.includes('apps/engine')) {
-      return 'An unexpected service error occurred. Please try again.';
-    }
-    return msg;
+  if (error instanceof Error && (error.name === 'AbortError' || /failed to fetch|networkerror/i.test(error.message))) {
+    return 'Unable to reach the server. Check your connection and try again.';
   }
-
-  if (typeof error === 'string') {
-    if (error.includes('{') || error.includes('\n') || error.includes('at ') || error.includes('apps/engine')) {
-      return 'An unexpected error occurred. Please try again.';
-    }
-    if (error.includes('Failed to fetch') || error.includes('Network connection error') || error.includes('NetworkError')) {
-      return 'Unable to connect to the server. Please check your network.';
-    }
-    return error;
-  }
-
-  return 'An unexpected error occurred. Please try again.';
+  return GENERIC;
 }
 
 export const notify = {
@@ -119,6 +107,7 @@ export const notify = {
 
   error(errorOrMessage: unknown, options?: NotifyOptions): string | number {
     const message = mapErrorMessage(errorOrMessage);
+    if (typeof errorOrMessage !== 'string' && typeof console !== 'undefined') console.debug('[notify]', errorOrMessage);
     const id = options?.id || hashMessage('error', message, options?.description);
 
     // Errors with an interactive action (e.g. Retry) must stay until dismissed

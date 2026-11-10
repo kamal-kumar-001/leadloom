@@ -55,7 +55,7 @@ export function ConnectorCard({
       if (res.success) {
         notify.success(`[${meta.name}] Handshake verified (${res.latencyMs}ms)`);
       } else {
-        notify.error(`[${meta.name}] Verification failed: ${res.message}`);
+        notify.error(`[${meta.name}] Verification did not complete.`);
       }
     } catch (err: unknown) {
       notify.error(err);
