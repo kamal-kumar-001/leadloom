@@ -14,8 +14,8 @@ export class WaterfallController {
     return this.waterfallService.estimatePreFlight(validated);
   }
 
-  public async dispatch(body: unknown): Promise<DispatchWaterfallResponse> {
+  public async dispatch(body: unknown, workspaceId?: string): Promise<DispatchWaterfallResponse> {
     const validated = DispatchWaterfallRequestSchema.parse(body);
-    return this.waterfallService.dispatchWaterfall(validated);
+    return this.waterfallService.dispatchWaterfall(validated, workspaceId);
   }
 }

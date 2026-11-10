@@ -97,3 +97,10 @@
 - Enforced strict credential safety: all key-based connectors fail closed with `MISSING_CREDENTIAL` when credentials are omitted (never mock success), support custom fetch/retry/timeout, and never leak secret tokens in output.
 - Added comprehensive test suite (`connectors.spec.ts`) with recorded fixtures and zero real provider calls. Engine vitest (148 passed across 22 test files) and `tsc --noEmit` pass cleanly.
 
+---
+
+### [2026-11-10T19:00:00Z] Team Beta | apps/engine/src/modules/waterfall | Non-Breaking
+- Implemented entitlement gating in `WaterfallService` and `WaterfallController` via injected `WaterfallEntitlementPort` (no hard-coded plan checks; pure policy evaluation via `checkFeature('waterfall')` and `checkLimit('enrichment_credits_per_month', rowCount)`).
+- Gated both bulk waterfall batch dispatch and single-row enrichment executions against plan features and monthly credit limits with structured `WaterfallEntitlementError`.
+- Added unit test suite `waterfall-entitlements.spec.ts` covering feature checks, credit limits, single-row consumption, unconfigured posture, and controller workspace delegation. All 28 engine test files (167 passed, 5 skipped) and `tsc --noEmit` pass cleanly.
+
