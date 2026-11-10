@@ -156,5 +156,15 @@
 - Shipped `AddWaterfallModal` allowing users to configure multi-tier enrichment cascades and early-exit predicates directly on the table canvas.
 - Shipped `DnsInspectorModal` with copyable SPF, DKIM, and DMARC DNS configuration records and health badges.
 - Shipped rate-limited public waitlist proxy `/api/v/[slug]/leads` (5 requests / 10 min sliding window) protecting smoke-test pages from bot flood abuse.
-- Verification: clean production build (`17/17` routes) and screenshot regression suite verified across all 36 route/viewport/theme combinations with 0 errors.
 
+---
+
+### [2026-11-10T22:20:00Z] Team Alpha | apps/web | Non-Breaking
+- Resolved all Stage 1 login blockers per STAGES.md and ALPHA_BRIEF.md:
+  - Removed password-less Credentials provider from `apps/web/auth.ts`; configured OAuth SSO providers (Google & GitHub) with verified email claims.
+  - Eliminated UI self-asserted role mappings; `/admin` is closed by default unless `NEXT_PUBLIC_DEV_ADMIN_ENABLED === 'true'`.
+  - Failed closed on missing or short (<32 bytes) secrets for `AUTH_SECRET` and `LEADLOOM_NEXTAUTH_BRIDGE_SECRET`; removed all hardcoded fallback literals.
+  - Enforced `/api/engine-token` minting strictly with `idp` in `['google', 'github']` and `email_verified: true`.
+  - Gated `/app` on engine identity (`GET /auth/me`) and first-time provisioning (`POST /auth/provision`).
+  - Added strict transparent error handling in `apps/web/lib/engine-client.ts`: live engine failures throw `EngineClientError` without silently masking failures as mock successes.
+  - Clean `next build` across all 17 routes with 0 errors.

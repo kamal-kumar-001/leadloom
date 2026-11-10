@@ -13,25 +13,33 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized: valid session required' }, { status: 401 });
   }
 
-  let key: Buffer;
-  if (process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET) {
-    // Engine in apps/engine/src/main.ts decodes this as base64
-    const b64Buf = Buffer.from(process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET, 'base64');
-    if (b64Buf.length >= 32) {
-      key = b64Buf;
-    } else {
-      key = Buffer.from(process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET, 'utf-8');
-    }
-  } else {
-    const rawSecret =
-      process.env.NEXTAUTH_SECRET ||
-      'leadloom-insecure-dev-secret-key-at-least-32-chars-long-0123456789';
-    key = Buffer.from(rawSecret, 'utf-8');
+  // 1. Fail closed on bridge secret: must exist and be >= 32 bytes base64 decoded
+  const rawSecret = process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET;
+  if (!rawSecret) {
+    return NextResponse.json(
+      { error: 'Bridge secret not configured (LEADLOOM_NEXTAUTH_BRIDGE_SECRET required)' },
+      { status: 500 }
+    );
   }
 
-  // Ensure bridge secret has at least 32 bytes
+  const key = Buffer.from(rawSecret, 'base64');
   if (key.length < 32) {
-    key = Buffer.concat([key, Buffer.alloc(32 - key.length, 0)]);
+    return NextResponse.json(
+      { error: 'Bridge secret must be at least 32 bytes (base64 decoded)' },
+      { status: 500 }
+    );
+  }
+
+  // 2. Validate provider evidence from session: MUST be verified Google or GitHub
+  const user = session.user as Record<string, unknown> | undefined;
+  const idp = user?.idp as string | undefined;
+  const emailVerified = user?.email_verified as boolean | undefined;
+
+  if (!idp || (idp !== 'google' && idp !== 'github') || emailVerified !== true) {
+    return NextResponse.json(
+      { error: 'Engine bridge requires a verified Google or GitHub session' },
+      { status: 403 }
+    );
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -44,6 +52,7 @@ export async function GET() {
     aud: BRIDGE_AUDIENCE,
     email: session.user.email.trim().toLowerCase(),
     email_verified: true,
+    idp,
     iat: now,
     exp,
   });

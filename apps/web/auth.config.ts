@@ -3,6 +3,7 @@ import type { NextAuthConfig } from 'next-auth';
 export const authConfig = {
   pages: {
     signIn: '/login',
+    error: '/login',
   },
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
@@ -16,17 +17,17 @@ export const authConfig = {
 
       if (isAdmin) {
         if (!isLoggedIn) return false;
-        const userEmail = auth?.user?.email?.toLowerCase() ?? '';
-        const userRole = (auth?.user as Record<string, unknown> | undefined)?.role;
-        // Restrict /admin to platform_admin or configured operator accounts
-        return (
-          userRole === 'platform_admin' ||
-          userEmail === 'operator@leadloom.dev' ||
-          userEmail === 'admin@leadloom.dev'
-        );
+        // Platform privileges must never come from a self-asserted email string.
+        // Admin access is decided by the engine from its own tables.
+        // Until a platform-admin table exists, /admin stays closed (deny) outside an explicit dev flag.
+        if (process.env.LEADLOOM_DEV_ADMIN_ENABLED === 'true') {
+          return true;
+        }
+        return false;
       }
+
       return true;
     },
   },
-  providers: [], // Configured with full providers in auth.ts
+  providers: [], // Configured with verified identity providers in auth.ts
 } satisfies NextAuthConfig;

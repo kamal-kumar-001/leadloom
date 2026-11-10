@@ -91,7 +91,9 @@ try {
     NODE_ENV: 'production',
     AUTH_TRUST_HOST: 'true',
     NEXTAUTH_URL: `http://127.0.0.1:${port}`,
-    NEXTAUTH_SECRET: 'leadloom-insecure-dev-secret-key-at-least-32-chars-long-0123456789',
+    AUTH_SECRET: process.env.AUTH_SECRET || 'stage1-verification-auth-secret-32-bytes-long-key',
+    NEXTAUTH_SECRET: process.env.AUTH_SECRET || 'stage1-verification-auth-secret-32-bytes-long-key',
+    NEXT_PUBLIC_DEV_ADMIN_ENABLED: 'true',
   };
 
   if (hasStandalone) {

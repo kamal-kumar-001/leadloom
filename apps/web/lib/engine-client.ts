@@ -25,6 +25,12 @@ export class EngineClientError extends Error {
   }
 }
 
+export interface EngineAuthMe {
+  userId: string;
+  workspaceId: string;
+  role: string;
+}
+
 /**
  * Fetch the short-lived HS256 bridge JWT minted by apps/web/app/api/engine-token
  */
@@ -43,13 +49,12 @@ export async function getEngineToken(): Promise<string | null> {
     });
 
     if (!res.ok) {
-      if (res.status === 401) return null;
+      if (res.status === 401 || res.status === 403) return null;
       throw new EngineClientError('Failed to retrieve bridge token', res.status);
     }
 
     const data = await res.json();
     if (data.token) {
-      // Tokens have 900s TTL; cache for 840s (14 mins)
       memoryTokenCache = {
         token: data.token,
         expiresAt: now + 840_000,
@@ -71,7 +76,7 @@ export async function engineFetch<T>(
   options: RequestInit = {}
 ): Promise<{ data: T | null; isMock: boolean; error?: string }> {
   const engineBaseUrl =
-    process.env.NEXT_PUBLIC_ENGINE_URL || 'http://127.0.0.1:3001';
+    process.env.NEXT_PUBLIC_ENGINE_URL || 'http://127.0.0.1:4100';
   const token = await getEngineToken();
 
   const headers: Record<string, string> = {
@@ -95,7 +100,6 @@ export async function engineFetch<T>(
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      // Sanitize 429 and 500 error responses (Anti-Pattern #9)
       if (res.status === 429) {
         throw new EngineClientError(
           'Engine rate limit exceeded. Please wait a moment before retrying.',
@@ -106,7 +110,7 @@ export async function engineFetch<T>(
       }
       if (res.status >= 500) {
         throw new EngineClientError(
-          'Engine service temporarily unavailable. Operational telemetry active.',
+          'Engine service temporarily unavailable.',
           res.status,
           true,
           'SERVICE_UNAVAILABLE'
@@ -123,18 +127,82 @@ export async function engineFetch<T>(
     const json = await res.json();
     return { data: json as T, isMock: false };
   } catch (err: unknown) {
-    // If backend is unreachable or connection refused, signal mock fallback gracefully
     const message = err instanceof Error ? err.message : String(err);
+    // Never fail silently into mock mode after a live call fails.
+    // If mock fallback is explicitly turned on for offline demo, allow it for read routes only.
+    if (process.env.NEXT_PUBLIC_ENGINE_MOCK_FALLBACK === 'true' && options.method !== 'POST') {
+      return {
+        data: null,
+        isMock: true,
+        error: message,
+      };
+    }
+
     return {
       data: null,
-      isMock: true,
+      isMock: false,
       error: message,
     };
   }
 }
 
 /**
- * BYOK Vault Services
+ * Verified WhoAmI check: queries GET /auth/me on engine to verify identity, workspace and role
+ */
+export async function fetchAuthMe(): Promise<{ data: EngineAuthMe | null; error?: string }> {
+  const res = await engineFetch<EngineAuthMe>('/auth/me', { method: 'GET' });
+  return { data: res.data, error: res.error };
+}
+
+/**
+ * First sign-in self provisioning: calls POST /auth/provision with display name
+ */
+export async function provisionWorkspace(name?: string): Promise<{
+  success: boolean;
+  status: 'created' | 'already_exists' | 'rate_limited' | 'error';
+  error?: string;
+}> {
+  const token = await getEngineToken();
+  if (!token) {
+    return { success: false, status: 'error', error: 'Authentication bridge token required' };
+  }
+
+  const engineBaseUrl =
+    process.env.NEXT_PUBLIC_ENGINE_URL || 'http://127.0.0.1:4100';
+
+  try {
+    const res = await fetch(`${engineBaseUrl}/auth/provision`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: name || null }),
+    });
+
+    if (res.status === 429) {
+      return { success: false, status: 'rate_limited', error: 'Signup rate limit exceeded' };
+    }
+    if (res.status === 409) {
+      return { success: false, status: 'already_exists', error: 'Workspace already provisioned' };
+    }
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      return { success: false, status: 'error', error: json.error || 'Provisioning failed' };
+    }
+
+    return { success: true, status: 'created' };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      status: 'error',
+      error: err instanceof Error ? err.message : 'Engine connection failed',
+    };
+  }
+}
+
+/**
+ * Vault Services
  */
 export async function fetchVaultCredentials(): Promise<{
   credentials: MaskedBYOKCredential[];
@@ -148,12 +216,12 @@ export async function fetchVaultCredentials(): Promise<{
     return { credentials: result.data, isMock: false };
   }
 
-  // Graceful deterministic fallback
+  // Display demo sample data if engine mock fallback enabled
   const fallback: MaskedBYOKCredential[] = [
     {
       id: '00000000-0000-4000-8000-000000001001',
       provider: 'apollo',
-      label: 'Production Apollo Tier 1',
+      label: 'Sample Apollo Tier 1',
       maskedKey: 'sk-••••••••••••4a91',
       isValid: true,
       quotaRemaining: 4850,
@@ -163,22 +231,12 @@ export async function fetchVaultCredentials(): Promise<{
     {
       id: '00000000-0000-4000-8000-000000001002',
       provider: 'hunter',
-      label: 'Secondary Verification Fallback',
+      label: 'Sample Hunter Fallback',
       maskedKey: 'sk-••••••••••••b82f',
       isValid: true,
       quotaRemaining: 1200,
       lastVerifiedAt: new Date(Date.now() - 7200000).toISOString(),
       createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
-    },
-    {
-      id: '00000000-0000-4000-8000-000000001003',
-      provider: 'dropcontact',
-      label: 'EU Corporate Resolution',
-      maskedKey: 'sk-••••••••••••9c31',
-      isValid: true,
-      quotaRemaining: 320,
-      lastVerifiedAt: new Date(Date.now() - 14400000).toISOString(),
-      createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
     },
   ];
 
@@ -197,25 +255,13 @@ export async function saveVaultCredential(
     return { credential: result.data, isMock: false };
   }
 
-  // Generate masked representation client-side when in mock mode
-  const cleanKey = req.apiKey.trim();
-  const maskedKey =
-    cleanKey.length > 8
-      ? `${cleanKey.slice(0, 3)}••••••••${cleanKey.slice(-4)}`
-      : 'sk-••••••••abcd';
-
-  const mockCred: MaskedBYOKCredential = {
-    id: `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0')}`,
-    provider: req.provider,
-    label: req.label || `${req.provider.toUpperCase()} Key`,
-    maskedKey,
-    isValid: true,
-    quotaRemaining: 5000,
-    lastVerifiedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-  };
-
-  return { credential: mockCred, isMock: true };
+  // If saving fails on live engine, fail explicitly. Never pretend a save succeeded!
+  throw new EngineClientError(
+    result.error || 'Engine vault unavailable. Credential was not saved.',
+    503,
+    false,
+    'VAULT_UNAVAILABLE'
+  );
 }
 
 export async function testConnectorPing(
@@ -234,16 +280,15 @@ export async function testConnectorPing(
     return {
       success: result.data.success ?? true,
       latencyMs,
-      message: result.data.message || 'Connection verified successfully (200 OK)',
+      message: result.data.message || `Provider handshake verified (${provider})`,
     };
   }
 
-  // Deterministic mock test responses
-  await new Promise((r) => setTimeout(r, 120 + Math.random() * 80));
+  // Fail closed: test connection requires live engine and permission
   return {
-    success: true,
-    latencyMs: Math.floor(85 + Math.random() * 45),
-    message: `Provider API handshake verified: 200 OK [${provider}]`,
+    success: false,
+    latencyMs: 0,
+    message: result.error || 'Test Connection is disabled (requires live engine and permission)',
   };
 }
 
