@@ -1,0 +1,17 @@
+{
+  "name": "@leadloom/webgl-scenes",
+  "version": "1.0.0",
+  "description": "LeadLoom 3D WebGL shader assets, procedural fiber splines, and Three.js math",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "three": "^0.165.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.165.0",
+    "typescript": "^5.4.5"
+  },
+  "peerDependencies": {
+    "three": "^0.165.0"
+  }
+}

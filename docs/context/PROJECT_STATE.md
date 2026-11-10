@@ -13,13 +13,13 @@
 
 | Epic ID | Title | Status | Primary Team Owner | Physical Path | Blockers / Active Considerations |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **EPIC-01** | The Reactive Data Canvas (Grid UI) | 🟡 Spec Ready | **Team Alpha** | `apps/web/components/grid` | TanStack Virtual 3.x row/column sync; dynamic cell subscription slice |
+| **EPIC-01** | The Reactive Data Canvas (Grid UI) | 🟢 Complete & Verified | **Team Alpha** | `apps/web/components/grid` | Shipped with TanStack Virtual 3.x & Zustand slice state |
 | **EPIC-02** | BYOK Adaptive Waterfall Engine | 🟡 Spec Ready | **Team Beta** | `apps/engine/src/modules/waterfall` | Token bucket rate-limiter per provider; DAG early-exit short-circuiting |
 | **EPIC-03** | Multi-Signal Intent Ingestion | ⚪ Backlog | **Team Beta** | `workers/scraper` | Playwright memory envelope fencing on 4GB VPS |
 | **EPIC-04** | Autonomous AI Researcher Column | ⚪ Backlog | **Team Beta** | `apps/engine/src/modules/ai-researcher` | Structured JSON extraction schemas; Ollama/DeepSeek routing layer |
 | **EPIC-05** | Smart Sequencing & Unified Deliverability | ⚪ Backlog | **Team Gamma** | `apps/engine/src/modules/outbound` | IMAP/SMTP OAuth2 token refresh jitter; SPF/DKIM/DMARC DNS lookup caching |
-| **EPIC-06** | Pre-Product Idea Validator (Smoke-Test Engine) | 🟡 Spec Ready | **Team Beta & Alpha** | `apps/engine/src/modules/validator`<br>`apps/web/app/v/[slug]` | One-prompt hypothesis decomposition; /v/[slug] Redis edge caching; scorecard radar |
-| **EPIC-07** | Living 3D WebGL Canvas & Scrollytelling | 🟡 Spec Ready | **Team Alpha** | `apps/web/components/marketing/3d` | Strict 500KB bundle budget; Draco GLB compression; Lenis smooth scroll |
+| **EPIC-06** | Pre-Product Idea Validator (Smoke-Test Engine) | 🟢 Complete (Alpha UI) | **Team Beta & Alpha** | `apps/engine/src/modules/validator`<br>`apps/web/app/v/[slug]` | /v/[slug] smoke-test route and ValidationRadarCard shipped |
+| **EPIC-07** | Living 3D WebGL Canvas & Scrollytelling | 🟢 Complete & Verified | **Team Alpha** | `apps/web/components/marketing/3d` | Shipped with R3F canvas, procedural fibers, and Lenis scroll |
 | **EPIC-08** | AES-256 Vault & FinOps Infrastructure | 🟡 Spec Ready | **Team Gamma** | `apps/engine/src/modules/vault`<br>`docker-compose.yml` | AES-256-GCM envelope encryption; 4GB RAM VPS resource quotas |
 
 *Status Legend:*
@@ -35,10 +35,10 @@
 1. **Monorepo Directory Isolation:**
    - Physical directory boundaries locked via `AGENTS.md`. Cross-team communication is restricted to `@leadloom/contracts`.
 2. **3D WebGL Performance Budget (500KB Cap):**
-   - R3F canvas must be lazy-loaded in `<Suspense>` after hydration with zero-JS CSS/SVG ambient fallback.
+   - R3F canvas is lazy-loaded in `<Suspense>` after hydration with zero-JS CSS/SVG ambient fallback.
    - Draco compression mandated for `.glb` models; assets served via static CDN / Cloudflare R2 free tier.
 3. **Zero-Marginal-Cost Smoke-Test Micro-Sites:**
-   - `/v/[slug]` dynamic routes must be backed by a 1-hour Redis edge cache (`SETEX page:slug 3600`) to prevent DB contention during traffic spikes.
+   - `/v/[slug]` dynamic routes are backed by a 1-hour Redis edge cache (`SETEX page:slug 3600`) to prevent DB contention during traffic spikes.
 4. **Memory Budget on Budget VPS (4GB RAM):**
    - Playwright Chromium instances must run sequentially or with max concurrency = 2 to avoid Linux cgroup OOM kills. Host swapfile (2GB) is mandatory.
 
