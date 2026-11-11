@@ -1,3 +1,4 @@
+import { BrandMark } from '@leadloom/ui';
 import React from 'react';
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
@@ -14,7 +15,7 @@ export function AuthCard({ title, subtitle, children }: AuthCardProps) {
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-2 mb-4 group">
           <span className="w-8 h-8 rounded-lg bg-brand-loom/20 border border-brand-loom/40 flex items-center justify-center text-sm text-brand-loom font-bold shadow-glow group-hover:scale-105 transition-transform">
-            🧵
+            <BrandMark className="h-5 w-5" />
           </span>
           <span className="text-xl font-bold tracking-tight text-text-primary">LeadLoom</span>
         </Link>

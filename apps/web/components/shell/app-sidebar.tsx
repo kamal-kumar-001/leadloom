@@ -1,5 +1,6 @@
 'use client';
 
+import { BrandMark } from '@leadloom/ui';
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -44,7 +45,7 @@ export function AppSidebar() {
       <div className="p-4 border-b border-border-subtle flex items-center justify-between">
         <Link href="/app" className="flex items-center gap-2.5 group">
           <div className="w-7 h-7 rounded-lg bg-brand-loom/20 border border-brand-loom/40 flex items-center justify-center text-sm text-brand-loom font-bold shadow-glow group-hover:scale-105 transition-transform">
-            🧵
+            <BrandMark className="h-4 w-4" />
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-sm text-text-primary tracking-tight leading-none">LeadLoom</span>
