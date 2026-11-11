@@ -49,4 +49,4 @@ Source: Kamal, 2026-11-12 voice direction - a project-wide checklist applied to 
 - Commit messages name the gap/feature and the substance.
 
 ## How rules get added
-A rule is added when a real failure or a direct owner decision teaches it, with the check that would have caught the failure. No aspirational rules without a runnable or inspectable check.
+A rule is added when a real failure or a direct owner decision teaches it, with the check that would have caught the failure. Well-supported industry-standard preventive checks (researched UI/UX or engineering practice) may be added the same way, with the source noted. No aspirational rules without a runnable or inspectable check. This checklist is process support, not certification: it does not prove compliance by itself - the real-browser and suite checks are the evidence.
