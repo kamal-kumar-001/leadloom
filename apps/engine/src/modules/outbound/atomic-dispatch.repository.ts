@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { OutboundApprovalItem, ApprovalQueueStats } from '@leadloom/contracts';
 import { approvalContentHash, buildApprovalSnapshot } from './approval-snapshot';
+import { attributeReply, recipientHashOf } from './reply-attribution';
 import type { DispatchRepository, DispatchSnapshot, SendReservation } from './dispatch.service';
 
 export interface SqlConnection {
@@ -386,5 +387,57 @@ export class AtomicDispatchRepository implements DispatchRepository {
       else if (r.status === 'rejected') rejectedCount += c;
     }
     return { pendingCount, approvedCount, rejectedCount };
+  }
+  /**
+   * G10: record one inbound reply (from the fixture-backed IMAP poller today) and
+   * halt the answered sequence. Attribution is computed from thread headers or a
+   * recipient-hash match only; unattributed replies are stored but halt nothing.
+   * Any attributed reply (human or bounce) cancels every still-actionable job for
+   * that recipient in that campaign, including held 'approved' ones: a reply means
+   * no further message in the sequence may ever be released for that recipient.
+   * Idempotent on (workspace_id, message_id): replays after a crash record nothing twice.
+   */
+  async recordInboundReply(workspaceId: string, input: {
+    mailboxId: string;
+    messageId: string;
+    fromEmail: string;
+    subject?: string;
+    inReplyTo?: string;
+    references?: string[];
+    classification: 'interested' | 'objection' | 'out_of_office' | 'unsubscribe' | 'neutral' | 'bounce';
+    confidence: number;
+    receivedAt: Date;
+  }): Promise<{ recorded: boolean; attribution: 'thread_header' | 'recipient_match' | 'unattributed'; haltedJobIds: string[] }> {
+    z.string().uuid().parse(workspaceId);
+    z.string().min(1).parse(input.messageId);
+    const fromEmail = z.string().email().parse(input.fromEmail.trim().toLowerCase());
+    return this.database.transaction(async (tx) => {
+      const jobs = await tx.query<{ id: string; campaign_id: string; provider_message_id: string | null; recipient_hash: string; scheduled_at: Date }>(
+        `SELECT j.id, j.campaign_id, j.provider_message_id, j.recipient_hash, j.scheduled_at
+         FROM outbound_jobs j
+         JOIN campaign_mailboxes cm ON cm.campaign_id = j.campaign_id AND cm.workspace_id = j.workspace_id
+         WHERE j.workspace_id = $1::uuid AND cm.mailbox_id = $2::uuid`,
+        [workspaceId, input.mailboxId]);
+      const match = attributeReply(
+        { inReplyTo: input.inReplyTo, references: input.references, fromEmail },
+        jobs.map((j) => ({ id: j.id, campaignId: j.campaign_id, providerMessageId: j.provider_message_id, recipientHash: j.recipient_hash, scheduledAt: new Date(j.scheduled_at) })),
+      );
+      const inserted = await tx.query<{ id: string }>(
+        `INSERT INTO inbound_replies
+           (id, workspace_id, outbound_job_id, campaign_id, mailbox_id, message_id, from_email, subject, classification, confidence, attribution, received_at, created_at)
+         VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$7,$8,$9,$10,$11,$12::timestamptz,$13::timestamptz)
+         ON CONFLICT (workspace_id, message_id) DO NOTHING RETURNING id`,
+        [randomUUID(), workspaceId, match?.jobId ?? null, match?.campaignId ?? null, input.mailboxId,
+         input.messageId, fromEmail, input.subject ?? null, input.classification, input.confidence,
+         match?.basis ?? 'unattributed', input.receivedAt, this.clock()]);
+      if (!inserted[0]) return { recorded: false, attribution: match?.basis ?? 'unattributed' as const, haltedJobIds: [] as string[] };
+      if (!match) return { recorded: true, attribution: 'unattributed' as const, haltedJobIds: [] as string[] };
+      const halted = await tx.query<{ id: string }>(
+        `UPDATE outbound_jobs SET status='cancelled', updated_at=$4::timestamptz
+         WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid AND recipient_hash=$3
+           AND status IN ('pending_approval','pending','approved') RETURNING id`,
+        [workspaceId, match.campaignId, recipientHashOf(fromEmail), this.clock()]);
+      return { recorded: true, attribution: match.basis, haltedJobIds: halted.map((h) => h.id) };
+    });
   }
 }

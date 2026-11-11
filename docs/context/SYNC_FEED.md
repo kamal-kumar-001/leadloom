@@ -409,3 +409,8 @@
 - Approve All removed: no bulk approval of unreviewed content. Banner no longer promises automatic withdrawal on campaign edits (no edit endpoint exists; documented obligation instead).
 - Page-wide "Sample data" badge removed from /app/campaigns (live queue + campaign rows); Step Flow keeps its localized sample badges.
 - Browser-verified locally; 302 engine tests pass; web tsc clean.
+## 2026-11-11 - Engine: G10 reply attribution and sequence halt (fixture-only)
+- inbound_replies table (migration 20261122, additive): persisted reply events with classification, confidence and attribution basis; idempotent on (workspace_id, message_id).
+- recordInboundReply(): attributes via thread headers (In-Reply-To/References vs stored provider_message_id) with recipient-hash fallback scoped to campaigns using the polled mailbox; never attributes across workspaces; unattributed replies are stored but halt nothing.
+- An attributed reply cancels every still-actionable job for that recipient in that campaign (pending_approval, pending, held 'approved'): "replies halt the sequence" is now enforced in the data layer, not just UI copy.
+- RawInboundMessage gains references[]. 8 new PGlite tests; 310 engine tests pass, tsc clean. No live mailbox use; poll loop remains gated off.

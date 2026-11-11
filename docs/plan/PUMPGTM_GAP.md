@@ -41,8 +41,8 @@ Status words follow `MISSING_WORK.md`: Live, Wired, Parked, Sample, Missing.
 | G6 | Lead enrichment waterfall | Parked connectors (11 providers), UI shows sample numbers | Registry endpoint, vault reconcile, test connection, real cascade |
 | G7 | LinkedIn outreach | Missing | No official API route. Not buildable as sequenced DMs without account automation; LeadLoom will stay out of that |
 | G8 | X DM outreach | Missing | Needs X developer app, prepaid credits, OAuth |
-| G9 | Approval-before-send | Missing in UI | Approval queue for list and messages |
-| G10 | Reply tracking and source attribution | Missing | Inbox sync (IMAP poller exists), reply classifier, attribution to source |
+| G9 | Approval-before-send | Wired (source-only): server-enforced held approval, per-item snapshot review (subject, full body, sender scope, stale state), no bulk approve. Sending disabled | Before ANY send release, reviewer must see the actual assigned sender identities (masked where role requires) and the resolved per-recipient message, not templates or mailbox-id counts; a no-mailbox item is explicitly incomplete context, not an approval to send |
+| G10 | Reply tracking and source attribution | Wired (source-only, fixtures): poller classify (bounce/keyword), persisted inbound_replies with thread-header/recipient attribution, reply halts the recipient's sequence | Live enablement gated; UI reporting of replies missing; deeper AI classification parked |
 | G11 | MCP/REST agent access | Missing | Out of scope tonight |
 | G12 | Billing and plans | Parked entitlements | Plan decisions are Kamal's |
 

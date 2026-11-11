@@ -17,6 +17,8 @@ export interface RawInboundMessage {
   subject: string;
   bodyText: string;
   inReplyTo?: string;
+  /** Raw References header values (each may hold several <id> tokens). */
+  references?: string[];
   receivedAt: Date;
 }
 
