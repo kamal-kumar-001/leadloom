@@ -7,7 +7,7 @@ function fakeDb() {
     count: async (a: any) => { calls.push([name, 'count', a]); return 3; },
     findMany: async (a: any) => { calls.push([name, 'findMany', a]); return []; },
   });
-  return { calls, db: { table: rec('table'), mailbox: rec('mailbox'), campaign: rec('campaign'), suppressionList: rec('sup'), validationExperiment: rec('exp'), byokCredential: rec('key') } };
+  return { calls, db: { table: { ...rec('table'), findFirst: async (a: any) => { calls.push(['table', 'findFirst', a]); return null; } }, column: rec('column'), row: rec('row'), cell: rec('cell'), mailbox: rec('mailbox'), campaign: rec('campaign'), suppressionList: rec('sup'), validationExperiment: rec('exp'), byokCredential: rec('key') } };
 }
 
 describe('WorkspaceReadService', () => {
@@ -41,5 +41,35 @@ describe('WorkspaceReadService', () => {
     const out = await new WorkspaceReadService(db).listExperiments('w');
     expect(out[0].hypothesis.length).toBe(140);
     expect(Object.keys(calls[0].select).join()).not.toMatch(/sequence|icp|actionable/i);
+  });
+});
+
+describe('listTableRows', () => {
+  const wsDb = (workspaceId: string) => {
+    const table = { id: 't1', workspaceId, name: 'Website research leads', rowCount: 1 };
+    return {
+      table: { count: async () => 1, findMany: async () => [table], findFirst: async ({ where }: any) => (where.id === 't1' && where.workspaceId === workspaceId ? table : null) },
+      column: { findMany: async () => [{ id: 'c1', tableId: 't1', name: 'Domain', type: 'text', orderIndex: 0 }, { id: 'c2', tableId: 't1', name: 'Source', type: 'text', orderIndex: 1 }] },
+      row: { findMany: async () => [{ id: 'r1', tableId: 't1', orderIndex: 0 }] },
+      cell: { findMany: async () => [{ tableId: 't1', rowId: 'r1', columnId: 'c1', value: 'acme.test' }, { tableId: 't1', rowId: 'r1', columnId: 'c2', value: 'heuristic_keywords' }] },
+      mailbox: { count: async () => 0, findMany: async () => [] },
+      campaign: { count: async () => 0, findMany: async () => [] },
+      suppressionList: { count: async () => 0, findMany: async () => [] },
+      validationExperiment: { count: async () => 0, findMany: async () => [] },
+      byokCredential: { count: async () => 0 },
+    };
+  };
+
+  it('returns rows keyed by column name for the owning workspace', async () => {
+    const svc = new WorkspaceReadService(wsDb('ws-1'));
+    const out = await svc.listTableRows('ws-1', 't1');
+    expect(out).not.toBeNull();
+    expect(out!.columns.map((c: any) => c.name)).toEqual(['Domain', 'Source']);
+    expect(out!.rows).toEqual([{ rowId: 'r1', values: { Domain: 'acme.test', Source: 'heuristic_keywords' } }]);
+  });
+
+  it('returns null for another tenant\'s table id (never their data)', async () => {
+    const svc = new WorkspaceReadService(wsDb('ws-1'));
+    expect(await svc.listTableRows('ws-2', 't1')).toBeNull();
   });
 });

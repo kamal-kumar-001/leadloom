@@ -5,7 +5,10 @@
  * bodies are never read here. No writes, no derived or invented numbers.
  */
 export interface WorkspaceReadDb {
-  table: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
+  table: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]>; findFirst(a: any): Promise<any> };
+  column: { findMany(a: any): Promise<any[]> };
+  row: { findMany(a: any): Promise<any[]> };
+  cell: { findMany(a: any): Promise<any[]> };
   mailbox: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   campaign: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   suppressionList: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
@@ -38,6 +41,35 @@ export class WorkspaceReadService {
       orderBy: { createdAt: 'desc' },
       take: LIMIT,
     });
+  }
+
+  /**
+   * Rows of one table with their cell values keyed by column name. The table
+   * must belong to the session workspace; otherwise this returns null (404 at
+   * the route) - never another tenant's data.
+   */
+  async listTableRows(workspaceId: string, tableId: string) {
+    const table = await this.db.table.findFirst({ where: { id: tableId, workspaceId } });
+    if (!table) return null;
+    const [columns, rows] = await Promise.all([
+      this.db.column.findMany({ where: { tableId }, orderBy: { orderIndex: 'asc' } }),
+      this.db.row.findMany({ where: { tableId }, orderBy: { orderIndex: 'asc' }, take: LIMIT }),
+    ]);
+    const cells = await this.db.cell.findMany({ where: { tableId, rowId: { in: rows.map((r: any) => r.id) } } });
+    const nameOf: Record<string, string> = {};
+    for (const c of columns) nameOf[c.id] = c.name;
+    return {
+      table: { id: table.id, name: table.name, rowCount: table.rowCount },
+      columns: columns.map((c: any) => ({ id: c.id, name: c.name, type: c.type })),
+      rows: rows.map((r: any) => {
+        const values: Record<string, unknown> = {};
+        for (const cell of cells.filter((c: any) => c.rowId === r.id)) {
+          const name = nameOf[cell.columnId];
+          if (name) values[name] = cell.value;
+        }
+        return { rowId: r.id, values };
+      }),
+    };
   }
 
   listMailboxes(workspaceId: string) {

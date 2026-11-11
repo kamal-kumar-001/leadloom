@@ -58,7 +58,7 @@ export interface RuntimeServices {
  passwordAccounts?: PasswordAccountService;
  unsubscribeKey?: Buffer;
  /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
- reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listMailboxes'|'listCampaigns'|'listSuppressions'|'listExperiments'>;
+ reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listTableRows'|'listMailboxes'|'listCampaigns'|'listSuppressions'|'listExperiments'>;
  /** Optional: admin-only workspace invitations (default off; LEADLOOM_TEAM_INVITES_ENABLED). Sends no mail. */
  invitations?: Pick<InvitationService,'invite'|'list'|'revoke'|'mine'|'accept'>;
  members?: Pick<MemberService,'list'|'setRole'|'remove'>;
@@ -143,6 +143,13 @@ export async function createApplication(services?:RuntimeServices) {
    const reads=services.reads;
    fastify.get('/workspace/summary',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.summary(s.workspaceId);});
    fastify.get('/workspace/tables',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listTables(s.workspaceId);});
+   fastify.get('/workspace/tables/:tableId/rows',async(request:any,reply:any)=>{
+    const s=await authorize(request,reply);if(!s)return;
+    const id=z.string().uuid().safeParse(request.params.tableId);if(!id.success)return reply.code(400).send({error:'Invalid table ID'});
+    const result=await reads.listTableRows(s.workspaceId,id.data);
+    if(!result)return reply.code(404).send({error:'Table not found'});
+    return result;
+   });
    fastify.get('/workspace/mailboxes',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listMailboxes(s.workspaceId);});
    fastify.get('/workspace/connectors/status',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return {connectors:connectorStatuses()};});
    if(services.waterfallConnectors) {

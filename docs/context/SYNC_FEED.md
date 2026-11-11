@@ -521,3 +521,10 @@
 - POST /research/website-signals/save (session + write role) re-computes the heuristic analysis server-side from the submitted text - the client never supplies computed signals - and writes a row to the per-workspace 'Website research leads' table (11 fixed columns incl. Source='heuristic_keywords' and Input). GET /research/leads lists saved rows (read role).
 - Research page: 'Save to lead table' after analysis, plus a Saved analyses list. Verified in a real browser as e2e-g9: analyze -> save -> 'Saved to lead table' badge; Tables page shows the persisted 'Website research leads' table with 1 row (screenshots g4-research-saved.png, g4-tables-row.png; the demo grid below is the pre-existing labeled sample canvas).
 - Engine tests: 334 pass (3 new: service save/list honesty, route role enforcement). No contract or API change beyond the two new routes.
+
+---
+### [2026-11-11 23:23 IST] Team A - real saved research rows readable; sample badge scoped to demo canvas
+- GET /workspace/tables/:tableId/rows (session, tenant-scoped, 404 for another workspace's table) returns columns + rows keyed by column name. Tables page 'Open Table' now renders the real persisted contents read-only - verified in a real browser: the saved acme-k8s.example analysis row shows its actual values (screenshot g4-table-open.png).
+- Topbar 'Sample data on this page' no longer covers the tables page (its persisted tables are real); the demo grid canvas keeps its own 'Sample preview' / 'Demo data' labels. Validator keeps the page-level badge.
+- Gap doc precision: a saved research row is a company/page OBSERVATION, not a discovered buyer or contact lead; person-level discovery is not built.
+- Engine tests: 336 pass (2 new: tenant-scoped rows read incl. cross-tenant null). No contract or API change beyond the new read route.

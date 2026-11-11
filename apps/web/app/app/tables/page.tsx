@@ -2,7 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
-import { fetchWorkspaceTables, type WorkspaceTableRow } from '../../../lib/engine-client';
+import {
+  fetchWorkspaceTables,
+  fetchWorkspaceTableRows,
+  type WorkspaceTableRow,
+  type WorkspaceTableRows,
+} from '../../../lib/engine-client';
 import { LoomVirtualGrid } from '../../../components/grid/loom-virtual-grid';
 import { PreFlightBar } from '../../../components/grid/pre-flight-bar';
 import { ThreadInspector } from '../../../components/grid/drawers/thread-inspector';
@@ -26,6 +31,16 @@ export default function TablesPage() {
   const [tables, setTables] = useState<WorkspaceTableRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openTable, setOpenTable] = useState<WorkspaceTableRows | null>(null);
+  const [openTableError, setOpenTableError] = useState<string | null>(null);
+
+  async function openPersistedTable(tableId: string) {
+    setOpenTable(null);
+    setOpenTableError(null);
+    const res = await fetchWorkspaceTableRows(tableId);
+    if (res.data) setOpenTable(res.data);
+    else setOpenTableError(res.error || 'Failed to load table rows');
+  }
 
   const table = useLoomStore((state) => state.table);
   const toggleSequencer = useLoomStore((state) => state.toggleSequencer);
@@ -149,7 +164,7 @@ export default function TablesPage() {
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-end">
-                  <Button size="sm" variant="outline" className="text-xs gap-1.5">
+                  <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => openPersistedTable(tbl.id)}>
                     <FolderOpen className="w-3.5 h-3.5" />
                     <span>Open Table</span>
                   </Button>
@@ -159,6 +174,55 @@ export default function TablesPage() {
           </div>
         )}
       </div>
+
+      {/* 1b. Real persisted table contents (read-only) */}
+      {(openTable || openTableError) && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-text-primary">
+              {openTable ? `Table: ${openTable.table.name}` : 'Table'}
+            </h2>
+            <button className="text-xs text-text-muted underline" onClick={() => { setOpenTable(null); setOpenTableError(null); }}>
+              Close
+            </button>
+          </div>
+          {openTableError && (
+            <Card className="p-4 border-signal-failed/30 bg-signal-failed/5 text-sm text-signal-failed">{openTableError}</Card>
+          )}
+          {openTable && (
+            <Card className="p-0 overflow-auto border border-border-subtle">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border-subtle bg-canvas-surface/90">
+                    {openTable.columns.map((c) => (
+                      <th key={c.id} className="text-left px-3 py-2 font-semibold text-text-primary whitespace-nowrap">{c.name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {openTable.rows.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-4 text-text-muted" colSpan={openTable.columns.length}>
+                        0 rows saved yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    openTable.rows.map((r) => (
+                      <tr key={r.rowId} className="border-b border-border-subtle last:border-0">
+                        {openTable.columns.map((c) => (
+                          <td key={c.id} className="px-3 py-2 text-text-secondary align-top max-w-[280px] truncate" title={String(r.values[c.name] ?? '')}>
+                            {r.values[c.name] === true ? 'yes' : r.values[c.name] === false ? 'no' : String(r.values[c.name] ?? '')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* 2. Interactive Grid Canvas (Sample Preview) */}
       <div className="space-y-3">

@@ -692,3 +692,14 @@ export async function fetchResearchLeads(): Promise<{ data: { items: SavedResear
   const res = await engineFetch<{ items: SavedResearchRow[] }>('/research/leads', { method: 'GET' });
   return { data: res.data, error: res.error };
 }
+
+export interface WorkspaceTableRows {
+  table: { id: string; name: string; rowCount: number };
+  columns: { id: string; name: string; type: string }[];
+  rows: { rowId: string; values: Record<string, unknown> }[];
+}
+
+export async function fetchWorkspaceTableRows(tableId: string): Promise<{ data: WorkspaceTableRows | null; error?: string }> {
+  const res = await engineFetch<WorkspaceTableRows>(`/workspace/tables/${tableId}/rows`, { method: 'GET' });
+  return { data: res.data, error: res.error };
+}

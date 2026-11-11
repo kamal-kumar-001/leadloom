@@ -10,7 +10,10 @@ interface AppTopbarProps {
 }
 
 // Campaigns shows live queue/campaign data; only sections with their own fixture badge stay listed here.
-const SAMPLE_ROUTES = ['/app/tables', '/app/validator'];
+// Pages whose MAIN content is still fixture data say so here. The tables page
+// is excluded: its persisted tables are real engine data, and its demo canvas
+// carries its own "Sample preview" / "Demo data" labels.
+const SAMPLE_ROUTES = ['/app/validator'];
 
 export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
   const pathname = usePathname();
