@@ -470,3 +470,10 @@
 - NOT yet active: the repo push token lacks the `workflow` scope (remote rejected .github/workflows push), so the owner activates it himself: create .github/workflows/release-images.yml in the GitHub web UI with this exact file content, then Actions > release-images > Run workflow (ref: main).
 - Identical to the reviewed inert draft plus: activation header and two read-only imagetools-inspect steps that print image digest and layer sizes to the run log (part of the approved "I'll check the images" step).
 - No contract or API change in this entry.
+
+---
+### [2026-11-11T16:52:00Z] Team Alpha | .github/workflows | Workflow ACTIVE + first run dispatched
+- Activated through Kamal's own signed-in GitHub browser session (cloud browser, config-h): created .github/workflows/release-images.yml directly on main, commit 3df93fa, byte-identical (sha256 ee11558f...) to the reviewed docs/plan/activated-release-images.yml. The repo push token lacks the workflow scope, so the owner-session web UI was the activation path (per main's 22:18 instruction).
+- First run dispatched via the Actions UI (workflow_dispatch, ref: main); API dispatch confirmed unavailable to the repo token (403). Run status at dispatch: queued.
+- Scope reminder: approval covers build + PRIVATE GHCR push only. Package visibility to be verified from the registry/package page after the run, not assumed from the first-publish default.
+- No contract or API change in this entry.
