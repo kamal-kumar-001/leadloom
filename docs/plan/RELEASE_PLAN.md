@@ -14,11 +14,23 @@ Live today: `94fa7ab` (deployed 12:40 IST 2026-11-11). Migrations through 202611
 - `COPY . .` before `npm ci` in both Dockerfiles means a code change reinstalls dependencies. That is wasted work and a possible contributor, NOT an established root cause of the export stall.
 - Unknown and not yet checked (read-only host questions): host CPU architecture, Docker runtime (Desktop VM vs engine), free disk now, image sizes.
 
-## Candidate routes (none verified safe yet)
-1. Build on the host as before. Same stall risk. Serial build lowers concurrency only; update.sh may build again. Any disk cutoff or time limit is a guess, and stopping a build may not stop the underlying export I/O. Residual outage risk: other apps may time out again for up to about an hour.
-2. Build images elsewhere and load them on the host. Needs: matching architecture (unknown), a place to hold the images (a registry or file transfer: no authority or account for that exists, and I have no Docker here to test), and a change to compose/update.sh to use prebuilt images. Not available now; would need Kamal's decision on any registry/account.
-3. Smaller exports: layering fix (`package.json` first, `npm ci`, then sources) only helps if the export, not the install, is the slow part. Untestable without Docker; do it only as part of a supervised release.
-Recommendation until a route is verified: do not release yet. Ask the host agent for the read-only facts above (arch, Docker runtime, disk, image sizes), then pick the route.
+## Recommended route (decision-ready, 2026-11-11 evening)
+
+RECOMMENDED: prebuilt images built by GitHub Actions, pulled by the host. This removes the only known stall source (the ~1h image build/export I/O on the shared host) from the release entirely. The host then does `docker compose pull` + `up -d`: the brownout window for pos/feefree shrinks from up-to-an-hour of disk saturation to the seconds-minutes of a container replace. Rollback is clean: images are tagged with the git SHA, the previous tag stays in the registry, and `docker compose up` with the previous tag restores the old stack in minutes (migrations 20261118-23 are additive, so old code runs fine against the migrated DB).
+
+What it needs from Kamal (three approvals, all one-time):
+1. Add ONE workflow file (`.github/workflows/release-images.yml`) to the public repo that builds the three compose images on a manually dispatched release tag and pushes them to GitHub Container Registry under his account. The repo's built-in GITHUB_TOKEN is enough; no new secret is needed if the GHCR package is public (the repo itself is public). Public repos get free Actions minutes. The draft workflow is in docs/plan/proposed-release-workflow.yml - it is inert until moved into .github/workflows/, which only Kamal's yes authorizes.
+2. Run `uname -m && docker version --format '{{.Server.Arch}} / {{.Server.Driver}}'` on the host once (read-only, 5 seconds). If the host is arm64 instead of x86_64 the workflow needs one extra buildx line; better to know before the release, not during.
+3. Approve the updated update.sh that pulls the prebuilt tag instead of building (prepared in the same release PR; current update.sh keeps working for route B).
+
+What remains unknown, stated honestly:
+- Host CPU architecture (blocks nothing until the first build; see ask 2).
+- Exact image sizes (est. 1-2 GiB total pull; 33G free disk is ample either way).
+- Whether GHCR public pulls need any host login. They do not for public packages; if Kamal prefers the package private, the host needs a one-time `docker login ghcr.io` with a read:packages token.
+
+FALLBACK (route B): on-host build as today, with a supervised window and the known residual risk that pos/feefree time out for up to about an hour if the export stall recurs. The Dockerfile layering fix (package.json before COPY . .) is intentionally NOT committed: it is unverifiable without a real build and the stall root cause is unproven. It rides along only if route B is chosen.
+
+NOT RECOMMENDED: ad-hoc cross-load of images built on an unknown-arch machine, or pausing co-hosted apps during the build (both trade the user's other products' availability or correctness for convenience).
 
 ## Release (once a route is chosen)
 `update.sh` order is build, then `prisma migrate deploy` + `migrate status` with the new image, then replace containers; if migration fails nothing is replaced. Last step runs `docker image prune -f` (existing behavior, dangling images only; not a new cleanup). After: `/login` 200, `/` 200, engine `/health`, pos and feefree 200, only 20261118 newly applied.
