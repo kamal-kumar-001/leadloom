@@ -52,7 +52,7 @@ export function InviteeCard({
         role: res.data?.role || inv.role,
       });
       notify.success(`Accepted invitation to join ${inv.workspaceName}.`);
-      onRefresh();
+      // No refresh: the engine just ended this session, so every reload would answer 401.
     } catch {
       notify.error('Failed to accept invitation. Please try again.');
     } finally {
@@ -105,7 +105,7 @@ export function InviteeCard({
 
       {/* List of pending invites */}
       <div className="space-y-3 pt-1">
-        {invitations.map((inv) => {
+        {!acceptedSuccess && invitations.map((inv) => {
           const isProcessing = acceptingId === inv.id;
           const expiresDate = new Date(inv.expiresAt).toLocaleDateString(undefined, {
             month: 'short',
