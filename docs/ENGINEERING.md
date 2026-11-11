@@ -1,6 +1,6 @@
 # Engineering rules and per-change checklist
 
-Source: Kamal, 2026-11-12 voice direction - a project-wide checklist applied to every change, so the product stays industry-standard maintainable rather than accumulating vibe-coded debt. This file is the ruleset; every builder (human or agent) reads it before building and checks it before calling a change done. Keep it concrete: each rule has a check that can actually be run or inspected. Amend it when a real failure teaches something new (see "How rules get added").
+Source: Kamal, WhatsApp voice notes 2026-11-12 02:05-02:07 IST (verbatim direction: use shared variables so a change reflects across the whole site; do not build big code files - split into components; make a list of rules and keep checking them every time the project is built; industry-standard, well-maintained code; best UI/UX practices all over the website). This file is the ruleset; every builder (human or agent) reads it before building and checks it before calling a change done. Keep it concrete: each rule has a check that can actually be run or inspected. Amend it when a real failure teaches something new (see "How rules get added").
 
 ## 1. Design tokens and styling
 - Colors, spacing and motion come from shared tokens (`apps/web/app/tokens.css` via `apps/web/tailwind.config.ts`), never hard-coded hex in components. Palette changes are token edits, not component edits.
