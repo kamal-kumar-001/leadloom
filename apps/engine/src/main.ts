@@ -287,7 +287,10 @@ export async function createApplication(services?:RuntimeServices) {
   // Jobs always enter as pending_approval: approval is enforced server-side and no caller
   // parameter can enqueue a send-reservable job. claim() only picks status='pending' and no
   // code path moves approved->pending while dispatch is disabled (G9 hardening).
-  const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime()}).strict();
+  const EnqueueRecipient=z.object({firstName:z.string().max(120).nullish(),lastName:z.string().max(120).nullish(),companyName:z.string().max(200).nullish(),title:z.string().max(200).nullish(),customFields:z.record(z.string(),z.unknown()).optional()}).strict();
+  // recipientId links the job to a campaign_recipients row (live fields); recipient fixes inline fields at enqueue.
+  // A template with variables resolves strictly: without recipient data the enqueue fails closed (nothing enters the queue).
+  const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime(),recipientId:z.string().uuid().optional(),recipient:EnqueueRecipient.optional()}).strict();
   fastify.post('/outbound/jobs',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
@@ -296,7 +299,12 @@ export async function createApplication(services?:RuntimeServices) {
    try {
     const id=await services.outbound.enqueue({...parsed.data,workspaceId:session.workspaceId,scheduledAt:new Date(parsed.data.scheduledAt)});
     return reply.code(202).send({id,status:'pending_approval',sendingEnabled:false});
-   } catch {return reply.code(400).send({error:'Job could not be queued'});}
+   } catch (err) {
+    // Resolution failures are actionable by the caller (fix the template or recipient); other errors stay generic.
+    const msg=err instanceof Error ? err.message : '';
+    if(msg.startsWith('Message does not resolve')) return reply.code(400).send({error:'Job could not be queued',detail:msg});
+    return reply.code(400).send({error:'Job could not be queued'});
+   }
   });
   // G9: Approval-before-send queue routes. Human review required before any send; sending stays disabled.
   fastify.get('/outbound/approvals',async(request:any,reply:any)=>{

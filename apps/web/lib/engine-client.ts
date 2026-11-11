@@ -560,6 +560,8 @@ export interface OutboundApprovalRow {
   bodyTemplate?: string;
   senderMailboxIds?: string[];
   stale?: boolean;
+  /** Set when the message can no longer be resolved for this recipient; the job stays held until the template or recipient is fixed. */
+  resolutionErrors?: string[];
   status: 'pending_approval' | 'pending' | 'approved' | 'rejected' | 'cancelled';
   scheduledAt: string;
   createdAt: string;

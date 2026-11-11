@@ -310,6 +310,14 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
                       Content changed since this message was queued. The first approval only refreshes the review snapshot; a second approval signs it off.
                     </div>
                   )}
+                  {item.resolutionErrors && item.resolutionErrors.length > 0 && (
+                    <div className="text-[11px] font-mono text-signal-failed rounded border border-signal-failed/40 bg-signal-failed/10 p-2 space-y-0.5">
+                      <div>Held: this message cannot be assembled for the recipient. Approving is blocked until fixed:</div>
+                      {item.resolutionErrors.map((err, i) => (
+                        <div key={i} className="pl-2">- {err}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2 border-t border-border-subtle flex items-center justify-between">
@@ -334,7 +342,8 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
                       size="sm"
                       variant="primary"
                       onClick={() => handleApproveOne(item.id)}
-                      disabled={isActing || Boolean(bulkLoading)}
+                      disabled={isActing || Boolean(bulkLoading) || (item.resolutionErrors?.length ?? 0) > 0}
+                      title={(item.resolutionErrors?.length ?? 0) > 0 ? 'Held: fix the template or recipient so the message can be assembled' : undefined}
                       className="text-xs h-7 px-2.5 gap-1"
                     >
                       <Check className="w-3 h-3" />
