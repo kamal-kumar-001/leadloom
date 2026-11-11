@@ -106,8 +106,12 @@ async function callEngine<T>(
     const res = await fetch(`/api/engine${path}`, {
       ...options,
       credentials: 'same-origin',
+      // The engine rejects an empty body that claims JSON, so only send the header with a body.
+      ...(options.body === undefined && options.method === 'POST' ? { body: '{}' } : {}),
       headers: {
-        'Content-Type': 'application/json',
+        ...(options.body !== undefined || options.method === 'POST'
+          ? { 'Content-Type': 'application/json' }
+          : {}),
         ...(options.headers as Record<string, string> | undefined),
       },
     });

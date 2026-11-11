@@ -1,5 +1,6 @@
 'use client';
 
+import { signOut } from 'next-auth/react';
 import React, { useState } from 'react';
 import { Card, Badge, Button } from '@leadloom/ui';
 import { Building2, UserCheck, AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
@@ -91,7 +92,7 @@ export function InviteeCard({
               variant="primary"
               size="sm"
               onClick={() => {
-                window.location.href = '/login';
+                signOut({ callbackUrl: '/login' });
               }}
               className="text-xs gap-1.5"
             >

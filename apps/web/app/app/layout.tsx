@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { signOut } from 'next-auth/react';
 import { AppSidebar } from '../../components/shell/app-sidebar';
 import { AppTopbar } from '../../components/shell/app-topbar';
 import { IdentityProvider, type ShellIdentity } from '../../components/shell/identity';
@@ -89,7 +90,7 @@ export default function AppLayout({
           <AlertCircle className="w-6 h-6" />
         </div>
         <h1 className="text-lg font-bold text-text-primary tracking-tight mb-1">
-          Engine Provisioning Notice
+          We could not verify your session
         </h1>
         <p className="text-xs text-text-muted max-w-md mb-6 leading-relaxed">
           {engineState.error}
@@ -103,6 +104,13 @@ export default function AppLayout({
           <RefreshCw className="w-3.5 h-3.5" />
           <span>Retry Connection</span>
         </Button>
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: '/login' })}
+          className="mt-3 text-xs text-text-muted hover:text-brand-loom underline underline-offset-2"
+        >
+          Sign in again
+        </button>
       </div>
     );
   }
