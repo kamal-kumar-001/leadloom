@@ -465,7 +465,8 @@
 - No contract or API change in this entry.
 
 ---
-### [2026-11-11T16:50:30Z] Team Alpha | .github/workflows | Workflow ACTIVATED (approved scope: build-only)
-- release-images.yml activated under Kamal's 22:17 "Sure" (WhatsApp, reply context: main's 22:15:54 ask - build off-host, save images privately, no deploy/running-app changes; originals verified in observation DB). Approval covers build + PRIVATE GHCR push only; host login/pull/deploy remain unapproved later gates.
+### [2026-11-11T16:50:30Z] Team Alpha | docs/plan | Workflow PREPARED for owner activation (approved scope: build-only)
+- release-images workflow content prepared at docs/plan/activated-release-images.yml under Kamal's 22:17 "Sure" (WhatsApp, reply context: main's 22:15:54 ask - build off-host, save images privately, no deploy/running-app changes; originals verified in observation DB). Approval covers build + PRIVATE GHCR push only; host login/pull/deploy remain unapproved later gates.
+- NOT yet active: the repo push token lacks the `workflow` scope (remote rejected .github/workflows push), so the owner activates it himself: create .github/workflows/release-images.yml in the GitHub web UI with this exact file content, then Actions > release-images > Run workflow (ref: main).
 - Identical to the reviewed inert draft plus: activation header and two read-only imagetools-inspect steps that print image digest and layer sizes to the run log (part of the approved "I'll check the images" step).
 - No contract or API change in this entry.
