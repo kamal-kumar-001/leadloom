@@ -1,3 +1,4 @@
+import { resolvePublic } from '../../mailbox-connect/host-policy';
 import type { SmtpClient, SmtpSendInput } from './smtp-transport';
 import type { ImapClient, RawInboundMessage } from './imap-poller';
 
@@ -88,6 +89,13 @@ export async function createNodemailerSmtpClient(config: MailboxClientConfig): P
   };
 }
 
+/** TEST-ONLY fixture hook for the strict path (never passed by production callers): resolver, trusted CA, socket remap. The public-address policy still applies to what the resolver returns. */
+export interface ImapStrictTestHooks {
+  resolve?: (host: string) => Promise<string[]>;
+  ca?: string;
+  connectTo?: (pinnedIp: string) => string;
+}
+
 export interface ImapReadLimits {
   /** Max messages returned per poll; the next poll continues from the last uid. */
   maxBatch?: number;
@@ -96,12 +104,34 @@ export interface ImapReadLimits {
 }
 
 /**
+ * Options for the poller's connection. Outside the plaintext fixture path this is the same strict policy as the
+ * mailbox-connect verifier: port allow-list, resolve once, refuse non-public addresses, connect to the pinned IP,
+ * verify the certificate against the original host name (SNI), TLS 1.2+, and require STARTTLS on port 143.
+ */
+export async function buildReadOptions(config: MailboxClientConfig, hooks: ImapStrictTestHooks = {}): Promise<Record<string, unknown>> {
+  const base = buildImapOptions(config) as Record<string, unknown>; // also validates and guards the plaintext hook
+  if (config.plaintextForTestsOnly) return { ...base, connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000, disableAutoIdle: true };
+  if (![143, 993].includes(config.port)) throw new Error('IMAP port not allowed');
+  const ip = await resolvePublic(config.host, hooks.resolve);
+  if (!ip) throw new Error('IMAP host is not a resolvable public host');
+  return {
+    ...base,
+    host: hooks.connectTo ? hooks.connectTo(ip) : ip,
+    secure: config.port === 993,
+    servername: config.host,
+    doSTARTTLS: config.port !== 993 ? true : undefined,
+    tls: { servername: config.host, rejectUnauthorized: true, minVersion: 'TLSv1.2', ...(hooks.ca ? { ca: hooks.ca } : {}) },
+    connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000, disableAutoIdle: true,
+  };
+}
+
+/**
  * Real IMAP client via imapflow. Call only inside the authorized worker.
  * Read-only by construction: the mailbox is opened with EXAMINE (readOnly), so messages are
  * never marked read, moved or deleted. Fetch is by UID and bounded per poll. Message content is
  * untrusted data: it is returned to the caller, never executed or acted on here.
  */
-export async function createImapflowClient(config: MailboxClientConfig, limits: ImapReadLimits = {}): Promise<ImapClient> {
+export async function createImapflowClient(config: MailboxClientConfig, limits: ImapReadLimits = {}, testHooks: ImapStrictTestHooks = {}): Promise<ImapClient> {
   const maxBatch = Math.max(1, limits.maxBatch ?? 100);
   const maxBodyChars = Math.max(0, limits.maxBodyChars ?? 20000);
   const { ImapFlow } = await import('imapflow');
@@ -111,7 +141,8 @@ export async function createImapflowClient(config: MailboxClientConfig, limits: 
     },
     async fetchBatch(sinceUid: number): Promise<{ uidValidity: number; messages: RawInboundMessage[] }> {
       let uidValidity = 0;
-      const client = new ImapFlow(buildImapOptions(config) as any);
+      const client = new ImapFlow((await buildReadOptions(config, testHooks)) as any);
+      client.on('error', () => undefined);
       const out: RawInboundMessage[] = [];
       try {
         await client.connect();

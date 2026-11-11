@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildImapOptions, buildSmtpOptions } from './client-factories';
+import { buildReadOptions, buildImapOptions, buildSmtpOptions } from './client-factories';
 
 const BASE = { host: 'smtp.provider.test', port: 587, user: 'sales@brand.test' };
 
@@ -34,5 +34,17 @@ describe('client option mapping', () => {
     const prev = process.env.NODE_ENV; process.env.NODE_ENV = 'production';
     try { expect(() => buildImapOptions({ ...cfg, host: '127.0.0.1' })).toThrow('plaintext IMAP is refused'); } finally { process.env.NODE_ENV = prev; }
     expect((buildImapOptions({ ...cfg, host: '127.0.0.1' }) as any).secure).toBe(false);
+  });
+
+  it('poller connection is strict: public-only, pinned IP, SNI, TLS 1.2+, STARTTLS on 143, port allow-list', async () => {
+    const cfg = { ...BASE, host: 'mail.example.org', port: 143, authType: 'password' as const, password: 'p' };
+    const o: any = await buildReadOptions(cfg, { resolve: async () => ['93.184.216.34'] });
+    expect(o.host).toBe('93.184.216.34'); expect(o.servername).toBe('mail.example.org'); expect(o.doSTARTTLS).toBe(true);
+    expect(o.secure).toBe(false); expect(o.tls).toMatchObject({ rejectUnauthorized: true, minVersion: 'TLSv1.2', servername: 'mail.example.org' });
+    expect(((await buildReadOptions({ ...cfg, port: 993 }, { resolve: async () => ['93.184.216.34'] })) as any).secure).toBe(true);
+    await expect(buildReadOptions(cfg, { resolve: async () => ['10.0.0.5'] })).rejects.toThrow('public host');
+    await expect(buildReadOptions(cfg, { resolve: async () => ['93.184.216.34', '192.168.1.5'] })).rejects.toThrow('public host');
+    await expect(buildReadOptions({ ...cfg, host: '127.0.0.1' }, { resolve: async () => ['93.184.216.34'] })).rejects.toThrow('public host');
+    await expect(buildReadOptions({ ...cfg, port: 22 })).rejects.toThrow('port not allowed');
   });
 });

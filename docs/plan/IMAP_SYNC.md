@@ -9,7 +9,7 @@ Source only. Nothing here is wired to a scheduler, endpoint or live mailbox. Fix
 - Migration `20261119_mailbox_uid_validity` (additive, nullable column).
 
 ## What does NOT exist yet (must precede any live use)
-- Strict TLS / public-host pinning on this client path. The mailbox-connect verifier has it; the poller's imapflow options do not. Do not expose or schedule a poll before this is applied.
+- Strict TLS / public-host pinning: DONE on the poller path (buildReadOptions: port allow-list, resolve once, public-only, pinned IP, SNI, TLS1.2+, STARTTLS on 143), unit-tested with fake resolvers; not yet tested against a real TLS fixture on this path.
 - A caller that resolves the mailbox credential. Tenant check lives at that caller: it must load the mailbox by `(workspace_id from the session, mailbox_id)` and the campaign by the same workspace before polling. `mailboxId` alone is not a tenant check.
 - Poll enablement flag, error backoff, DSN/bounce parsing, retention policy for `bodyText` beyond the cap.
 - Atomic "persist event + advance checkpoint" in one transaction: today events are recorded one by one and the checkpoint advances after the batch; a crash replays the batch and dedupe makes it idempotent.
