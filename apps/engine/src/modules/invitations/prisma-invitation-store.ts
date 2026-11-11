@@ -96,9 +96,13 @@ export class PrismaInvitationStore implements InvitationStore {
           WHERE i.id = $1::uuid AND i.email = $2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > now() FOR UPDATE OF i`, invitationId, me.email.toLowerCase());
       if (!inv[0]) return { ok: false, reason: 'not_found' };
       if (inv[0].workspace_id === me.workspaceId) return { ok: false, reason: 'already_member' };
+      // Lock the current workspace row first: inserts into child tables take a key-share lock on it through their
+      // foreign keys, so concurrent writers wait for this transaction instead of slipping data in after the check.
+      // Each later statement then sees everything committed before the lock.
       const own: any[] = await tx.$queryRawUnsafe(
-        `SELECT (SELECT count(*)::int FROM users WHERE workspace_id = $1::uuid) AS members, (w.owner_user_id = $2::uuid) AS is_owner FROM workspaces w WHERE w.id = $1::uuid`, me.workspaceId, userId);
-      if (!own[0] || own[0].members !== 1 || own[0].is_owner !== true) return { ok: false, reason: 'has_workspace_data' };
+        `SELECT (SELECT count(*)::int FROM users WHERE workspace_id = w.id) AS members, (w.owner_user_id = $2::uuid) AS is_owner,
+                (w.plan = 'free' AND w.preferences = '{}'::jsonb) AS default_settings FROM workspaces w WHERE w.id = $1::uuid FOR UPDATE OF w`, me.workspaceId, userId);
+      if (!own[0] || own[0].members !== 1 || own[0].is_owner !== true || own[0].default_settings !== true) return { ok: false, reason: 'has_workspace_data' };
       const tables: Array<{ table_name: string }> = await tx.$queryRawUnsafe(
         `SELECT DISTINCT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
           WHERE c.table_schema = 'public' AND c.column_name = 'workspace_id' AND c.table_name NOT IN ('users', 'audit_log', 'workspace_invitations')`);

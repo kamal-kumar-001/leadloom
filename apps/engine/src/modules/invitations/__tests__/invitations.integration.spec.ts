@@ -70,6 +70,17 @@ describe.runIf(RUN)('invitations on real Postgres (gated)', () => {
     expect(await inv().accept(g.userId, m.invitation.id)).toEqual({ ok: false, reason: 'has_workspace_data' });
     const u: any[] = await prisma.$queryRawUnsafe(`SELECT workspace_id::text w FROM users WHERE id=$1::uuid`, g.userId); expect(u[0].w).toBe(g.workspaceId);
   });
+  it('guard: every workspace table is either checked by accept or a known child of a checked table', async () => {
+    const r: any[] = await prisma.$queryRawUnsafe(`SELECT t.table_name n FROM information_schema.tables t WHERE t.table_schema='public' AND t.table_type='BASE TABLE' AND NOT EXISTS (SELECT 1 FROM information_schema.columns c WHERE c.table_schema='public' AND c.table_name=t.table_name AND c.column_name='workspace_id') ORDER BY 1`);
+    // Reviewed children of workspace-scoped parents, plus auth/global tables. A new table here must be reviewed against Accept's pristine check.
+    const known = ['cells', 'columns', 'email_otps', 'enrichment_cache', 'mailbox_sync_state', 'outreach_events', 'rows', 'smoke_test_pages', 'waitlist_leads', 'workspaces', '_prisma_migrations'];
+    expect(r.map((x) => x.n).filter((n) => !known.includes(n))).toEqual([]);
+  });
+  it('a workspace with non-default settings is not pristine', async () => {
+    const o = await owner(); const email = `set-${tag}@example.invalid`; const m: any = await invite(o, email); const g = await accountVia(email);
+    await prisma.$executeRawUnsafe(`UPDATE workspaces SET preferences = '{"x":1}'::jsonb WHERE id = $1::uuid`, g.workspaceId);
+    expect(await inv().accept(g.userId, m.invitation.id)).toEqual({ ok: false, reason: 'has_workspace_data' });
+  });
   it('an address that already has an account cannot be invited; invitations are workspace-scoped', async () => {
     const a = await owner(); const b = await owner(); const existing = await accountVia(`ex-${tag}@example.invalid`);
     expect(await inv().invite(a.workspaceId, a.userId, `ex-${tag}@example.invalid`, 'member')).toEqual({ ok: false, reason: 'account_exists' });
