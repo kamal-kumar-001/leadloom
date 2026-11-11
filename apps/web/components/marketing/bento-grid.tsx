@@ -28,6 +28,7 @@ export function BentoGridSection() {
             </div>
             <h3 className="text-xl font-bold text-text-primary">
               Buying Signal Ingestion
+              <span className="ml-2 align-middle text-[10px] font-mono font-normal uppercase tracking-wider text-text-muted border border-border-muted rounded px-1.5 py-0.5">Planned</span>
             </h3>
             <p className="mt-2 text-sm text-text-secondary">
               Never prospect from stale databases again. Trigger outbound rows automatically when target accounts make moves in the wild.
@@ -57,7 +58,7 @@ export function BentoGridSection() {
 
           <div className="mt-6 pt-4 border-t border-border-subtle flex items-center text-xs font-mono text-text-muted gap-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-signal-verified" />
-            <span>Signal source connectors are in rollout</span>
+            <span>Signal source connectors are planned</span>
           </div>
         </SpotlightCard>
 
@@ -69,6 +70,7 @@ export function BentoGridSection() {
             </div>
             <h3 className="text-xl font-bold text-text-primary">
               DAG Waterfall Short-Circuiting
+              <span className="ml-2 align-middle text-[10px] font-mono font-normal uppercase tracking-wider text-text-muted border border-border-muted rounded px-1.5 py-0.5">Planned</span>
             </h3>
             <p className="mt-2 text-sm text-text-secondary">
               Query multiple vendors in cascade. As soon as a low-cost provider verifies the email, expensive downstream API calls are aborted automatically.
@@ -106,13 +108,14 @@ export function BentoGridSection() {
               <Mail className="w-5 h-5" />
             </div>
             <h3 className="text-2xl font-bold text-text-primary">
-              Integrated Multi-Inbox Sequencer with Health Scoring
+              Multi-Inbox Sequencer with Health Scoring
+              <span className="ml-2 align-middle text-[10px] font-mono font-normal uppercase tracking-wider text-text-muted border border-border-muted rounded px-1.5 py-0.5">Planned</span>
             </h3>
             <p className="mt-2 text-sm text-text-secondary">
-              Send sequences from your connected mailboxes with rotation, SPF/DKIM/DMARC checks, and randomized sending jitter. Mailbox connections and sending are in rollout and labelled as such in the app.
+              Planned: send sequences from your connected mailboxes with rotation, SPF/DKIM/DMARC checks, and randomized sending jitter.
             </p>
             <div className="mt-4 flex flex-wrap gap-2 text-xs font-mono">
-              <Badge variant="matrix">Randomized send jitter</Badge>
+              <Badge variant="matrix">Planned: randomized send jitter</Badge>
               <Badge variant="loom">Planned: unified IMAP triage</Badge>
             </div>
           </div>

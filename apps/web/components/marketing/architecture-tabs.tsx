@@ -5,12 +5,13 @@ import { Badge } from '@leadloom/ui';
 import { Database, Shield, Cpu, Copy, Check } from 'lucide-react';
 
 const STACK_SNIPPET = `# LeadLoom hosted stack - nothing for you to run
-web:      Next.js (App Router), token-driven light/dark theming
-api:      NestJS engine, queue-based waterfall runs
-data:     PostgreSQL 16 + pgvector, Redis 7 queues
-workers:  containerized scraping and sequencing workers
-secrets:  AES-256-GCM envelope encryption for your provider keys
-delivery: SMTP/IMAP mailbox pool with rotation`;
+web:        Next.js (App Router), token-driven light/dark theming
+api:        NestJS engine
+data:       PostgreSQL 16 + pgvector, Redis 7
+your keys:  AES-256-GCM encryption at rest, bound to
+            your workspace
+planned:    provider connectors, waterfall enrichment,
+            mailbox sending, scraping and sequencing workers`;
 
 const SDK_SNIPPET = `import { defineProvider, ExitCondition } from '@leadloom/engine';
 

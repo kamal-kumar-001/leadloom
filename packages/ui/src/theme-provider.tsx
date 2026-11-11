@@ -56,6 +56,26 @@ export function ThemeProvider({
     setMounted(true);
   }, [defaultTheme]);
 
+  // When a route-level theme lock releases (e.g. leaving the light-by-default
+  // landing), the route restores the stored theme in the DOM and fires this
+  // event; sync provider state so the next toggle behaves correctly. This
+  // never writes storage - the landing's light override is not persisted.
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const stored = localStorage.getItem(THEME_STORAGE_KEY);
+        if (stored === 'light' || stored === 'dark') setThemeState(stored);
+      } catch {}
+    };
+    window.addEventListener('leadloom-theme-sync', sync);
+    return () => window.removeEventListener('leadloom-theme-sync', sync);
+  }, []);
+
+  // Mirrors the resolved provider theme for observability and pixel tests.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme-state', theme);
+  }, [theme]);
+
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
     try {

@@ -35,6 +35,8 @@ export default function MarketingPage() {
       root.removeAttribute('data-theme-lock');
       root.setAttribute('data-theme', stored);
       root.classList.toggle('dark', stored === 'dark');
+      // Let the shared ThemeProvider sync its state to the restored theme.
+      window.dispatchEvent(new Event('leadloom-theme-sync'));
     };
   }, []);
 
@@ -45,15 +47,15 @@ export default function MarketingPage() {
     },
     {
       q: 'Why bring your own keys?',
-      a: 'You connect your own Apollo, Hunter, or OpenAI keys and pay each provider directly at their own price. Your total depends on the providers and the volume you use.',
+      a: 'You will pay providers like Apollo, Hunter, or OpenAI directly at their own prices. Today you can store keys with encryption at rest; connections that use them are planned.',
     },
     {
       q: 'Is LeadLoom hosted or do I run it myself?',
       a: 'LeadLoom is hosted for you - there is nothing to install or run. The engine runs on our infrastructure (Next.js, NestJS, PostgreSQL 16 + pgvector, Redis 7) and you connect your own provider keys.',
     },
     {
-      q: 'How does the Pre-Product Idea Validator smoke-test ideas?',
-      a: 'You enter a 2-sentence hypothesis. LeadLoom auto-deploys a 1-page smoke-test micro-site (/v/[slug]) with a waitlist form and 2-question survey, while enriching an ICP test list and generating an outreach sequence.',
+      q: 'How will the Pre-Product Idea Validator smoke-test ideas?',
+      a: 'The validator is planned and not live yet. It will turn a 2-sentence hypothesis into a 1-page smoke-test micro-site with a waitlist form and a short survey, plus an enriched ICP test list.',
     },
   ];
 
@@ -120,7 +122,7 @@ export default function MarketingPage() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-text-secondary leading-relaxed max-w-2xl mx-auto">
-              Bring your own Apollo, Hunter, and OpenAI keys. Waterfall enrichment, idea validation, and sequencing are rolling out in stages - anything not live yet is labelled, never faked.
+              LeadLoom is in early access. Live today: your workspace, saved lead lists, and encrypted provider key storage. Waterfall enrichment, idea validation, and sequencing with your own Apollo, Hunter, or OpenAI keys are planned next.
             </p>
 
             {/* Email CTA: starts sign-up only (email prefills /signup) */}
@@ -202,13 +204,13 @@ export default function MarketingPage() {
                 <CheckCircle className="w-4 h-4 text-signal-verified" /> Hosted for you - nothing to install or run
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-signal-verified" /> Bring your own provider keys, stored AES-256-GCM encrypted
+                <CheckCircle className="w-4 h-4 text-signal-verified" /> Provider key storage with AES-256-GCM encryption at rest
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-signal-verified" /> Workspaces with saved tables, lists, and validator experiments
+                <CheckCircle className="w-4 h-4 text-signal-verified" /> Workspace dashboard with saved tables and lists
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-signal-verified" /> Capabilities still in rollout are labelled &quot;Not available yet&quot; - never faked
+                <CheckCircle className="w-4 h-4 text-signal-verified" /> Planned capabilities are labelled &quot;Not available yet&quot; - never faked
               </li>
             </ul>
             <Link href="/signup" className="mt-8 block">
