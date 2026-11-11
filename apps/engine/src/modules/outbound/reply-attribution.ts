@@ -37,6 +37,19 @@ export interface ReplyAttribution {
   basis: AttributionBasis;
 }
 
+/**
+ * Recipient-hash evidence can name a person but not a campaign: when the same
+ * recipient appears in several campaigns reachable from the polled mailbox, any
+ * exact-job pick would be arbitrary. We preserve that uncertainty instead of
+ * halting a guessed campaign.
+ */
+export interface AmbiguousAttribution {
+  ambiguous: true;
+  campaignIds: string[];
+}
+
+export type AttributionResult = ReplyAttribution | AmbiguousAttribution | null;
+
 /** Same canonical form as AtomicDispatchRepository.recipientHash. */
 export function recipientHashOf(email: string): string {
   return createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
@@ -64,7 +77,7 @@ function headerIds(raw: ReplyLike): string[] {
   return [...new Set(ids)];
 }
 
-export function attributeReply(raw: ReplyLike, jobs: JobThreadRef[]): ReplyAttribution | null {
+export function attributeReply(raw: ReplyLike, jobs: JobThreadRef[]): AttributionResult {
   const ids = headerIds(raw);
   if (ids.length > 0) {
     for (const job of jobs) {
@@ -78,6 +91,11 @@ export function attributeReply(raw: ReplyLike, jobs: JobThreadRef[]): ReplyAttri
   const candidates = jobs
     .filter((j) => j.recipientHash === fromHash)
     .sort((a, b) => b.scheduledAt.getTime() - a.scheduledAt.getTime());
+  const campaignIds = [...new Set(candidates.map((j) => j.campaignId))];
+  if (campaignIds.length > 1) {
+    // Same recipient, several campaigns, no thread headers: do not guess.
+    return { ambiguous: true, campaignIds };
+  }
   const latest = candidates[0];
   return latest ? { jobId: latest.id, campaignId: latest.campaignId, basis: 'recipient_match' } : null;
 }

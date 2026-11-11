@@ -414,3 +414,6 @@
 - recordInboundReply(): attributes via thread headers (In-Reply-To/References vs stored provider_message_id) with recipient-hash fallback scoped to campaigns using the polled mailbox; never attributes across workspaces; unattributed replies are stored but halt nothing.
 - An attributed reply cancels every still-actionable job for that recipient in that campaign (pending_approval, pending, held 'approved'): "replies halt the sequence" is now enforced in the data layer, not just UI copy.
 - RawInboundMessage gains references[]. 8 new PGlite tests; 310 engine tests pass, tsc clean. No live mailbox use; poll loop remains gated off.
+## 2026-11-11 - Engine: G10 ambiguity-safe recipient attribution
+- Recipient-hash fallback no longer picks an arbitrary job when the same recipient appears in multiple campaigns reachable from the polled mailbox: the reply is recorded with attribution 'ambiguous_recipient' (migration 20261123), linked to no job, and halts nothing. Thread headers still resolve exact attribution in that situation; single-campaign multi-step stays recipient_match and halts only that campaign.
+- 11 reply-attribution tests (313 engine total pass), tsc clean.

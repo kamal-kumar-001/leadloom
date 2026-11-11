@@ -12,6 +12,7 @@ const MIGRATIONS = [
   '20261120_outbound_approval_status',
   '20261121_outbound_approval_hardening',
   '20261122_inbound_replies',
+  '20261123_inbound_replies_ambiguity',
 ];
 
 let pg: PGlite, repo: AtomicDispatchRepository;
@@ -156,6 +157,60 @@ describe('G10 reply attribution and sequence halt', () => {
     expect(res.haltedJobIds).toContain(job);
     const row = (await pg.query('SELECT status FROM outbound_jobs WHERE id=$1', [job])).rows as any[];
     expect(row[0].status).toBe('cancelled');
+  });
+
+  it('recipient fallback spanning multiple campaigns is ambiguous: recorded, halts nothing', async () => {
+    const campaign2 = randomUUID();
+    await pg.query(
+      "INSERT INTO campaigns (id,workspace_id,name,status,daily_limit_total,steps,updated_at) VALUES ($1,$2,$3,'active',5,'[]',$4)",
+      [campaign2, workspaceId, 'Campaign A2', now]
+    );
+    await pg.query('INSERT INTO campaign_mailboxes (campaign_id,mailbox_id,workspace_id) VALUES ($1,$2,$3)', [campaign2, mailboxId, workspaceId]);
+    const j1 = await addJob({ recipient: 'lead@example.invalid', key: 'k1' });
+    const j2 = await addJob({ recipient: 'lead@example.invalid', key: 'k2', campaign: campaign2 });
+
+    const res = await repo.recordInboundReply(workspaceId, {
+      mailboxId, messageId: 'reply-amb@x.invalid', fromEmail: 'lead@example.invalid',
+      classification: 'interested', confidence: 0.9, receivedAt: now,
+    });
+    expect(res).toEqual({ recorded: true, attribution: 'ambiguous_recipient', haltedJobIds: [] });
+    const rows = (await pg.query('SELECT id,status FROM outbound_jobs')).rows as any[];
+    expect(rows.find((r) => r.id === j1).status).toBe('pending_approval');
+    expect(rows.find((r) => r.id === j2).status).toBe('pending_approval');
+    const stored = (await pg.query("SELECT attribution, outbound_job_id FROM inbound_replies WHERE message_id='reply-amb@x.invalid'")).rows as any[];
+    expect(stored[0].attribution).toBe('ambiguous_recipient');
+    expect(stored[0].outbound_job_id).toBeNull();
+  });
+
+  it('thread headers resolve attribution even when the recipient spans campaigns', async () => {
+    const campaign2 = randomUUID();
+    await pg.query(
+      "INSERT INTO campaigns (id,workspace_id,name,status,daily_limit_total,steps,updated_at) VALUES ($1,$2,$3,'active',5,'[]',$4)",
+      [campaign2, workspaceId, 'Campaign A2', now]
+    );
+    await pg.query('INSERT INTO campaign_mailboxes (campaign_id,mailbox_id,workspace_id) VALUES ($1,$2,$3)', [campaign2, mailboxId, workspaceId]);
+    const j1 = await addJob({ recipient: 'lead@example.invalid', key: 'k1', providerMessageId: 'unique@msg.invalid' });
+    const j2 = await addJob({ recipient: 'lead@example.invalid', key: 'k2', campaign: campaign2 });
+
+    const res = await repo.recordInboundReply(workspaceId, {
+      mailboxId, messageId: 'reply-amb2@x.invalid', fromEmail: 'lead@example.invalid',
+      inReplyTo: '<unique@msg.invalid>', classification: 'interested', confidence: 0.9, receivedAt: now,
+    });
+    expect(res.attribution).toBe('thread_header');
+    expect(res.haltedJobIds).toEqual([j1]);
+    const row = (await pg.query('SELECT status FROM outbound_jobs WHERE id=$1', [j2])).rows as any[];
+    expect(row[0].status).toBe('pending_approval');
+  });
+
+  it('same-campaign multi-step recipient fallback stays a match and halts only that campaign', async () => {
+    const j1 = await addJob({ recipient: 'lead@example.invalid', key: 'k1', step: 1 });
+    const j2 = await addJob({ recipient: 'lead@example.invalid', key: 'k2', step: 2 });
+    const res = await repo.recordInboundReply(workspaceId, {
+      mailboxId, messageId: 'reply-single@x.invalid', fromEmail: 'lead@example.invalid',
+      classification: 'neutral', confidence: 0.5, receivedAt: now,
+    });
+    expect(res.attribution).toBe('recipient_match');
+    expect(res.haltedJobIds).toEqual(expect.arrayContaining([j1, j2]));
   });
 
   it('persists classification and confidence for later reporting', async () => {

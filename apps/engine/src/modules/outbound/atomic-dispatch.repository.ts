@@ -407,7 +407,7 @@ export class AtomicDispatchRepository implements DispatchRepository {
     classification: 'interested' | 'objection' | 'out_of_office' | 'unsubscribe' | 'neutral' | 'bounce';
     confidence: number;
     receivedAt: Date;
-  }): Promise<{ recorded: boolean; attribution: 'thread_header' | 'recipient_match' | 'unattributed'; haltedJobIds: string[] }> {
+  }): Promise<{ recorded: boolean; attribution: 'thread_header' | 'recipient_match' | 'ambiguous_recipient' | 'unattributed'; haltedJobIds: string[] }> {
     z.string().uuid().parse(workspaceId);
     z.string().min(1).parse(input.messageId);
     const fromEmail = z.string().email().parse(input.fromEmail.trim().toLowerCase());
@@ -418,10 +418,12 @@ export class AtomicDispatchRepository implements DispatchRepository {
          JOIN campaign_mailboxes cm ON cm.campaign_id = j.campaign_id AND cm.workspace_id = j.workspace_id
          WHERE j.workspace_id = $1::uuid AND cm.mailbox_id = $2::uuid`,
         [workspaceId, input.mailboxId]);
-      const match = attributeReply(
+      const result = attributeReply(
         { inReplyTo: input.inReplyTo, references: input.references, fromEmail },
         jobs.map((j) => ({ id: j.id, campaignId: j.campaign_id, providerMessageId: j.provider_message_id, recipientHash: j.recipient_hash, scheduledAt: new Date(j.scheduled_at) })),
       );
+      const match = result && !('ambiguous' in result) ? result : null;
+      const basis = result ? ('ambiguous' in result ? 'ambiguous_recipient' as const : result.basis) : 'unattributed' as const;
       const inserted = await tx.query<{ id: string }>(
         `INSERT INTO inbound_replies
            (id, workspace_id, outbound_job_id, campaign_id, mailbox_id, message_id, from_email, subject, classification, confidence, attribution, received_at, created_at)
@@ -429,9 +431,9 @@ export class AtomicDispatchRepository implements DispatchRepository {
          ON CONFLICT (workspace_id, message_id) DO NOTHING RETURNING id`,
         [randomUUID(), workspaceId, match?.jobId ?? null, match?.campaignId ?? null, input.mailboxId,
          input.messageId, fromEmail, input.subject ?? null, input.classification, input.confidence,
-         match?.basis ?? 'unattributed', input.receivedAt, this.clock()]);
-      if (!inserted[0]) return { recorded: false, attribution: match?.basis ?? 'unattributed' as const, haltedJobIds: [] as string[] };
-      if (!match) return { recorded: true, attribution: 'unattributed' as const, haltedJobIds: [] as string[] };
+         basis, input.receivedAt, this.clock()]);
+      if (!inserted[0]) return { recorded: false, attribution: basis, haltedJobIds: [] as string[] };
+      if (!match) return { recorded: true, attribution: basis, haltedJobIds: [] as string[] };
       const halted = await tx.query<{ id: string }>(
         `UPDATE outbound_jobs SET status='cancelled', updated_at=$4::timestamptz
          WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid AND recipient_hash=$3
