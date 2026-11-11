@@ -38,7 +38,7 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [bulkLoading, setBulkLoading] = useState<'approve' | 'reject' | null>(null);
+  const [bulkLoading, setBulkLoading] = useState<'reject' | null>(null);
 
   const loadQueue = useCallback(async () => {
     setIsLoading(true);
@@ -99,27 +99,6 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
       notify.error(err instanceof Error ? err.message : 'Rejection failed');
     } finally {
       setActionLoadingId(null);
-    }
-  };
-
-  const handleBulkApprove = async () => {
-    setBulkLoading('approve');
-    try {
-      const res = await approveOutboundJobs({ all: true, campaignId });
-      if (res.error) {
-        notify.error(res.error);
-      } else {
-        notify.success(
-          `Approved and held ${res.approvedCount ?? 0} messages (sending stays disabled)` +
-            ((res.staleCount ?? 0) > 0 ? `; ${res.staleCount} changed since queueing and still need review` : ''),
-        );
-        await loadQueue();
-        onStatusChange?.();
-      }
-    } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Batch approval failed');
-    } finally {
-      setBulkLoading(null);
     }
   };
 
@@ -189,16 +168,7 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
                 <span>{bulkLoading === 'reject' ? 'Rejecting...' : 'Reject All'}</span>
               </Button>
 
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={handleBulkApprove}
-                disabled={Boolean(bulkLoading) || Boolean(actionLoadingId)}
-                className="text-xs gap-1.5"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>{bulkLoading === 'approve' ? 'Approving...' : 'Approve All'}</span>
-              </Button>
+              {/* No Approve All: every approval must follow a human reading the exact recipient, wording and sender context on the item. */}
             </>
           )}
         </div>
@@ -212,7 +182,7 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
             Outreach dispatch is disabled system-wide
           </p>
           <p className="text-text-muted">
-            Approving signs off the exact recipient, wording and sender context shown here and holds the message as approved. Approved messages do not become schedulable and no external mail server calls are made. If the campaign content changes after approval, the approval is withdrawn and the message returns here for review.
+            Approving signs off the exact recipient, wording and sender context shown on the item and holds the message as approved. Approved messages do not become schedulable and no external mail server calls are made. Approval re-checks the current campaign content at click time: if anything changed since the message was queued, the approval is not recorded and you review the updated text instead. Campaign editing is not available yet; when it ships, edits must invalidate existing approvals before they can be released.
           </p>
         </div>
       </div>
@@ -314,9 +284,30 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
                       Subject: <span className="font-sans font-normal">{item.subject}</span>
                     </div>
                   )}
-                  {item.bodySnippet && (
+                  {item.bodyTemplate ? (
+                    <details className="rounded bg-canvas-elevated/40 border border-border-subtle text-xs leading-relaxed">
+                      <summary className="cursor-pointer select-none p-2.5 text-text-secondary">
+                        <span className="italic">&ldquo;{item.bodySnippet}&rdquo;</span>
+                        <span className="ml-2 text-[10px] font-mono text-text-muted">click to review full text</span>
+                      </summary>
+                      <pre className="whitespace-pre-wrap font-sans not-italic p-2.5 pt-0 text-text-secondary">{item.bodyTemplate}</pre>
+                    </details>
+                  ) : item.bodySnippet ? (
                     <div className="p-2.5 rounded bg-canvas-elevated/40 border border-border-subtle text-text-secondary italic text-xs leading-relaxed">
                       &ldquo;{item.bodySnippet}&rdquo;
+                    </div>
+                  ) : null}
+                  <div className="text-text-muted font-mono text-[11px]">
+                    Sender scope:{' '}
+                    <span className="text-text-secondary">
+                      {item.senderMailboxIds && item.senderMailboxIds.length > 0
+                        ? `${item.senderMailboxIds.length} assigned mailbox${item.senderMailboxIds.length === 1 ? '' : 'es'}`
+                        : 'no sender mailboxes assigned to this campaign'}
+                    </span>
+                  </div>
+                  {item.stale && (
+                    <div className="text-[11px] font-mono text-signal-pending">
+                      Content changed since this message was queued. The first approval only refreshes the review snapshot; a second approval signs it off.
                     </div>
                   )}
                 </div>

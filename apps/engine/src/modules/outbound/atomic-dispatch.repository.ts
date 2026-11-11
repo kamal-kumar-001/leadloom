@@ -157,9 +157,15 @@ export class AtomicDispatchRepository implements DispatchRepository {
       status: string;
       scheduled_at: Date;
       created_at: Date;
+      approval_snapshot: any;
+      approval_content_hash: string | null;
+      mailbox_ids: string[] | null;
     }>(
       `SELECT j.id, j.workspace_id, j.campaign_id, c.name AS campaign_name, c.steps AS campaign_steps,
-              j.recipient_email, j.step_number, j.status, j.scheduled_at, j.created_at
+              j.recipient_email, j.step_number, j.status, j.scheduled_at, j.created_at,
+              j.approval_snapshot, j.approval_content_hash,
+              (SELECT array_agg(cm.mailbox_id) FROM campaign_mailboxes cm
+                WHERE cm.workspace_id = j.workspace_id AND cm.campaign_id = j.campaign_id) AS mailbox_ids
        FROM outbound_jobs j
        JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
        WHERE j.workspace_id = $1::uuid
@@ -173,16 +179,45 @@ export class AtomicDispatchRepository implements DispatchRepository {
     return rows.map(r => {
       let subject: string | undefined;
       let bodySnippet: string | undefined;
+      let bodyTemplate: string | undefined;
+      let senderMailboxIds: string[] | undefined;
+      let stale = false;
+      let steps: any[] = [];
       try {
-        const steps = Array.isArray(r.campaign_steps) ? r.campaign_steps : JSON.parse(r.campaign_steps || '[]');
+        steps = Array.isArray(r.campaign_steps) ? r.campaign_steps : JSON.parse(r.campaign_steps || '[]');
+      } catch {
+        // Fallback gracefully if steps cannot be decoded
+      }
+      const stored = r.approval_snapshot && typeof r.approval_snapshot === 'object' ? r.approval_snapshot : null;
+      if (stored) {
+        // Review shows exactly what the stored approval snapshot signs off on.
+        subject = typeof stored.subject === 'string' ? stored.subject : undefined;
+        bodyTemplate = typeof stored.bodyTemplate === 'string' ? stored.bodyTemplate : undefined;
+        senderMailboxIds = Array.isArray(stored.mailboxIds) ? stored.mailboxIds.map(String) : [];
+      } else {
         const step = steps.find((s: any) => (s.stepNumber ?? s.step) === r.step_number);
         if (step) {
           subject = step.subject;
-          const body = step.bodyTemplate || step.bodySnippet || step.body || '';
-          bodySnippet = body.length > 200 ? body.slice(0, 197) + '...' : body;
+          bodyTemplate = step.bodyTemplate || step.body || '';
+        }
+        senderMailboxIds = (r.mailbox_ids ?? []).map(String);
+      }
+      if (bodyTemplate) bodySnippet = bodyTemplate.length > 200 ? bodyTemplate.slice(0, 197) + '...' : bodyTemplate;
+      // Stale when no snapshot is stored yet, or the stored hash no longer matches
+      // the current campaign content + recipient + mailbox context. A stale item's
+      // first approval only refreshes the snapshot; a second deliberate approval signs off.
+      try {
+        if (!r.approval_content_hash || !stored) {
+          stale = true;
+        } else {
+          const current = buildApprovalSnapshot({
+            campaignId: r.campaign_id, stepNumber: r.step_number, recipientEmail: r.recipient_email,
+            campaignSteps: steps, mailboxIds: (r.mailbox_ids ?? []).map(String),
+          });
+          stale = approvalContentHash(current) !== r.approval_content_hash;
         }
       } catch {
-        // Fallback gracefully if steps cannot be decoded
+        stale = true;
       }
 
       return {
@@ -194,6 +229,9 @@ export class AtomicDispatchRepository implements DispatchRepository {
         stepNumber: r.step_number,
         subject,
         bodySnippet,
+        bodyTemplate,
+        senderMailboxIds,
+        stale,
         status: 'pending_approval' as const,
         scheduledAt: new Date(r.scheduled_at).toISOString(),
         createdAt: new Date(r.created_at).toISOString(),

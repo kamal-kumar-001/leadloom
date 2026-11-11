@@ -403,3 +403,9 @@
 - Toasts: single/bulk approve report "approved and held (sending stays disabled)"; stale responses (approvedCount 0, staleCount > 0) tell the reviewer the content changed since queueing and a second deliberate approval is needed.
 - Metric relabeled APPROVED (HELD). engine-client approve response typed with staleCount.
 - Verified end-to-end in a real browser against local engine: first approve of a snapshot-less job surfaces the stale message; second deliberate approve holds the job (DB status 'approved', hash stamped), queue metric updates, no dispatch.
+## 2026-11-11 - Web+Engine: approval queue review surface
+- Queue items now render the actual approval snapshot: subject, expandable full body text, recipient, sender scope (assigned mailbox count or explicit "no sender mailboxes assigned"), and a stale badge when content changed since queueing (first approval refreshes the snapshot; a second signs off).
+- listPendingApprovals returns stored snapshot + recomputed stale flag (current campaign content + recipient + mailbox context vs stored hash); contract gains bodyTemplate/senderMailboxIds/stale.
+- Approve All removed: no bulk approval of unreviewed content. Banner no longer promises automatic withdrawal on campaign edits (no edit endpoint exists; documented obligation instead).
+- Page-wide "Sample data" badge removed from /app/campaigns (live queue + campaign rows); Step Flow keeps its localized sample badges.
+- Browser-verified locally; 302 engine tests pass; web tsc clean.

@@ -9,7 +9,8 @@ interface AppTopbarProps {
   onToggleMobileMenu?: () => void;
 }
 
-const SAMPLE_ROUTES = ['/app/tables', '/app/campaigns', '/app/validator'];
+// Campaigns shows live queue/campaign data; only sections with their own fixture badge stay listed here.
+const SAMPLE_ROUTES = ['/app/tables', '/app/validator'];
 
 export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
   const pathname = usePathname();

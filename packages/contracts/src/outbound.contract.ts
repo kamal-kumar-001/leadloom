@@ -81,6 +81,12 @@ export const OutboundApprovalItemSchema = z.object({
   stepNumber: z.number().int().positive(),
   subject: z.string().optional(),
   bodySnippet: z.string().optional(),
+  /** Full body text under review (what the approval signs off on). */
+  bodyTemplate: z.string().optional(),
+  /** Sender context under review: sorted mailbox ids the campaign may send from. */
+  senderMailboxIds: z.array(z.string()).optional(),
+  /** True when the stored approval snapshot matches current campaign content; false means the content changed since queueing and approval will refresh the snapshot and require a second deliberate approval. */
+  stale: z.boolean().optional(),
   status: OutboundApprovalStatusEnum,
   scheduledAt: z.string(),
   createdAt: z.string(),

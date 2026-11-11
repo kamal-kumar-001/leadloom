@@ -557,6 +557,9 @@ export interface OutboundApprovalRow {
   stepNumber: number;
   subject?: string;
   bodySnippet?: string;
+  bodyTemplate?: string;
+  senderMailboxIds?: string[];
+  stale?: boolean;
   status: 'pending_approval' | 'pending' | 'approved' | 'rejected' | 'cancelled';
   scheduledAt: string;
   createdAt: string;
