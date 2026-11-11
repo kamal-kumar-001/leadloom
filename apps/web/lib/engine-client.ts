@@ -310,6 +310,10 @@ export interface WorkspaceMailboxRow {
   isPaused: boolean;
   lastHealthCheckAt: string | null;
   createdAt: string;
+  authType?: string;
+  connectionStatus?: string | null;
+  connectionCheckedAt?: string | null;
+  connectionErrorCode?: string | null;
 }
 export interface WorkspaceCampaignRow {
   id: string;
@@ -349,3 +353,182 @@ export interface WorkspaceExperimentRow {
 }
 export const fetchWorkspaceSuppressions = () => workspaceRead<WorkspaceSuppressionRow[]>('/workspace/suppressions');
 export const fetchWorkspaceExperiments = () => workspaceRead<WorkspaceExperimentRow[]>('/workspace/experiments');
+
+export interface MailboxPreset {
+  id: 'gmail' | 'outlook' | 'yahoo' | 'custom';
+  label: string;
+  smtpHost: string;
+  smtpPort: number;
+  imapHost: string;
+  imapPort: number;
+  secretLabel: string;
+  steps: string[];
+  sourceUrl: string | null;
+  caveat: string | null;
+}
+
+export interface ConnectMailboxInput {
+  email: string;
+  password: string;
+  smtpHost: string;
+  smtpPort: number;
+  imapHost: string;
+  imapPort: number;
+}
+
+export type ConnectionCheckCode =
+  | 'ok'
+  | 'auth_failed'
+  | 'unreachable'
+  | 'timeout'
+  | 'tls_error'
+  | 'failed'
+  | 'skipped';
+
+export interface MailboxConnectionResult {
+  smtp: ConnectionCheckCode;
+  imap: ConnectionCheckCode | 'skipped';
+}
+
+export interface ConnectMailboxResponse {
+  mailbox: {
+    id: string;
+    email: string;
+    connectionStatus: string;
+    connectionErrorCode: string | null;
+    connectionCheckedAt: string | null;
+  };
+  result: MailboxConnectionResult;
+  mailSent: false;
+}
+
+export interface TestMailboxResponse {
+  mailbox: {
+    id: string;
+    email: string;
+    connectionStatus: string;
+    connectionErrorCode: string | null;
+    connectionCheckedAt: string | null;
+  };
+  result: MailboxConnectionResult;
+  mailSent: false;
+}
+
+export async function fetchMailboxPresets(): Promise<{
+  data: MailboxPreset[] | null;
+  unavailable?: boolean;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/engine/workspace/mailbox-presets', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (res.status === 404) {
+      return { data: null, unavailable: true };
+    }
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      return {
+        data: null,
+        error: errJson.error || `Server responded with status ${res.status}`,
+      };
+    }
+    const data = await res.json();
+    return { data: data as MailboxPreset[] };
+  } catch (err: unknown) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Network error loading presets',
+    };
+  }
+}
+
+export async function connectMailbox(input: ConnectMailboxInput): Promise<{
+  data: ConnectMailboxResponse | null;
+  error?: string;
+  code?: string;
+  result?: MailboxConnectionResult;
+}> {
+  try {
+    const res = await fetch('/api/engine/workspace/mailboxes/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(input),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        data: null,
+        error: json.error || `Connection failed with status ${res.status}`,
+        code: json.code,
+        result: json.result,
+      };
+    }
+    return { data: json as ConnectMailboxResponse };
+  } catch (err: unknown) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Network error connecting mailbox',
+    };
+  }
+}
+
+export async function testMailboxConnection(id: string): Promise<{
+  data: TestMailboxResponse | null;
+  error?: string;
+  code?: string;
+  result?: MailboxConnectionResult;
+}> {
+  try {
+    const res = await fetch(`/api/engine/workspace/mailboxes/${id}/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        data: null,
+        error: json.error || `Test failed with status ${res.status}`,
+        code: json.code,
+        result: json.result,
+      };
+    }
+    return { data: json as TestMailboxResponse };
+  } catch (err: unknown) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Network error testing mailbox',
+    };
+  }
+}
+
+export async function deleteMailbox(id: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`/api/engine/workspace/mailboxes/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || `Removal failed with status ${res.status}`,
+      };
+    }
+    return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Network error removing mailbox',
+    };
+  }
+}
+

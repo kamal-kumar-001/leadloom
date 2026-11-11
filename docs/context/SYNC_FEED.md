@@ -327,3 +327,14 @@
 - Engine `modules/mailbox-connect` + routes GET `/workspace/mailbox-presets`, POST `/workspace/mailboxes/connect`, POST `/workspace/mailboxes/:id/test`, DELETE `/workspace/mailboxes/:id`; admin only, off unless `LEADLOOM_MAILBOX_CONNECT_ENABLED=true`. Login check only, no mail sent; password sealed in the vault envelope, never returned. SMTP verified against a local SMTP server; IMAP not yet verified against a real server. `listMailboxes` now returns status fields. Web UI not built yet.
 - Hardening (same day): hosts are resolved once at connect time, every address must be public (IPv6 allowlist, mapped/NAT64/6to4/ULA refused), socket goes to the pinned IP with SNI + certificate validation, TLS required before the password is sent, 20s hard deadline. Applies to /test too.
 - Test coverage (same day): the STRICT connect path (public-address policy, pinned IP, SNI, mandatory STARTTLS, certificate validation) is exercised against local TLS SMTP and IMAP servers using a test CA via a test-only hook that main.ts never passes. Not verified against Gmail/Outlook or implicit-TLS ports 465/993.
+
+---
+
+### [2026-11-11T18:08:00+05:30] Team Beta | apps/web mailbox connect UI | Non-Breaking
+- Implemented Mailbox Connect UI (`apps/web/app/app/mailboxes/page.tsx`, `apps/web/components/mailboxes/`, `apps/web/lib/engine-client.ts`):
+  - Added typed client methods and interfaces for `fetchMailboxPresets`, `connectMailbox`, `testMailboxConnection`, `deleteMailbox`, and extended `WorkspaceMailboxRow` with connection attributes.
+  - Built `ConnectMailboxDialog` with provider picker (Gmail, Outlook, Yahoo, Custom), numbered setup steps, caveat callouts, documentation links, encrypted app password input with security note, and plain-language error mapping (`auth_failed`, `tls_error`, `timeout`, `unreachable`, `private_host`, etc.). Password is cleared immediately on submit and never logged or exposed.
+  - Built `MailboxRowItem` with connection status pills (`Login verified`, `Failed: <code>`, `Never checked`), timestamp, admin-only "Test connection" with spinner, and "Remove" with accessible `ConfirmDialog`. Non-admin members see read-only cards without action buttons.
+  - Built `UnbuiltProvidersCard` showing honest roadmaps for Gmail OAuth, LinkedIn, and X without prices.
+  - Handled feature flag 404 on `/workspace/mailbox-presets` gracefully with a disabled card notice when `LEADLOOM_MAILBOX_CONNECT_ENABLED` is off.
+- Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (0 errors).

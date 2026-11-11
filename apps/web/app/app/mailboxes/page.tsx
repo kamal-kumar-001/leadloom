@@ -1,55 +1,28 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
+import { Button, Card, EmptyState } from '@leadloom/ui';
 import {
   fetchWorkspaceMailboxes,
   fetchWorkspaceSuppressions,
+  fetchMailboxPresets,
+  fetchAuthMe,
   type WorkspaceMailboxRow,
   type WorkspaceSuppressionRow,
+  type MailboxPreset,
 } from '../../../lib/engine-client';
-import { notify } from '@/lib/notify';
+import {
+  MailboxRowItem,
+  ConnectMailboxDialog,
+  UnbuiltProvidersCard,
+} from '../../../components/mailboxes';
 import {
   Mail,
-  ShieldCheck,
   ShieldAlert,
-  CheckCircle2,
-  AlertCircle,
-  Plus,
   RefreshCw,
-  Clock,
-  Send,
-  Sliders,
-  Check,
-  HelpCircle,
-  XCircle,
+  Plus,
+  Info,
 } from 'lucide-react';
-
-function renderDnsChip(label: 'SPF' | 'DKIM' | 'DMARC', status: string) {
-  const s = (status || 'unknown').toLowerCase();
-  if (s === 'verified' || s === 'pass') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-signal-verified/15 text-signal-verified border border-signal-verified/30">
-        <Check className="w-3 h-3 stroke-[2.5]" />
-        <span>{label}: Verified</span>
-      </span>
-    );
-  }
-  if (s === 'failed' || s === 'fail') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-signal-failed/15 text-signal-failed border border-signal-failed/30">
-        <XCircle className="w-3 h-3 stroke-[2.5]" />
-        <span>{label}: Failed</span>
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-canvas-elevated text-text-muted border border-border-subtle">
-      <HelpCircle className="w-3 h-3" />
-      <span>{label}: Unknown</span>
-    </span>
-  );
-}
 
 export default function MailboxesPage() {
   const [mailboxes, setMailboxes] = useState<WorkspaceMailboxRow[]>([]);
@@ -60,7 +33,10 @@ export default function MailboxesPage() {
   const [suppressionsLoading, setSuppressionsLoading] = useState(true);
   const [suppressionsError, setSuppressionsError] = useState<string | null>(null);
 
-  const [activeDnsDomain, setActiveDnsDomain] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [presets, setPresets] = useState<MailboxPreset[]>([]);
+  const [isConnectFeatureEnabled, setIsConnectFeatureEnabled] = useState(true);
+  const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
 
   const loadMailboxes = useCallback(async () => {
     setIsLoading(true);
@@ -96,15 +72,42 @@ export default function MailboxesPage() {
     }
   }, []);
 
+  const loadPresetsAndUser = useCallback(async () => {
+    try {
+      const [meRes, presetsRes] = await Promise.all([
+        fetchAuthMe(),
+        fetchMailboxPresets(),
+      ]);
+
+      if (meRes.data) {
+        const role = meRes.data.role;
+        setIsAdmin(role === 'admin' || role === 'owner');
+      }
+
+      if (presetsRes.unavailable) {
+        setIsConnectFeatureEnabled(false);
+        setPresets([]);
+      } else if (presetsRes.data) {
+        setIsConnectFeatureEnabled(true);
+        setPresets(presetsRes.data);
+      }
+    } catch {
+      // Degrade gracefully if metadata endpoint errors
+      setIsConnectFeatureEnabled(false);
+    }
+  }, []);
+
   const handleRefreshAll = useCallback(() => {
     loadMailboxes();
     loadSuppressions();
-  }, [loadMailboxes, loadSuppressions]);
+    loadPresetsAndUser();
+  }, [loadMailboxes, loadSuppressions, loadPresetsAndUser]);
 
   useEffect(() => {
     loadMailboxes();
     loadSuppressions();
-  }, [loadMailboxes, loadSuppressions]);
+    loadPresetsAndUser();
+  }, [loadMailboxes, loadSuppressions, loadPresetsAndUser]);
 
   const totalSendLimit = mailboxes.reduce((acc, m) => acc + (m.dailySendLimit || 0), 0);
   const totalSentToday = mailboxes.reduce((acc, m) => acc + (m.sentToday || 0), 0);
@@ -141,9 +144,29 @@ export default function MailboxesPage() {
             <span>Refresh</span>
           </Button>
 
-          <Button size="sm" variant="outline" disabled title="Mailbox connection is not available yet" className="text-xs gap-1.5">
-            <span>Add mailbox: not available yet</span>
-          </Button>
+          {isConnectFeatureEnabled ? (
+            isAdmin ? (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => setIsConnectDialogOpen(true)}
+                className="text-xs gap-1.5 focus-visible:ring-2 focus-visible:ring-brand-loom"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Connect a mailbox</span>
+              </Button>
+            ) : null
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled
+              title="Mailbox connection is not enabled on this server"
+              className="text-xs gap-1.5"
+            >
+              <span>Connect a mailbox: not available yet</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -172,7 +195,11 @@ export default function MailboxesPage() {
           <div className="text-2xl font-bold text-text-primary mt-1">
             {isLoading ? '—' : avgHealth}
           </div>
-          <div className="text-[11px] text-text-muted mt-1">{checked.length > 0 ? `${checked.length} checked mailbox${checked.length === 1 ? '' : 'es'}` : 'No health check has run yet'}</div>
+          <div className="text-[11px] text-text-muted mt-1">
+            {checked.length > 0
+              ? `${checked.length} checked mailbox${checked.length === 1 ? '' : 'es'}`
+              : 'No health check has run yet'}
+          </div>
         </Card>
 
         <Card className="p-4">
@@ -184,10 +211,29 @@ export default function MailboxesPage() {
         </Card>
       </div>
 
+      {/* Feature Flag Notice if Disabled on Host */}
+      {!isConnectFeatureEnabled && (
+        <Card className="p-4 bg-canvas-surface border-border-subtle flex items-start gap-3">
+          <Info className="w-4 h-4 text-text-muted mt-0.5 shrink-0" />
+          <div className="text-xs text-text-muted leading-relaxed">
+            <span className="font-semibold text-text-secondary block mb-0.5">
+              Mailbox connection is not enabled on this server
+            </span>
+            Connecting IMAP/SMTP mailboxes requires the{' '}
+            <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-canvas-elevated border border-border-subtle">
+              LEADLOOM_MAILBOX_CONNECT_ENABLED
+            </code>{' '}
+            engine flag. Existing mailboxes and suppressions remain accessible.
+          </div>
+        </Card>
+      )}
+
       {/* Mailbox List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-text-primary">Sender Health & Record Validation</h2>
+          <h2 className="text-sm font-semibold text-text-primary">
+            Sender Health & Connection Status
+          </h2>
           {!isLoading && !error && (
             <span className="text-xs text-text-muted font-mono">
               {mailboxes.length} {mailboxes.length === 1 ? 'mailbox' : 'mailboxes'}
@@ -207,7 +253,9 @@ export default function MailboxesPage() {
         ) : error ? (
           <Card className="p-6 border-signal-failed/30 bg-signal-failed/5 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-signal-failed">Failed to load workspace mailboxes</p>
+              <p className="text-sm font-medium text-signal-failed">
+                Failed to load workspace mailboxes
+              </p>
               <p className="text-xs text-text-muted mt-0.5">{error}</p>
             </div>
             <Button size="sm" variant="outline" onClick={loadMailboxes} className="text-xs">
@@ -219,71 +267,37 @@ export default function MailboxesPage() {
           <Card className="p-8">
             <EmptyState
               icon={<Mail className="w-6 h-6 text-text-muted" />}
-              title="No mailboxes yet"
-              description="Connect an SMTP/OAuth sender to start outbound sequences."
+              title="No mailboxes connected yet"
+              description="Connect an IMAP/SMTP sender to verify connection and start outbound sequences."
+              action={
+                isAdmin && isConnectFeatureEnabled ? (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => setIsConnectDialogOpen(true)}
+                    className="text-xs gap-1.5 mt-2"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Connect a mailbox</span>
+                  </Button>
+                ) : undefined
+              }
             />
           </Card>
         ) : (
-          mailboxes.map((m) => {
-            const domain = m.email.split('@')[1] || 'leadloom.dev';
-            const quotaPercent = m.dailySendLimit > 0 ? Math.min(100, Math.round((m.sentToday / m.dailySendLimit) * 100)) : 0;
-
-            return (
-              <Card
-                key={m.id}
-                className="p-5 hover:border-border-muted transition-all shadow-sm"
-              >
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-brand-loom/20 border border-brand-loom/30 flex items-center justify-center shrink-0">
-                      <Mail className="w-5 h-5 text-brand-loom" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold text-text-primary">{m.email}</span>
-                        <Badge variant={m.isPaused ? 'muted' : 'verified'} className="text-[10px] font-mono">
-                          {m.isPaused ? 'Paused' : 'Active'}
-                        </Badge>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-canvas-elevated text-text-secondary border border-border-subtle">
-                          Health: {m.healthScore > 0 ? `${m.healthScore}/100` : '—'}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                        {renderDnsChip('SPF', m.spfStatus)}
-                        {renderDnsChip('DKIM', m.dkimStatus)}
-                        {renderDnsChip('DMARC', m.dmarcStatus)}
-                      </div>
-                      <p className="text-[11px] text-text-muted mt-2 font-mono">
-                        Last health check: {m.lastHealthCheckAt ? new Date(m.lastHealthCheckAt).toLocaleDateString() : 'Never checked'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Quota Progress & DNS Inspect Action */}
-                  <div className="flex items-center gap-4 lg:justify-end">
-                    <div className="text-right">
-                      <div className="text-xs text-text-muted font-mono">
-                        Sent today: <span className="font-semibold text-text-primary">{m.sentToday}</span> / {m.dailySendLimit}
-                      </div>
-                      <div className="w-36 h-2 rounded-full bg-canvas-elevated overflow-hidden mt-1.5 border border-border-subtle">
-                        <div
-                          className="h-full bg-signal-verified rounded-full"
-                          style={{ width: `${quotaPercent}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <Button size="sm" variant="outline" disabled title="DNS checks are not available yet" className="text-xs py-1.5 gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>DNS check: not available yet</span>
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            );
-          })
+          mailboxes.map((m) => (
+            <MailboxRowItem
+              key={m.id}
+              mailbox={m}
+              isAdmin={isAdmin}
+              onRefresh={loadMailboxes}
+            />
+          ))
         )}
       </div>
+
+      {/* Unbuilt Providers & Roadmap */}
+      <UnbuiltProvidersCard />
 
       {/* Suppression list */}
       <div className="space-y-4">
@@ -351,9 +365,9 @@ export default function MailboxesPage() {
                       </td>
                       <td className="py-3 px-4 text-text-secondary">
                         {s.reason ? (
-                          <Badge variant="subtle" className="text-[10px] font-mono">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-canvas-elevated border border-border-subtle text-text-secondary">
                             {s.reason}
-                          </Badge>
+                          </span>
                         ) : (
                           <span className="text-text-muted">—</span>
                         )}
@@ -388,9 +402,9 @@ export default function MailboxesPage() {
                     <span className="text-[10px] uppercase font-mono text-text-muted">Reason</span>
                     <span className="text-text-secondary">
                       {s.reason ? (
-                        <Badge variant="subtle" className="text-[10px] font-mono">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-canvas-elevated border border-border-subtle text-text-secondary">
                           {s.reason}
-                        </Badge>
+                        </span>
                       ) : (
                         '—'
                       )}
@@ -417,6 +431,13 @@ export default function MailboxesPage() {
         )}
       </div>
 
+      {/* Connect Mailbox Dialog */}
+      <ConnectMailboxDialog
+        isOpen={isConnectDialogOpen}
+        presets={presets}
+        onClose={() => setIsConnectDialogOpen(false)}
+        onSuccess={loadMailboxes}
+      />
     </div>
   );
 }
