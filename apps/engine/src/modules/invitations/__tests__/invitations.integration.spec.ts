@@ -73,7 +73,9 @@ describe.runIf(RUN)('invitations on real Postgres (gated)', () => {
   it('guard: every workspace table is either checked by accept or a known child of a checked table', async () => {
     const r: any[] = await prisma.$queryRawUnsafe(`SELECT t.table_name n FROM information_schema.tables t WHERE t.table_schema='public' AND t.table_type='BASE TABLE' AND NOT EXISTS (SELECT 1 FROM information_schema.columns c WHERE c.table_schema='public' AND c.table_name=t.table_name AND c.column_name='workspace_id') ORDER BY 1`);
     // Reviewed children of workspace-scoped parents, plus auth/global tables. A new table here must be reviewed against Accept's pristine check.
-    const known = ['cells', 'columns', 'email_otps', 'enrichment_cache', 'mailbox_sync_state', 'outreach_events', 'rows', 'smoke_test_pages', 'waitlist_leads', 'workspaces', '_prisma_migrations'];
+    const known = ['cells', 'columns', 'email_otps', 'enrichment_cache', 'mailbox_sync_state', 'outreach_events', 'rows', 'smoke_test_pages', 'waitlist_leads', 'workspaces', '_prisma_migrations',
+      // Global ephemeral abuse-control state (hashed-IP buckets, no workspace linkage, cleaned after 24h): an account move cannot interact with it.
+      'public_rate_limit_buckets'];
     expect(r.map((x) => x.n).filter((n) => !known.includes(n))).toEqual([]);
   });
   it('a workspace with non-default settings is not pristine', async () => {
