@@ -12,7 +12,7 @@ export interface ProvisionedMember { userId: string; workspaceId: string; role: 
  */
 export interface ProvisioningStore {
   findByEmail(email: string): Promise<{ userId: string; workspaceId: string; role: Role; active: boolean } | null>;
-  createWorkspaceWithAdmin(input: { email: string; name: string | null; workspaceName: string }): Promise<{ userId: string; workspaceId: string; role?: Role } | null>;
+  createWorkspaceWithAdmin(input: { email: string; name: string | null; workspaceName: string }): Promise<{ userId: string; workspaceId: string } | null>;
 }
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
@@ -21,7 +21,7 @@ const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
  * First sign-in provisioning. Input is ONLY a provider-verified email (and a
  * display name for the label). There is no parameter for workspace or role:
  * a new user always gets a brand-new workspace and is admin of that workspace
- * alone. Joining an existing workspace happens only through an open invitation for this exact verified address (the store claims it atomically), and
+ * alone. Joining an existing workspace happens only through an explicit, authenticated invitation accept (modules/invitations), never here, and
  * platform privileges are never granted here. No plan is assigned, so
  * entitlement gates deny until an owner or billing flow assigns one.
  */
@@ -41,7 +41,7 @@ export class ProvisioningService {
     const name = (displayName ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 255) || null;
     const workspaceName = (name ? `${name}'s workspace` : `${email.split('@')[0]}'s workspace`).slice(0, 255);
     const made = await this.store.createWorkspaceWithAdmin({ email, name, workspaceName });
-    if (made) return { userId: made.userId, workspaceId: made.workspaceId, role: made.role ?? 'admin', created: true };
+    if (made) return { userId: made.userId, workspaceId: made.workspaceId, role: 'admin', created: true };
     const raced = await this.store.findByEmail(email); // lost a race: converge on the winner
     if (!raced) throw new Error('Provisioning failed');
     if (!raced.active) throw new AccountSuspendedError();

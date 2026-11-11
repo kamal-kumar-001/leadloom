@@ -61,18 +61,21 @@ Goal: the account creator can invite members into the *same* workspace with a ro
 engine enforces access. Additive only: no migration rewrites, existing users stay admins of
 their own workspaces. Pattern follows the BakeryPOS team flow (to be compared once its source is read).
 
-**Done (commit 528e088, engine only, flag `LEADLOOM_TEAM_INVITES_ENABLED`, default off, not deployed):**
-- A1: migration `20261116_workspace_invitations`: email-bound invitation (no token, no secret), role admin/member/read_only, 7-day expiry, one open invite per workspace and address, revoked/accepted markers. `User.workspaceId` stays: one workspace per user, so an address that already has an account cannot be invited yet.
-- A2: admin-only routes `GET/POST /workspace/invitations`, `DELETE /workspace/invitations/:id`. Workspace and actor come only from the session; the body cannot carry a workspace; strict schema; per-workspace caps (25 open, 20 per day) and a request limiter; audit rows. Create returns `emailSent:false`.
-- A4: acceptance is claimed atomically while the account is created, only for the exact address, only by a provider-verified sign-in or a password signup (which still cannot sign in until the mailbox is proven). The new user joins the inviter's workspace at the invited role instead of getting a new workspace. Revoked, expired, wrong-workspace and concurrent cases are tested on real Postgres.
+**Model (engine only, flag `LEADLOOM_TEAM_INVITES_ENABLED`, default off, not deployed). Reference: BakeryPOS has an OWNER role seeded for the creator, per-role permission bundles, a last-owner guard, and no self-delete (read from `kamal-kumar-001/BakeryPOS`, packages/types/src/permissions.ts and apps/backend/src/modules/users/users.service.ts). Leadloom takes the owner, last-admin and no-self-removal rules now; per-permission toggles are a later step.**
+- Migrations `20261116_workspace_invitations` and `20261117_workspace_owner` (additive). An invitation binds an email to a workspace and a role (admin, member or read_only), expires after 7 days, and carries no token or secret. The workspace creator is recorded as owner (`workspaces.owner_user_id`; existing workspaces backfilled to their earliest admin). No new role value.
+- Engine roles are admin, member and read_only (an earlier note that said only admin and member was wrong).
+- Creating an invitation does nothing to the invitee. Signing up with the address creates a normal personal workspace; the invitation stays open. The invited user must sign in with a verified identity and explicitly accept (`GET /me/invitations`, `POST /me/invitations/:id/accept`). Verified means a completed email verification or a provider-verified provisioning record. Accept works only for the invitation's exact address, only while open and unexpired, and only if the user's current workspace is pristine (sole member, creator, and no data in any workspace-scoped table). Then the user moves, the empty personal workspace is deactivated (not deleted) and the session version is bumped. Otherwise nothing moves.
+- Admin routes: `GET/POST /workspace/invitations`, `DELETE /workspace/invitations/:id`, `GET /workspace/members`, `PATCH/DELETE /workspace/members/:id`. Workspace and actor come only from the session. Caps of 25 open and 20 per day; request limiters; audit rows. Create returns `emailSent:false`.
+- Owner rules: the owner cannot be demoted or removed by anyone; only the owner can grant or take the admin role or invite an admin; nobody removes themselves; the last active admin is protected. Removal suspends (`disabled_at` plus session bump), never deletes. Ownership transfer is not built.
+- An address that already has an account cannot be invited (explicitly unsupported, nothing is forced to move). Multi-workspace membership is a larger change and is not built.
+- Tests: squatting the address gains nothing; revoked, expired, wrong-address and unverified accepts are refused; data-holding accounts are never moved; concurrent membership changes keep an admin. Run on real Postgres locally.
 
 **Open decisions (not assumed):**
-- Role model: engine roles today are admin, member, read_only. An `owner` role, non-removable creator and ownership transfer are a product decision, not built. Admins can currently invite admins.
-- Existing account holders joining a second workspace needs a membership table (out of scope until decided).
-- A5 invite email: sending to an invitee is outside the approved requester-OTP scope. No invite mail is sent. The UI would show the sign-up instruction for manual sharing. Needs Kamal's explicit approval of the flow and recipient semantics first.
+- Invite email: sending to an invitee is outside the approved requester-OTP scope and no mail is sent. Until Kamal approves the flow and recipient semantics, the UI would tell the admin to ask the person to sign up with that address, then accept in Settings.
+- Per-permission toggles and custom roles (BakeryPOS has them) and ownership transfer.
 
 **Remaining:**
-- A3: member list, role change and member removal routes (admin-only, last-admin guard, session version bump on removal).
+- A3: done in the engine (see model). Web side remains.
 - A6 (web): Settings team card with real member and pending-invite lists, invite form, revoke, honest states. Keep "not available yet" until A2 and A4 are live-verified.
 - A8: browser-verified end to end on a non-production stack: owner invites, invitee signs up, role limits enforced, revoke and expiry refused.
 

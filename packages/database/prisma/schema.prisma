@@ -21,6 +21,7 @@ model Workspace {
   name        String   @db.VarChar(255)
   plan        String   @default("free") @db.VarChar(32)
   isActive    Boolean  @default(true) @map("is_active")
+  ownerUserId String?  @map("owner_user_id") @db.Uuid // creator; protected from demotion/removal by others
   preferences Json     @default("{}")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz

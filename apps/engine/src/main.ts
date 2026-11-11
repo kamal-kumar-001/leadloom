@@ -25,6 +25,7 @@ import { PrismaDispatchDatabase } from './modules/outbound/prisma-database';
 import type { WaterfallController } from './modules/waterfall/waterfall.controller';
 import type { ValidatorController } from './modules/validator/validator.controller';
 import { WorkspaceReadService } from './modules/workspace-read/workspace-read.service';
+import type { MemberService } from './modules/invitations/members';
 import type { InvitationService } from './modules/invitations/invitation.service';
 import { z } from 'zod';
 import { Module } from '@nestjs/common';
@@ -56,7 +57,8 @@ export interface RuntimeServices {
  /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
  reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listMailboxes'|'listCampaigns'|'listSuppressions'|'listExperiments'>;
  /** Optional: admin-only workspace invitations (default off; LEADLOOM_TEAM_INVITES_ENABLED). Sends no mail. */
- invitations?: Pick<InvitationService,'invite'|'list'|'revoke'>;
+ invitations?: Pick<InvitationService,'invite'|'list'|'revoke'|'mine'|'accept'>;
+ members?: Pick<MemberService,'list'|'setRole'|'remove'>;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
@@ -137,6 +139,18 @@ export async function createApplication(services?:RuntimeServices) {
    const InviteBody=z.object({email:z.string().max(320),role:z.enum(['read_only','member','admin'])}).strict();
    const adminOnly=async(request:any,reply:any)=>{const s=await authorize(request,reply,true);if(!s)return null;if(!isAdmin(s)){reply.code(403).send({error:'Admin role required'});return null;}return s;};
    const inviteLimiter=new SlidingWindowLimiter(30,60_000);
+   // The signed-in user's own pending invitations and explicit accept. Any role may call these; the engine
+   // answers only for the session's own verified address and moves only a pristine, empty personal workspace.
+   const acceptLimiter=new SlidingWindowLimiter(10,60_000);
+   fastify.get('/me/invitations',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return inv.mine(s.sub);});
+   fastify.post('/me/invitations/:id/accept',async(request:any,reply:any)=>{
+    const s=await authorize(request,reply);if(!s)return;
+    if(!acceptLimiter.take(s.sub))return reply.code(429).send({error:'Too many requests'});
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid invitation ID'});
+    const r=await inv.accept(s.sub,id.data);
+    if(r.ok)return {accepted:true,role:r.role,reauthenticate:true};
+    return reply.code(r.reason==='not_found'?404:409).send({error:'Invitation not accepted',code:r.reason});
+   });
    fastify.get('/workspace/invitations',async(request:any,reply:any)=>{const s=await adminOnly(request,reply);if(!s)return;return inv.list(s.workspaceId);});
    fastify.post('/workspace/invitations',async(request:any,reply:any)=>{
     const s=await adminOnly(request,reply);if(!s)return;
@@ -144,7 +158,7 @@ export async function createApplication(services?:RuntimeServices) {
     const p=InviteBody.safeParse(request.body);if(!p.success)return reply.code(400).send({error:'Invalid invitation request',code:'invalid_request'});
     const r=await inv.invite(s.workspaceId,s.sub,p.data.email,p.data.role);
     if(r.ok)return reply.code(201).send({invitation:r.invitation,emailSent:false});
-    const status=r.reason==='limit_reached'?429:r.reason==='already_member'||r.reason==='already_invited'?409:400;
+    const status=r.reason==='limit_reached'?429:r.reason==='owner_only'?403:r.reason==='account_exists'||r.reason==='already_invited'?409:400;
     return reply.code(status).send({error:'Invitation not created',code:r.reason});
    });
    fastify.delete('/workspace/invitations/:id',async(request:any,reply:any)=>{
@@ -152,6 +166,28 @@ export async function createApplication(services?:RuntimeServices) {
     const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid invitation ID'});
     const ok=await inv.revoke(s.workspaceId,s.sub,id.data);
     return ok?{revoked:true}:reply.code(404).send({error:'Invitation not found'});
+   });
+  }
+  if(services.members) {
+   const mem=services.members;
+   const adminOnlyM=async(request:any,reply:any)=>{const s=await authorize(request,reply,true);if(!s)return null;if(!isAdmin(s)){reply.code(403).send({error:'Admin role required'});return null;}return s;};
+   const memberLimiter=new SlidingWindowLimiter(30,60_000);
+   const changeStatus=(r:{ok:false;reason:string})=>r.reason==='not_found'?404:r.reason==='invalid_role'?400:r.reason==='owner_only'?403:409;
+   fastify.get('/workspace/members',async(request:any,reply:any)=>{const s=await adminOnlyM(request,reply);if(!s)return;return mem.list(s.workspaceId);});
+   fastify.patch('/workspace/members/:id',async(request:any,reply:any)=>{
+    const s=await adminOnlyM(request,reply);if(!s)return;
+    if(!memberLimiter.take(s.workspaceId))return reply.code(429).send({error:'Too many requests'});
+    const id=z.string().uuid().safeParse(request.params.id);const b=z.object({role:z.enum(['read_only','member','admin'])}).strict().safeParse(request.body);
+    if(!id.success||!b.success)return reply.code(400).send({error:'Invalid request'});
+    const r=await mem.setRole(s.workspaceId,s.sub,id.data,b.data.role);
+    return r.ok?{updated:true}:reply.code(changeStatus(r)).send({error:'Member not changed',code:r.reason});
+   });
+   fastify.delete('/workspace/members/:id',async(request:any,reply:any)=>{
+    const s=await adminOnlyM(request,reply);if(!s)return;
+    if(!memberLimiter.take(s.workspaceId))return reply.code(429).send({error:'Too many requests'});
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid member ID'});
+    const r=await mem.remove(s.workspaceId,s.sub,id.data);
+    return r.ok?{removed:true}:reply.code(changeStatus(r)).send({error:'Member not changed',code:r.reason});
    });
   }
   fastify.get('/vault/credentials',async(request:any,reply:any)=>{
@@ -387,6 +423,9 @@ if(require.main===module) {
     const {InvitationService}=await import('./modules/invitations/invitation.service.js');
     const {PrismaInvitationStore}=await import('./modules/invitations/prisma-invitation-store.js');
     services.invitations=new InvitationService(new PrismaInvitationStore(prisma));
+    const {MemberService}=await import('./modules/invitations/members.js');
+    const {PrismaMemberStore}=await import('./modules/invitations/prisma-member-store.js');
+    services.members=new MemberService(new PrismaMemberStore(prisma));
    }
    if(process.env.LEADLOOM_PASSWORD_AUTH_ENABLED==='true') {
     const {createTransactionalEmail}=await import('./modules/email/transactional.js');

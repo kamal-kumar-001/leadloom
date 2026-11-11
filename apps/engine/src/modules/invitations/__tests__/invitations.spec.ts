@@ -14,6 +14,10 @@ class MemStore implements InvitationStore {
     const r = { id: randomUUID(), workspaceId: i.workspaceId, email: i.email, role: i.role, createdAt: new Date(), expiresAt: i.expiresAt, status: 'pending' as const };
     this.rows.push(r); return r;
   }
+  owners = new Set<string>();
+  async isWorkspaceOwner(_w: string, u: string) { return this.owners.has(u); }
+  async listForUser() { return []; }
+  async accept() { return { ok: false as const, reason: 'not_found' as const }; }
   async list(w: string) { return this.rows.filter((r) => r.workspaceId === w); }
   async revoke(w: string, id: string) { const r = this.rows.find((x) => x.id === id && x.workspaceId === w && x.status === 'pending'); if (!r) return false; r.status = 'revoked'; return true; }
 }
@@ -27,7 +31,13 @@ describe('InvitationService', () => {
     expect(ok.ok && ok.invitation.email).toBe('new@y.example');
     expect(await svc.invite(w, a, 'new@y.example', 'member')).toEqual({ ok: false, reason: 'already_invited' });
     st.accounts.add('taken@y.example');
-    expect(await svc.invite(w, a, 'taken@y.example', 'member')).toEqual({ ok: false, reason: 'already_member' });
+    expect(await svc.invite(w, a, 'taken@y.example', 'member')).toEqual({ ok: false, reason: 'account_exists' });
+  });
+  it('only the workspace owner may invite an admin', async () => {
+    const st = new MemStore(); const svc = new InvitationService(st); const w = randomUUID(), owner = randomUUID(), admin = randomUUID(); st.owners.add(owner);
+    expect(await svc.invite(w, admin, 'a@y.example', 'admin')).toEqual({ ok: false, reason: 'owner_only' });
+    expect((await svc.invite(w, admin, 'a@y.example', 'member')).ok).toBe(true);
+    expect((await svc.invite(w, owner, 'b@y.example', 'admin')).ok).toBe(true);
   });
   it('caps invitations per workspace per day', async () => {
     const st = new MemStore(); const svc = new InvitationService(st); const w = randomUUID(), a = randomUUID();

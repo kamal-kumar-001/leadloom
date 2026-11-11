@@ -1,7 +1,6 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { PasswordAccountStore, PasswordUser } from './password-account.service';
 import type { Role } from '../auth/rbac';
-import { claimPendingInvite } from '../invitations/prisma-invitation-store';
 
 export class PrismaPasswordStore implements PasswordAccountStore {
   constructor(private readonly prisma: any) {}
@@ -16,20 +15,15 @@ export class PrismaPasswordStore implements PasswordAccountStore {
   }
 
   async createPasswordAccount(input: { email: string; name: string | null; workspaceName: string; passwordHash: string }) {
-    let workspaceId: string = randomUUID(); const userId = randomUUID();
+    const workspaceId = randomUUID(), userId = randomUUID();
     try {
       await this.prisma.$transaction(async (tx: any) => {
-        // An open invitation for this exact address joins the inviting workspace at the invited role.
-        // The account stays unverified and cannot sign in until the mailbox owner proves the address.
-        const invite = await claimPendingInvite(tx, input.email);
-        const role: Role = invite ? invite.role : 'admin';
-        if (invite) workspaceId = invite.workspaceId;
-        else await tx.workspace.create({ data: { id: workspaceId, name: input.workspaceName } });
-        await tx.user.create({ data: { id: userId, workspaceId, email: input.email, name: input.name, role, passwordHash: input.passwordHash } });
-        if (invite) await tx.$executeRawUnsafe(`UPDATE workspace_invitations SET accepted_user_id = $2::uuid WHERE id = $1::uuid`, invite.id, userId);
+        await tx.workspace.create({ data: { id: workspaceId, name: input.workspaceName } });
+        await tx.user.create({ data: { id: userId, workspaceId, email: input.email, name: input.name, role: 'admin', passwordHash: input.passwordHash } });
+        await tx.$executeRawUnsafe(`UPDATE workspaces SET owner_user_id = $2::uuid WHERE id = $1::uuid`, workspaceId, userId);
         await tx.$executeRawUnsafe(
-          `INSERT INTO audit_log (workspace_id, actor_user_id, action, target, metadata) VALUES ($1::uuid, $2::uuid, 'user.registered', $3, $4::jsonb)`,
-          workspaceId, userId, userId, JSON.stringify(invite ? { method: 'password', invitation: invite.id } : { method: 'password' }));
+          `INSERT INTO audit_log (workspace_id, actor_user_id, action, target, metadata) VALUES ($1::uuid, $2::uuid, 'user.registered', $3, '{"method":"password"}'::jsonb)`,
+          workspaceId, userId, userId);
       });
       return { userId };
     } catch (e: any) {
