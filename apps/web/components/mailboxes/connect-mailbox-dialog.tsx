@@ -260,7 +260,7 @@ export function ConnectMailboxDialog({
           <label className="text-xs font-semibold text-text-primary block">
             Select Mail Provider
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {presets.map((preset) => {
               const isSelected = selectedPresetId === preset.id;
               return (
@@ -275,7 +275,7 @@ export function ConnectMailboxDialog({
                       : 'bg-canvas-surface border-border-subtle text-text-secondary hover:text-text-primary hover:border-border-muted'
                   }`}
                 >
-                  <div className="text-xs font-medium truncate">{preset.label}</div>
+                  <div className="text-xs font-medium break-words leading-tight">{preset.label}</div>
                   <div className="text-[10px] text-text-muted mt-1 font-mono">
                     {preset.id === 'custom' ? 'Custom hosts' : `${preset.smtpPort}/${preset.imapPort}`}
                   </div>

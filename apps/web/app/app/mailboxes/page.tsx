@@ -183,11 +183,11 @@ export default function MailboxesPage() {
         </Card>
 
         <Card className="p-4">
-          <div className="text-xs text-text-muted">Aggregate Daily Quota</div>
+          <div className="text-xs text-text-muted">Configured daily limit</div>
           <div className="text-2xl font-bold text-text-primary mt-1">
-            {isLoading ? '—' : `${totalSentToday} / ${totalSendLimit}`}
+            {isLoading ? '—' : `${totalSendLimit}/day`}
           </div>
-          <div className="text-[11px] text-text-muted mt-1">Sum of per-mailbox daily limits</div>
+          <div className="text-[11px] text-text-muted mt-1">Sum of configured limits. Sending is not enabled; sent so far: {totalSentToday}</div>
         </Card>
 
         <Card className="p-4">

@@ -27,7 +27,7 @@ const UNBUILT_PROVIDERS: UnbuiltProvider[] = [
     id: 'linkedin',
     name: 'LinkedIn Direct Messages',
     category: 'Social Outreach',
-    status: 'No official route',
+    status: 'Partner-limited',
     description:
       "LinkedIn's official Messages API is limited to approved partners and member-initiated sends; it does not cover automated or scheduled messages.",
     documentationUrl:
@@ -70,7 +70,7 @@ export function UnbuiltProvidersCard() {
                   <div className="w-7 h-7 rounded-lg bg-canvas-elevated border border-border-subtle flex items-center justify-center shrink-0">
                     <Mail className="w-3.5 h-3.5 text-text-muted" />
                   </div>
-                  <span className="text-xs font-semibold text-text-primary truncate">
+                  <span className="text-xs font-semibold text-text-primary">
                     {provider.name}
                   </span>
                 </div>

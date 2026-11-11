@@ -147,7 +147,7 @@ export function MailboxRowItem({
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-bold text-text-primary">{m.email}</span>
               <Badge variant={m.isPaused ? 'muted' : 'verified'} className="text-[10px] font-mono">
-                {m.isPaused ? 'Paused' : 'Active'}
+                {m.isPaused ? 'Paused' : 'Not paused'}
               </Badge>
               {m.authType && (
                 <Badge variant="subtle" className="text-[10px] font-mono">
@@ -194,13 +194,10 @@ export function MailboxRowItem({
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 lg:justify-end">
           <div className="text-left sm:text-right">
             <div className="text-xs text-text-muted font-mono">
-              Sent today: <span className="font-semibold text-text-primary">{m.sentToday}</span> / {m.dailySendLimit}
+              Sending not enabled
             </div>
-            <div className="w-36 h-2 rounded-full bg-canvas-elevated overflow-hidden mt-1.5 border border-border-subtle">
-              <div
-                className="h-full bg-signal-verified rounded-full"
-                style={{ width: `${quotaPercent}%` }}
-              />
+            <div className="text-[11px] text-text-muted font-mono mt-0.5">
+              Configured limit: {m.dailySendLimit}/day. Sent so far: {m.sentToday}
             </div>
           </div>
 
