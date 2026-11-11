@@ -40,6 +40,23 @@ describe.runIf(RUN)('postgres integration (gated: LEADLOOM_INTEGRATION=1)', () =
     await prisma?.$disconnect();
   });
 
+  it('PrismaSeenMessageStore: UIDVALIDITY reset may lower the checkpoint, and the poll lock is exclusive', async () => {
+    const { PrismaSeenMessageStore } = await import('./prisma-seen-store');
+    const store = new PrismaSeenMessageStore(prisma);
+    expect(await store.storedValidity(mailboxId)).toBeNull();
+    await store.setLastUid(mailboxId, 50);
+    await store.resetCheckpoint(mailboxId, 4294967295);
+    expect(await store.storedValidity(mailboxId)).toBe(4294967295);
+    expect(await store.lastUid(mailboxId)).toBe(0);
+    let release!: () => void; const gate = new Promise<void>((r) => (release = r));
+    const first = store.withLock(mailboxId, async () => { await gate; return 'a'; });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(await store.withLock(mailboxId, async () => 'b')).toBeNull();
+    release();
+    expect(await first).toBe('a');
+    expect(await store.withLock(mailboxId, async () => 'c')).toBe('c');
+  });
+
   it('PrismaSeenMessageStore dedupes replies and keeps monotone UID checkpoints', async () => {
     const { PrismaSeenMessageStore } = await import('./prisma-seen-store');
     const store = new PrismaSeenMessageStore(prisma);

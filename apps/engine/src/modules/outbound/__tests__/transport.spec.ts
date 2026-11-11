@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SmtpTransport, type SmtpClient, type SmtpSendInput } from '../transport/smtp-transport';
 import { InMemoryMessageComposer } from '../transport/message-composer';
 import { buildListUnsubscribeHeaders, buildUnsubscribeToken, classifyReply } from '../transport/unsubscribe';
-import { ImapReplyPoller, InMemorySeenMessageStore, type ImapClient, type RawInboundMessage } from '../transport/imap-poller';
+import { replyDedupeKey, ImapReplyPoller, InMemorySeenMessageStore, type ImapClient, type RawInboundMessage } from '../transport/imap-poller';
 import { OAuth2TokenLoop, type MailboxTokenVault, type OAuth2TokenEndpoint, type OAuth2Tokens } from '../transport/oauth2-token-loop';
 
 const reservation = {
@@ -140,11 +140,55 @@ describe('imap reply poller', () => {
 
   it('skips already-seen ids within a replayed batch', async () => {
     const seen = new InMemorySeenMessageStore();
-    await seen.add(ctx.mailboxId, '<a@x>');
+    await seen.add(ctx.mailboxId, replyDedupeKey(msg(1, '<a@x>', 'ok'), undefined));
     const poller = new ImapReplyPoller(client([msg(1, '<a@x>', 'ok'), msg(2, '<b@x>', 'interested demo')]), seen);
     const events = await poller.pollOnce(ctx);
     expect(events.map((e) => e.messageId)).toEqual(['<b@x>']);
     expect(await seen.lastUid(ctx.mailboxId)).toBe(2);
+  });
+
+  it('does not drop distinct senders that reuse a Message-ID, and keys messages without one by uid', async () => {
+    const a = { ...msg(1, '<same@x>', 'one'), fromEmail: 'p@x.test' };
+    const b = { ...msg(2, '<same@x>', 'two'), fromEmail: 'q@x.test' };
+    const c = { ...msg(3, '', 'no id'), messageId: '' };
+    const events = await new ImapReplyPoller(client([a, b, c as any]), new InMemorySeenMessageStore()).pollOnce(ctx);
+    expect(events).toHaveLength(3);
+    expect(replyDedupeKey(a, 1)).not.toBe(replyDedupeKey(b, 1));
+    expect(replyDedupeKey(c as any, 1)).not.toBe(replyDedupeKey(c as any, 2));
+  });
+
+  it('keeps the same Message-ID in two mailboxes as separate events', async () => {
+    const seen = new InMemorySeenMessageStore();
+    const p = new ImapReplyPoller(client([msg(1, '<z@x>', 'hi')]), seen);
+    expect(await p.pollOnce({ ...ctx, mailboxId: '55555555-5555-4555-8555-555555555555' })).toHaveLength(1);
+    expect(await p.pollOnce({ ...ctx, mailboxId: '66666666-6666-4666-8666-666666666666' })).toHaveLength(1);
+  });
+
+  it('resets the checkpoint when UIDVALIDITY changes and refetches from 0', async () => {
+    const seen = new InMemorySeenMessageStore();
+    let validity = 10; const calls: number[] = [];
+    const c: ImapClient = { fetchSince: async () => [], fetchBatch: async (since) => { calls.push(since);
+      return { uidValidity: validity, messages: validity === 10 ? [msg(7, '<o@x>', 'old')] : [msg(1, '<n@x>', 'renumbered')] }; } };
+    const p = new ImapReplyPoller(c, seen);
+    expect((await p.pollOnce(ctx)).map((e) => e.messageId)).toEqual(['<o@x>']);
+    expect(await seen.lastUid(ctx.mailboxId)).toBe(7);
+    validity = 11;
+    expect((await p.pollOnce(ctx)).map((e) => e.messageId)).toEqual(['<n@x>']);
+    expect(calls).toEqual([0, 7, 0]);
+    expect(await seen.storedValidity(ctx.mailboxId)).toBe(11);
+    expect(await seen.lastUid(ctx.mailboxId)).toBe(1);
+  });
+
+  it('does not run two polls for one mailbox at once', async () => {
+    const seen = new InMemorySeenMessageStore();
+    let release!: () => void; const gate = new Promise<void>((r) => (release = r));
+    const slow: ImapClient = { fetchSince: async () => { await gate; return [msg(1, '<l@x>', 'x')]; } };
+    const p = new ImapReplyPoller(slow, seen);
+    const first = p.pollOnce(ctx);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(await p.pollOnce(ctx)).toEqual([]);
+    release();
+    expect(await first).toHaveLength(1);
   });
 });
 

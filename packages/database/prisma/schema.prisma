@@ -430,5 +430,7 @@ model MailboxSyncState {
 
   mailbox Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
 
+  uidValidity    BigInt?  @map("uid_validity")
+
   @@map("mailbox_sync_state")
 }

@@ -27,4 +27,12 @@ describe('client option mapping', () => {
     expect(() => buildSmtpOptions({ ...BASE, authType: 'password' })).toThrow('password');
     expect(() => buildImapOptions({ ...BASE, host: '', authType: 'oauth2', accessToken: 't' })).toThrow('host');
   });
+
+  it('refuses the plaintext test hook for non-loopback hosts and in production', () => {
+    const cfg = { ...BASE, port: 143, authType: 'password' as const, password: 'p', plaintextForTestsOnly: true };
+    expect(() => buildImapOptions({ ...cfg, host: 'mail.example.com' })).toThrow('plaintext IMAP is refused');
+    const prev = process.env.NODE_ENV; process.env.NODE_ENV = 'production';
+    try { expect(() => buildImapOptions({ ...cfg, host: '127.0.0.1' })).toThrow('plaintext IMAP is refused'); } finally { process.env.NODE_ENV = prev; }
+    expect((buildImapOptions({ ...cfg, host: '127.0.0.1' }) as any).secure).toBe(false);
+  });
 });

@@ -45,6 +45,11 @@ export function buildSmtpOptions(config: MailboxClientConfig): Record<string, un
 
 export function buildImapOptions(config: MailboxClientConfig): Record<string, unknown> {
   if (!config.host || !config.user) throw new Error('IMAP host and user are required');
+  if (config.plaintextForTestsOnly) {
+    // Refused outside a loopback fixture under a non-production runtime, whatever the caller passes.
+    const loopback = ['127.0.0.1', '::1', 'localhost'].includes(config.host);
+    if (process.env.NODE_ENV === 'production' || !loopback) throw new Error('plaintext IMAP is refused outside local test fixtures');
+  }
   const auth = config.authType === 'oauth2'
     ? (() => {
         if (!config.accessToken) throw new Error('OAuth2 IMAP auth requires an access token');
@@ -100,17 +105,22 @@ export async function createImapflowClient(config: MailboxClientConfig, limits: 
   const maxBatch = Math.max(1, limits.maxBatch ?? 100);
   const maxBodyChars = Math.max(0, limits.maxBodyChars ?? 20000);
   const { ImapFlow } = await import('imapflow');
-  return {
+  const self: ImapClient = {
     async fetchSince(sinceUid: number): Promise<RawInboundMessage[]> {
+      return (await self.fetchBatch!(sinceUid)).messages;
+    },
+    async fetchBatch(sinceUid: number): Promise<{ uidValidity: number; messages: RawInboundMessage[] }> {
+      let uidValidity = 0;
       const client = new ImapFlow(buildImapOptions(config) as any);
       const out: RawInboundMessage[] = [];
       try {
         await client.connect();
         const mailbox = await client.mailboxOpen('INBOX', { readOnly: true });
+        uidValidity = Number(mailbox.uidValidity ?? 0);
         if (mailbox.exists > 0) {
           const found = (await client.search({ uid: `${Math.max(0, sinceUid) + 1}:*` }, { uid: true })) || [];
           const uids = found.filter((u: number) => u > sinceUid).sort((a: number, b: number) => a - b).slice(0, maxBatch);
-          if (uids.length === 0) return out;
+          if (uids.length === 0) return { uidValidity, messages: out };
           for await (const msg of client.fetch(uids.join(','), { uid: true, envelope: true, bodyParts: ['text'] }, { uid: true })) {
             const envelope = msg.envelope;
             if (!msg.uid || msg.uid <= sinceUid) continue; // '*' always yields the newest message
@@ -130,7 +140,8 @@ export async function createImapflowClient(config: MailboxClientConfig, limits: 
         await client.logout().catch(() => undefined);
       }
       out.sort((a, b) => a.uid - b.uid);
-      return out.slice(0, maxBatch);
+      return { uidValidity, messages: out.slice(0, maxBatch) };
     },
   };
+  return self;
 }

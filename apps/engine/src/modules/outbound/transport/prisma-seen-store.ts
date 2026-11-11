@@ -48,4 +48,43 @@ export class PrismaSeenMessageStore implements SeenMessageStore {
       uid,
     );
   }
+
+  async storedValidity(mailboxId: string): Promise<number | null> {
+    const rows: Array<{ uid_validity: bigint | number | null }> = await this.prisma.$queryRawUnsafe(
+      `SELECT uid_validity FROM mailbox_sync_state WHERE mailbox_id = $1::uuid`,
+      mailboxId,
+    );
+    return rows.length && rows[0].uid_validity !== null ? Number(rows[0].uid_validity) : null;
+  }
+
+  /** Unlike setLastUid (monotone), this may lower the checkpoint: the server renumbered the folder. */
+  async resetCheckpoint(mailboxId: string, uidValidity: number): Promise<void> {
+    if (!Number.isInteger(uidValidity) || uidValidity < 0) throw new Error('uidValidity must be a non-negative integer');
+    await this.prisma.$executeRawUnsafe(
+      `INSERT INTO mailbox_sync_state (mailbox_id, last_inbound_uid, uid_validity, updated_at)
+       VALUES ($1::uuid, 0, $2, now())
+       ON CONFLICT (mailbox_id) DO UPDATE SET last_inbound_uid = 0, uid_validity = EXCLUDED.uid_validity, updated_at = now()`,
+      mailboxId,
+      uidValidity,
+    );
+  }
+
+  /**
+   * Per-mailbox mutual exclusion for the whole poll. A transaction-scoped advisory lock is held for the
+   * duration of fn, so a crashed worker releases it automatically. Returns null when another poll holds it.
+   * Bounded by a transaction timeout so a hung IMAP server cannot hold the lock forever.
+   */
+  async withLock<T>(mailboxId: string, fn: () => Promise<T>): Promise<T | null> {
+    return this.prisma.$transaction(
+      async (tx: any) => {
+        const rows: Array<{ ok: boolean }> = await tx.$queryRawUnsafe(
+          `SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0)) AS ok`,
+          'leadloom:imap-poll:' + mailboxId,
+        );
+        if (!rows[0]?.ok) return null;
+        return fn();
+      },
+      { timeout: 120_000, maxWait: 5_000 },
+    );
+  }
 }

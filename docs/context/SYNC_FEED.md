@@ -370,3 +370,8 @@
 
 ### [2026-11-11T13:25:00Z] Engine | IMAP reply fetch hardening | Non-Breaking
 - createImapflowClient now opens INBOX read-only, fetches by UID (previously sequence numbers), searches then fetches at most maxBatch (default 100) UIDs per poll, and caps retained body at 20000 chars. Not wired to any scheduler; no live mailbox is polled. Gated fixture test against hoodiecrow.
+
+---
+
+### [2026-11-11T13:35:00Z] Engine/DB | IMAP poll safety | Non-Breaking, one additive migration
+- New migration 20261119_mailbox_uid_validity (nullable column). Poller dedupe keys changed to mailbox-scoped hash (no live rows exist: poller is unwired). UIDVALIDITY reset, per-mailbox lock, plaintext hook refused in production/non-loopback. See docs/plan/IMAP_SYNC.md.
