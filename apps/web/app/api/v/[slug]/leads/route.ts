@@ -66,7 +66,9 @@ export async function POST(
     try {
       engineRes = await fetch(`${engineUrl}/validator/pages/${encodeURIComponent(slug)}/leads`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // Forward the client IP so the engine's shared per-IP rate limit keys
+        // the real visitor, not this proxy's loopback address.
+        headers: { 'Content-Type': 'application/json', ...(forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {}) },
         body: JSON.stringify({ email, name, company, surveyResponses: survey ?? {}, referrer }),
       });
     } catch {
@@ -74,6 +76,12 @@ export async function POST(
     }
     if (engineRes.status === 404) {
       return NextResponse.json({ error: 'This smoke test page is no longer available.' }, { status: 404 });
+    }
+    if (engineRes.status === 429) {
+      return NextResponse.json({ error: 'Too many submissions. Please try again in 10 minutes.' }, { status: 429 });
+    }
+    if (engineRes.status === 503) {
+      return NextResponse.json({ error: 'Your response could not be saved right now. Please try again.' }, { status: 503 });
     }
     if (!engineRes.ok) {
       return NextResponse.json({ error: 'Your response could not be saved right now. Please try again.' }, { status: 502 });

@@ -20,36 +20,52 @@ export class SlidingWindowLimiter {
 }
 
 /**
- * Shared-store sliding-window limiter backed by Postgres: the limit holds
- * across engine replicas and restarts, unlike SlidingWindowLimiter. Used for
- * public routes (validator /v/ pages) where per-process limits are bypassable
- * by hitting a different replica.
+ * Shared-store fixed-window limiter backed by Postgres: the limit holds across
+ * engine replicas and restarts, unlike SlidingWindowLimiter. Used for public
+ * routes (validator /v/ pages) where per-process limits are bypassable by
+ * hitting a different replica.
  *
- * take() is one round-trip: insert the hit, then count the key's prior hits
- * inside the window. Note the data-modifying CTE rule: the count does NOT see
- * the row inserted by its own statement, so it counts prior hits and the
- * allow condition is prior < max. Concurrent requests can both pass the count
- * check and slightly over-admit at the boundary - acceptable for abuse
- * control, and vastly stricter than a per-process limit. Denied takes are
- * still recorded, keeping abuse visible. Old rows are deleted
- * opportunistically (1/100 of takes) so the table stays small.
+ * One atomic upsert per request: INSERT ... ON CONFLICT increment, RETURNING
+ * the bucket count - no count-then-insert race, so concurrent contenders
+ * across replicas cannot over-admit. Storage is bounded to one row per key
+ * per window and denied requests UPDATE the same bucket row, so a flood does
+ * not amplify into unbounded writes. Fixed windows can admit up to 2x the cap
+ * at a boundary; acceptable for abuse control. Buckets are keyed on the DB
+ * clock (now()) so replica clock skew cannot split a window. Old buckets are
+ * deleted opportunistically (1/100 of takes).
+ *
+ * Fail-closed: any store error returns 'error' and callers deny the request
+ * (503), never fail open.
  */
 export type RawQuery = (text: string, params: unknown[]) => Promise<Array<Record<string, unknown>>>;
+export type LimitVerdict = 'allow' | 'deny' | 'error';
+
+const MAX_KEY_LENGTH = 255;
 
 export class PgSharedLimiter {
   private takes = 0;
   constructor(private readonly query: RawQuery, private readonly windowMs: number) {}
-  /** Returns true if the action is allowed and records it. */
-  async take(key: string, max: number): Promise<boolean> {
-    const rows = await this.query(
-      `WITH ins AS (INSERT INTO public_rate_limit_hits ("key", ts) VALUES ($1, now()) RETURNING ts)
-       SELECT count(*)::int AS n FROM public_rate_limit_hits WHERE "key" = $1 AND ts > now() - ($2::double precision || ' milliseconds')::interval`,
-      [key, this.windowMs],
-    );
-    if (++this.takes % 100 === 0) {
-      await this.query(`DELETE FROM public_rate_limit_hits WHERE ts < now() - interval '1 day' RETURNING id`, []).catch(() => []);
+  /** Records the hit and returns whether the action is allowed. */
+  async take(key: string, max: number): Promise<LimitVerdict> {
+    const boundedKey = key.slice(0, MAX_KEY_LENGTH);
+    let rows: Array<Record<string, unknown>>;
+    try {
+      rows = await this.query(
+        `INSERT INTO public_rate_limit_buckets ("key", window_start, "count")
+         VALUES ($1, floor(extract(epoch from now()) * 1000 / $2::double precision) * $2::double precision, 1)
+         ON CONFLICT ("key", window_start) DO UPDATE SET "count" = public_rate_limit_buckets."count" + 1
+         RETURNING "count"`,
+        [boundedKey, this.windowMs],
+      );
+    } catch {
+      return 'error';
     }
-    const prior = Number(rows[0]?.n ?? max); // count excludes this statement's own insert
-    return prior < max;
+    this.takes += 1;
+    if (this.takes % 100 === 0) {
+      const cutoff = Date.now() - 24 * 3_600_000;
+      await this.query(`DELETE FROM public_rate_limit_buckets WHERE window_start < $1 RETURNING "key"`, [cutoff]).catch(() => []);
+    }
+    const count = Number(rows[0]?.count ?? Number.MAX_SAFE_INTEGER);
+    return count <= max ? 'allow' : 'deny';
   }
 }

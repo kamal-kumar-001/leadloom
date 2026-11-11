@@ -121,7 +121,7 @@ describe('waterfall/validator route integration', () => {
     const seen: string[] = [];
     const publicRateLimit = async (key: string, max: number) => {
       seen.push(key);
-      return seen.filter((k) => k === key).length <= Math.min(max, 2);
+      return seen.filter((k) => k === key).length <= Math.min(max, 2) ? 'allow' as const : 'deny' as const;
     };
     const app = await createApplication({ ...stubCore(), validator: new ValidatorController(new ValidatorService('https://app.test')), publicRateLimit } as never);
     try {
@@ -139,6 +139,36 @@ describe('waterfall/validator route integration', () => {
       expect(seen.length).toBe(3);
       expect(seen[0]).toContain(`pg:`);
       expect(seen[0]).toContain(slug);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('public routes fail closed on limiter store error (503, never open)', async () => {
+    const publicRateLimit = async () => 'error' as const;
+    const app = await createApplication({ ...stubCore(), validator: new ValidatorController(new ValidatorService('https://app.test')), publicRateLimit } as never);
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      const res = await server.inject({ method: 'GET', url: '/validator/pages/any-slug' });
+      expect(res.statusCode).toBe(503);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('limit keys trust X-Forwarded-For only from a loopback peer (the proxy)', async () => {
+    const seen: string[] = [];
+    const publicRateLimit = async (key: string) => { seen.push(key); return 'allow' as const; };
+    const app = await createApplication({ ...stubCore(), validator: new ValidatorController(new ValidatorService('https://app.test')), publicRateLimit } as never);
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      // Default inject peer is loopback (the proxy's position): XFF is honored.
+      await server.inject({ method: 'GET', url: '/validator/pages/some-slug', headers: { 'x-forwarded-for': '203.0.113.7, 10.0.0.1' } });
+      expect(seen[0]).toContain('203.0.113.7');
+      // A direct non-loopback caller cannot spoof its key with XFF.
+      await server.inject({ method: 'GET', url: '/validator/pages/some-slug', remoteAddress: '198.51.100.9', headers: { 'x-forwarded-for': '203.0.113.7' } });
+      expect(seen[1]).toContain('198.51.100.9');
+      expect(seen[1]).not.toContain('203.0.113.7');
     } finally {
       await app.close();
     }

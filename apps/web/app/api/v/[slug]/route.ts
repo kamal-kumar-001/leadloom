@@ -5,7 +5,7 @@ import { engineBase } from '@/lib/engine-server';
 // load in the engine (visitors counts loads, not unique people). No mock
 // fallback: if the engine has no such page, the visitor sees an honest 404.
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
@@ -14,9 +14,21 @@ export async function GET(
   }
   const engineUrl = engineBase();
   try {
-    const engineRes = await fetch(`${engineUrl}/validator/pages/${encodeURIComponent(slug)}`, { cache: 'no-store' });
+    // Forward the client IP so the engine's shared per-IP rate limit keys the
+    // real visitor, not this proxy's loopback address.
+    const fwd = request.headers.get('x-forwarded-for');
+    const engineRes = await fetch(`${engineUrl}/validator/pages/${encodeURIComponent(slug)}`, {
+      cache: 'no-store',
+      headers: fwd ? { 'X-Forwarded-For': fwd } : undefined,
+    });
     if (engineRes.status === 404) {
       return NextResponse.json({ error: 'Smoke test page not found' }, { status: 404 });
+    }
+    if (engineRes.status === 429) {
+      return NextResponse.json({ error: 'Too many requests. Please try again in a few minutes.' }, { status: 429 });
+    }
+    if (engineRes.status === 503) {
+      return NextResponse.json({ error: 'The page could not be loaded right now.' }, { status: 503 });
     }
     if (!engineRes.ok) {
       return NextResponse.json({ error: 'The page could not be loaded right now.' }, { status: 502 });

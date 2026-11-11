@@ -72,8 +72,8 @@ export interface RuntimeServices {
  waterfallConnectors?: { list(workspaceId: string): Promise<unknown> };
  connectorTest?: import('./modules/waterfall/connectors/test-connection.service.js').TestConnectionService;
  validator?: Pick<ValidatorController,'generate'|'recordOutreach'|'getOwnerPage'|'setPublishStatus'|'getScorecard'|'submitLead'|'getPublicPage'>;
- /** Optional: shared-store rate limit for public routes (Postgres-backed, holds across replicas/restarts). Wired by main when the validator runs on a real DB; absent in tests, which keep a per-process fallback. */
- publicRateLimit?: (key: string, max: number) => Promise<boolean>;
+ /** Optional: shared-store rate limit for public routes (Postgres-backed, holds across replicas/restarts). Wired by main when the validator runs on a real DB; absent in tests, which keep a per-process fallback. 'error' means the store failed - callers fail closed (503), never open. */
+ publicRateLimit?: (key: string, max: number) => Promise<import('./modules/auth/rate-limiter.js').LimitVerdict>;
  /** Optional: G4 website research (default off; LEADLOOM_RESEARCH_API_ENABLED). Heuristic keyword analysis only - no LLM call, no fabricated claims. */
  websiteSignals?: import('./modules/ai-researcher/website-signals.service.js').WebsiteSignalService;
  /** Optional: URL fetch boundary for research (default off; LEADLOOM_RESEARCH_FETCH_ENABLED). Without it, only pasted page text is analyzed and no egress exists. */
@@ -558,19 +558,36 @@ export async function createApplication(services?:RuntimeServices) {
    // limiter; direct engine callers must not bypass it): 20 page loads + 5
    // lead submissions per IP per slug per 10 minutes. Uses the shared
    // Postgres store when wired (production), per-process map otherwise.
+   // Client IP for limit keys: the engine is loopback-only behind the web
+   // proxy, so X-Forwarded-For is trusted ONLY when the direct peer is
+   // loopback (the proxy). Direct non-loopback callers cannot spoof it.
+   const pubClientIp=(request:any):string=>{
+    const peer=String(request.ip??'unknown');
+    if(peer==='127.0.0.1'||peer==='::1'||peer==='::ffff:127.0.0.1'){
+     const fwd=String(request.headers?.['x-forwarded-for']??'').split(',')[0].trim();
+     if(fwd)return fwd.slice(0,45);
+    }
+    return peer.slice(0,45);
+   };
    const pubHits=new Map<string,number[]>();
-   const pubLimit=async(key:string,max:number):Promise<boolean>=>{
+   const pubLimit=async(key:string,max:number):Promise<'allow'|'deny'|'error'>=>{
     if(services?.publicRateLimit)return services.publicRateLimit(key,max);
     // Fallback when no shared store is configured (unit tests, no DB).
     const now=Date.now(),W=600_000;
     const arr=(pubHits.get(key)??[]).filter(t=>now-t<W);
-    if(arr.length>=max){pubHits.set(key,arr);return false;}
-    arr.push(now);pubHits.set(key,arr);return true;
+    if(arr.length>=max){pubHits.set(key,arr);return 'deny';}
+    arr.push(now);pubHits.set(key,arr);return 'allow';
+   };
+   const pubGate=async(request:any,reply:any,prefix:string,slug:string,max:number):Promise<boolean>=>{
+    const verdict=await pubLimit(`${prefix}:${pubClientIp(request)}:${slug}`,max);
+    if(verdict==='error'){reply.code(503).send({error:'Service temporarily unavailable'});return false;}
+    if(verdict==='deny'){reply.code(429).send({error:max<=5?'Too many submissions. Please try again in 10 minutes.':'Too many requests'});return false;}
+    return true;
    };
    fastify.get('/validator/pages/:slug',async(request:any,reply:any)=>{
     const slug=String(request.params.slug);
     if(!SLUG_RE.test(slug))return reply.code(404).send({error:'Smoke test page not found'});
-    if(!(await pubLimit(`pg:${request.ip}:${slug}`,20)))return reply.code(429).send({error:'Too many requests'});
+    if(!(await pubGate(request,reply,'pg',slug,20)))return;
     const page=await services.validator!.getPublicPage(slug);
     if(!page)return reply.code(404).send({error:'Smoke test page not found'});
     return page;
@@ -578,7 +595,7 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.post('/validator/pages/:slug/leads',async(request:any,reply:any)=>{
     const slug=String(request.params.slug);
     if(!SLUG_RE.test(slug))return reply.code(404).send({error:'Smoke test page not found'});
-    if(!(await pubLimit(`ld:${request.ip}:${slug}`,5)))return reply.code(429).send({error:'Too many submissions. Please try again in 10 minutes.'});
+    if(!(await pubGate(request,reply,'ld',slug,5)))return;
     try{return await services.validator!.submitLead(slug,request.body);}
     catch(err){const notFound=(err as Error).message?.includes('not found');return reply.code(notFound?404:400).send({error:notFound?'Smoke test page not found':'Invalid lead submission'});}
    });
