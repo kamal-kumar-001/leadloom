@@ -502,3 +502,9 @@
 - End-to-end, fixture-only: hoodiecrow IMAP (127.0.0.1:2146) with a reply carrying In-Reply-To/References -> createImapflowClient (read-only, plaintextForTestsOnly) -> ImapReplyPoller -> pollMailboxReplies (LEADLOOM_IMAP_POLL_ENABLED=true in-process) -> recordInboundReply. Result: recorded=1, attribution thread_header, held pending_approval job 44444444 cancelled; immediate second poll fetched 0 (dedupe + uid checkpoint persisted). No live mailbox touched; nothing sent.
 - Recorded Replies UI (campaigns page) shows the polled reply prospect.e2e@example.test, classification interested, basis "matched to message" - screenshot g10-e2e-replies.png. PUMPGTM_GAP.md G10 row updated (UI reporting is NOT missing; the earlier seeded-panel note replaced by this real-path verification).
 - No contract or API change in this entry.
+
+---
+### [2026-11-11 22:56 IST] Team A - actual-image inspection complete: no credential material in either image
+- image-inspect.yml v2 (run 43067623096, success) scanned the EXISTING release digests (engine sha256:0bb659f5..., web sha256:a55baf08...) read-only inside Actions: entry files present, 0 .env files, 0 credential-shaped env vars; all pattern hits (private-key/github-token/aws-key/password-like) trace to third-party package docs/code, none to repo source. v1 run 43066151341 failed on a wrong expected path + set -e before the web scan; v2 fixed both. Full record in RELEASE_PLAN.md CONTENT INSPECTION.
+- Packages leadloom-engine and leadloom-web remain PRIVATE (flipped after the first-publish incident; anonymous pull verified 403). Publishing stays paused: no new packages until a private-before-content method is verified; existing-package pushes only after re-verifying Private state immediately before.
+- No contract or API change in this entry.
