@@ -70,6 +70,10 @@ export interface RuntimeServices {
  waterfallConnectors?: { list(workspaceId: string): Promise<unknown> };
  connectorTest?: import('./modules/waterfall/connectors/test-connection.service.js').TestConnectionService;
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
+ /** Optional: G4 website research (default off; LEADLOOM_RESEARCH_API_ENABLED). Heuristic keyword analysis only - no LLM call, no fabricated claims. */
+ websiteSignals?: import('./modules/ai-researcher/website-signals.service.js').WebsiteSignalService;
+ /** Optional: URL fetch boundary for research (default off; LEADLOOM_RESEARCH_FETCH_ENABLED). Without it, only pasted page text is analyzed and no egress exists. */
+ websiteFetcher?: import('./modules/ai-researcher/website-fetcher.js').SafeWebsiteFetcher;
  /** Optional: when provided, plan/feature gates are enforced server-side (main gates it behind LEADLOOM_ENTITLEMENTS_ENFORCED). */
  entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'>;
 }
@@ -369,6 +373,38 @@ export async function createApplication(services?:RuntimeServices) {
     catch{return reply.code(400).send({error:'Invalid waterfall dispatch request'});}
    });
   }
+  // G4 buyer discovery, first increment: heuristic website-signal analysis.
+  // Honesty contract (see website-signals.service.ts): keyword matches only,
+  // labeled heuristic_keywords; no LLM call, no invented summary/confidence.
+  // Pasted page text is always accepted (no egress). URL fetching exists only
+  // when main mounted a fetcher behind LEADLOOM_RESEARCH_FETCH_ENABLED.
+  if(services.websiteSignals) {
+   const ResearchBody=z.union([
+    z.object({domain:z.string().min(1).max(255).regex(/^[a-z0-9.-]+\.[a-z]{2,}$/i,'Invalid domain'),pageText:z.string().min(1).max(200_000)}).strict(),
+    z.object({url:z.string().url().max(2048)}).strict(),
+   ]);
+   fastify.post('/research/website-signals',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply);if(!session)return;
+    const parsed=ResearchBody.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:'Invalid research request'});
+    if('url' in parsed.data) {
+     if(!services.websiteFetcher)
+      return {status:'DISABLED',message:'Fetching websites is disabled on this environment. Paste the page text instead.',fetchEnabled:false};
+     let fetched;
+     try{fetched=await services.websiteFetcher.fetchText(parsed.data.url);}
+     catch(err){return reply.code(422).send({status:'FETCH_FAILED',message:(err as Error).message||'The page could not be fetched',fetchEnabled:true});}
+     const domain=new URL(fetched.finalUrl).hostname;
+     const signals=services.websiteSignals!.analyzeText(domain,fetched.text);
+     const {deriveIcpHints,deriveRelevanceReasons}=await import('./modules/ai-researcher/website-signals.service.js');
+     const icpHints=deriveIcpHints(fetched.text);
+     return {status:'OK',input:'fetched_url',truncated:fetched.truncated,signals,icpHints,relevanceReasons:deriveRelevanceReasons(signals,icpHints)};
+    }
+    const signals=services.websiteSignals!.analyzeText(parsed.data.domain,parsed.data.pageText);
+    const {deriveIcpHints,deriveRelevanceReasons}=await import('./modules/ai-researcher/website-signals.service.js');
+    const icpHints=deriveIcpHints(parsed.data.pageText);
+    return {status:'OK',input:'pasted_text',signals,icpHints,relevanceReasons:deriveRelevanceReasons(signals,icpHints)};
+   });
+  }
   if(services.validator) {
    fastify.post('/validator/experiments',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
@@ -491,7 +527,7 @@ export async function createApplication(services?:RuntimeServices) {
  // report per-route mount state so health checks show exactly what exists.
  // Every mounted mutation route still requires a session + write role, and
  // sessions can only be minted when the login issuer itself is mounted.
- fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false,routes:{provisioning:services?.provisioning&&services.nextAuthBridgeKey?'mounted:bridge-token-required':'unmounted',entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted'}}));
+ fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false,routes:{provisioning:services?.provisioning&&services.nextAuthBridgeKey?'mounted:bridge-token-required':'unmounted',entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted',research:services?.websiteSignals?(services.websiteFetcher?'mounted:session-required:fetch-enabled':'mounted:session-required:pasted-text-only'):'unmounted'}}));
  fastify.get('/ready',async(_request:any,reply:any)=>reply.code(503).send({status:'not-ready',reason:'Database/auth/provider workers are not mounted'}));
  await app.init();
  return app;
@@ -581,6 +617,17 @@ if(require.main===module) {
     const {WaterfallController}=await import('./modules/waterfall/waterfall.controller.js');
     const {WaterfallService}=await import('./modules/waterfall/waterfall.service.js');
     services.waterfall=new WaterfallController(new WaterfallService());
+   }
+   // G4 research API: heuristic website signals (no LLM, no egress for pasted
+   // text). URL fetching is a separate opt-in with the private-host rule.
+   if(process.env.LEADLOOM_RESEARCH_API_ENABLED==='true') {
+    const {WebsiteSignalService}=await import('./modules/ai-researcher/website-signals.service.js');
+    services.websiteSignals=new WebsiteSignalService();
+    if(process.env.LEADLOOM_RESEARCH_FETCH_ENABLED==='true') {
+     const {SafeWebsiteFetcher}=await import('./modules/ai-researcher/website-fetcher.js');
+     const PRIV=process.env.NODE_ENV!=='production'&&process.env.LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS==='true';
+     services.websiteFetcher=new SafeWebsiteFetcher({allowPrivateHosts:PRIV});
+    }
    }
    if(process.env.LEADLOOM_VALIDATOR_API_ENABLED==='true') {
     const {ValidatorController}=await import('./modules/validator/validator.controller.js');

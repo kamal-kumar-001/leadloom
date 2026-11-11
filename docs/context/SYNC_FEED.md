@@ -508,3 +508,10 @@
 - image-inspect.yml v2 (run 43067623096, success) scanned the EXISTING release digests (engine sha256:0bb659f5..., web sha256:a55baf08...) read-only inside Actions: entry files present, 0 .env files, 0 credential-shaped env vars; all pattern hits (private-key/github-token/aws-key/password-like) trace to third-party package docs/code, none to repo source. v1 run 43066151341 failed on a wrong expected path + set -e before the web scan; v2 fixed both. Full record in RELEASE_PLAN.md CONTENT INSPECTION.
 - Packages leadloom-engine and leadloom-web remain PRIVATE (flipped after the first-publish incident; anonymous pull verified 403). Publishing stays paused: no new packages until a private-before-content method is verified; existing-package pushes only after re-verifying Private state immediately before.
 - No contract or API change in this entry.
+
+---
+### [2026-11-11 23:08 IST] Team A - G4 first increment: website research (heuristic) verified end-to-end locally
+- New POST /research/website-signals (session-required; mounted only behind LEADLOOM_RESEARCH_API_ENABLED). Honesty contract: keyword matches only, source 'heuristic_keywords', no AI summary, no confidence score; relevance reasons cite the actual matched words; thin pages say they are thin. ICP hints are keyword category matches (industry/size/model), not inferred fit.
+- URL fetching is a separate opt-in (LEADLOOM_RESEARCH_FETCH_ENABLED) via SafeWebsiteFetcher (http/https only, private hosts blocked, same-host redirects only, 512KB cap); without it the route returns an honest disabled state and zero egress exists. Health reports research mount state.
+- New web Research page (/app/research): fetch-URL input + paste-text path, renders signals/reasons with 'keyword match' labeling. Verified in a real browser as e2e-g9: pasted-text analysis renders correctly; fetch URL shows the honest disabled message (screenshots g4-research-pasted.png, g4-research-fetch-disabled.png).
+- 330 engine tests pass (7 new: service honesty + route integration incl. default-off 404, auth, pasted-text, fetch-disabled, injected-fetcher, thin-page). No contract or API change beyond the new route.

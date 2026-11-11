@@ -12,6 +12,7 @@ import {
   Mail,
   Send,
   FlaskConical,
+  Globe,
   Settings,
   LogOut,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'Mailboxes', href: '/app/mailboxes', icon: Mail },
   { name: 'Campaigns', href: '/app/campaigns', icon: Send },
   { name: 'Validator', href: '/app/validator', icon: FlaskConical },
+  { name: 'Research', href: '/app/research', icon: Globe },
   { name: 'Settings & Plans', href: '/app/settings', icon: Settings },
 ];
 

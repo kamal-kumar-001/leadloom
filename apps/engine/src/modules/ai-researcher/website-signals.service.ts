@@ -67,3 +67,59 @@ export class WebsiteSignalService {
     };
   }
 }
+
+/** One grounded ICP hint: the category plus the words that evidence it. */
+export interface IcpHint {
+  category: string;
+  matchedKeywords: string[];
+}
+
+const ICP_INDUSTRIES: ReadonlyArray<{ category: string; keywords: ReadonlyArray<[string, RegExp]> }> = [
+  { category: 'developer tools', keywords: [['api', /\bapi\b/], ['sdk', /\bsdk\b/], ['developer', /developers?/], ['CLI', /\bcli\b/]] },
+  { category: 'e-commerce', keywords: [['e-commerce', /e-?commerce/], ['storefront', /storefront/], ['checkout', /checkout/], ['Shopify', /shopify/]] },
+  { category: 'fintech', keywords: [['payments', /payments?/], ['banking', /banking/], ['invoicing', /invoic(e|ing)/], ['fintech', /fintech/]] },
+  { category: 'healthtech', keywords: [['healthcare', /health ?care/], ['clinical', /clinical/], ['patient', /patients?/]] },
+  { category: 'martech', keywords: [['marketing', /marketing/], ['SEO', /\bseo\b/], ['ads', /\bads\b/], ['campaigns', /campaigns?/]] },
+  { category: 'hrtech', keywords: [['recruiting', /recruit(er|ing|ment)/], ['payroll', /payroll/], ['onboarding', /onboarding/]] },
+  { category: 'logistics', keywords: [['logistics', /logistics/], ['shipping', /shipping/], ['fulfillment', /fulfil?l?ment/]] },
+];
+const ICP_SIZE: ReadonlyArray<[string, RegExp]> = [
+  ['enterprise', /\benterprise\b/],
+  ['startup', /\bstart ?ups?\b/],
+  ['small business', /\b(smb|small business)\b/],
+  ['mid-market', /mid-?market/],
+];
+const ICP_MODEL: ReadonlyArray<[string, RegExp]> = [
+  ['B2B', /\bb2b\b/],
+  ['B2C', /\bb2c\b/],
+  ['SaaS', /\bsaas\b/],
+];
+
+export function deriveIcpHints(pageText: string): IcpHint[] {
+  const t = pageText.toLowerCase();
+  const hints: IcpHint[] = [];
+  for (const ind of ICP_INDUSTRIES) {
+    const matched = ind.keywords.filter(([, re]) => re.test(t)).map(([name]) => name);
+    if (matched.length) hints.push({ category: ind.category, matchedKeywords: matched });
+  }
+  for (const [name, re] of ICP_SIZE) if (re.test(t)) hints.push({ category: 'size', matchedKeywords: [name] });
+  for (const [name, re] of ICP_MODEL) if (re.test(t)) hints.push({ category: 'model', matchedKeywords: [name] });
+  return hints;
+}
+
+/**
+ * Relevance reasons cite only evidence actually found. A thin page says it is
+ * thin; no matches says no matches. Nothing here is a judgment of fit quality -
+ * it is a list of grounded observations, labeled as keyword matches.
+ */
+export function deriveRelevanceReasons(signals: WebsiteSignals, icpHints: IcpHint[]): string[] {
+  const reasons: string[] = [];
+  if (signals.techKeywords.length) reasons.push(`Tech keywords found in page text: ${signals.techKeywords.join(', ')}`);
+  for (const hint of icpHints) reasons.push(`ICP keyword match (${hint.category}): ${hint.matchedKeywords.join(', ')}`);
+  if (signals.mentionsHiring) reasons.push('Hiring/careers language present in page text');
+  if (signals.mentionsPricing) reasons.push('Pricing language present in page text');
+  if (signals.mentionsScaling) reasons.push('Scaling language present in page text');
+  if (!reasons.length) reasons.push('No tracked keywords matched the page text');
+  if (signals.wordCount < 100) reasons.push(`Thin page text (${signals.wordCount} meaningful words): signals are limited`);
+  return reasons;
+}

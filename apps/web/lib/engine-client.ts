@@ -649,3 +649,31 @@ export async function rejectOutboundJobs(input: {
   return { rejectedCount: 0, error: result.error || 'Rejection failed' };
 }
 
+
+export interface WebsiteSignalsResult {
+  status: 'OK' | 'DISABLED' | 'FETCH_FAILED';
+  message?: string;
+  fetchEnabled?: boolean;
+  input: 'pasted_text' | 'fetched_url';
+  truncated?: boolean;
+  signals: {
+    companyDomain: string;
+    source: 'heuristic_keywords';
+    techKeywords: string[];
+    mentionsHiring: boolean;
+    mentionsPricing: boolean;
+    mentionsScaling: boolean;
+    wordCount: number;
+    summary: null;
+    confidence: null;
+  };
+  icpHints: { category: string; matchedKeywords: string[] }[];
+  relevanceReasons: string[];
+}
+
+export type WebsiteSignalsResponse = Partial<WebsiteSignalsResult> & Pick<WebsiteSignalsResult, 'status'>;
+
+export async function analyzeWebsiteSignals(input: { domain: string; pageText: string } | { url: string }): Promise<{ data: WebsiteSignalsResult | null; error?: string; status?: number }> {
+  const res = await engineFetch<WebsiteSignalsResult>('/research/website-signals', { method: 'POST', body: JSON.stringify(input) });
+  return { data: res.data, error: res.error, status: res.status };
+}
