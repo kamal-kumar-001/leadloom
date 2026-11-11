@@ -384,3 +384,13 @@
 ### [2026-11-11T13:36:00Z] Team Alpha | contracts/outbound.contract.ts + engine transport | Non-Breaking
 - Added `bounce` to `OutreachReplyClassificationEnum` (DB stores classification as varchar, no migration).
 - New `transport/bounce.ts` DSN detection (RFC 3464 fixtures) classified before keyword baseline; new `transport/backoff.ts` PollBackoff helper (bounded exponential + jitter, reset on success; not yet scheduler-wired).
+
+---
+
+### [2026-11-11T13:55:00Z] Engine/Web/DB | G9 Approval-Before-Send Queue | Non-Breaking, one additive migration
+- G9 Real Behavior: Outbound jobs enqueue into 'pending_approval' status by default; AtomicDispatchRepository.claim() strictly skips unapproved jobs.
+- Engine approval endpoints: GET /outbound/approvals lists pending jobs with campaign context and step previews; POST /outbound/approvals/approve and /reject support single-item and batch operations; replies/unsubscribes cancel pending_approval jobs.
+- Web UI: Added ApprovalQueue component to /app/campaigns with live review counters, preview snippets, single/bulk approval actions, and honest disabled-dispatch banner.
+- DB migration 20261120_outbound_approval_status expands check constraint to allow 'pending_approval' and 'rejected'.
+- Sending stays disabled everywhere (sendingEnabled: false).
+

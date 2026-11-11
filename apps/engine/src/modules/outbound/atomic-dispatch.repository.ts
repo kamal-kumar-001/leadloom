@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import type { OutboundApprovalItem, ApprovalQueueStats } from '@leadloom/contracts';
 import type { DispatchRepository, DispatchSnapshot, SendReservation } from './dispatch.service';
 
 export interface SqlConnection {
@@ -88,30 +89,175 @@ export class AtomicDispatchRepository implements DispatchRepository {
     if (rows.length!==1) throw new Error('Reservation completion requires reconciliation');
   }
 
-  async enqueue(input:{workspaceId:string;campaignId:string;recipientEmail:string;idempotencyKey:string;stepNumber:number;scheduledAt:Date}):Promise<string> {
-    const email=z.string().email().parse(input.recipientEmail.trim().toLowerCase());
+  async enqueue(input: {
+    workspaceId: string;
+    campaignId: string;
+    recipientEmail: string;
+    idempotencyKey: string;
+    stepNumber: number;
+    scheduledAt: Date;
+    status?: string;
+  }): Promise<string> {
+    const email = z.string().email().parse(input.recipientEmail.trim().toLowerCase());
     z.string().min(1).max(255).parse(input.idempotencyKey);
     z.number().int().positive().parse(input.stepNumber);
     z.date().parse(input.scheduledAt);
-    const hash=recipientHash(email),id=randomUUID();
-    const rows=await this.database.query<{id:string}>(`INSERT INTO outbound_jobs
-      (id,workspace_id,campaign_id,recipient_email,recipient_hash,idempotency_key,step_number,scheduled_at,updated_at)
-      SELECT $1::uuid,c.workspace_id,c.id,$4,$5,$6,$7,$8::timestamptz,$9::timestamptz FROM campaigns c WHERE c.workspace_id=$2::uuid AND c.id=$3::uuid
+    const status = input.status ?? 'pending';
+    const hash = recipientHash(email), id = randomUUID();
+    const rows = await this.database.query<{ id: string }>(`INSERT INTO outbound_jobs
+      (id,workspace_id,campaign_id,recipient_email,recipient_hash,idempotency_key,step_number,scheduled_at,status,updated_at)
+      SELECT $1::uuid,c.workspace_id,c.id,$4,$5,$6,$7,$8::timestamptz,$9,$10::timestamptz FROM campaigns c WHERE c.workspace_id=$2::uuid AND c.id=$3::uuid
       ON CONFLICT (workspace_id,idempotency_key) DO NOTHING RETURNING id`,
-      [id,input.workspaceId,input.campaignId,email,hash,input.idempotencyKey,input.stepNumber,input.scheduledAt,this.clock()]);
+      [id, input.workspaceId, input.campaignId, email, hash, input.idempotencyKey, input.stepNumber, input.scheduledAt, status, this.clock()]);
     if (rows[0]) return rows[0].id;
-    const [existing]=await this.database.query<{id:string;campaign_id:string;recipient_hash:string;step_number:number;scheduled_at:Date}>(
-      'SELECT id,campaign_id,recipient_hash,step_number,scheduled_at FROM outbound_jobs WHERE workspace_id=$1::uuid AND idempotency_key=$2',[input.workspaceId,input.idempotencyKey]);
-    if (!existing || existing.campaign_id!==input.campaignId || existing.recipient_hash!==hash || existing.step_number!==input.stepNumber || new Date(existing.scheduled_at).getTime()!==input.scheduledAt.getTime()) throw new Error('Idempotency conflict or unknown campaign');
+    const [existing] = await this.database.query<{ id: string; campaign_id: string; recipient_hash: string; step_number: number; scheduled_at: Date }>(
+      'SELECT id,campaign_id,recipient_hash,step_number,scheduled_at FROM outbound_jobs WHERE workspace_id=$1::uuid AND idempotency_key=$2', [input.workspaceId, input.idempotencyKey]);
+    if (!existing || existing.campaign_id !== input.campaignId || existing.recipient_hash !== hash || existing.step_number !== input.stepNumber || new Date(existing.scheduled_at).getTime() !== input.scheduledAt.getTime()) throw new Error('Idempotency conflict or unknown campaign');
     return existing.id;
   }
 
-  async suppress(workspaceId:string,email:string):Promise<void> {
-    const hash=recipientHash(email);
-    await this.database.transaction(async tx=>{
+  async suppress(workspaceId: string, email: string): Promise<void> {
+    const hash = recipientHash(email);
+    await this.database.transaction(async tx => {
       await tx.query(`INSERT INTO suppression_list (id,workspace_id,email_hash,reason,source)
-        VALUES ($1::uuid,$2::uuid,$3,'unsubscribe','outbound') ON CONFLICT (workspace_id,email_hash) DO NOTHING RETURNING id`,[randomUUID(),workspaceId,hash]);
-      await tx.query(`UPDATE outbound_jobs SET status='cancelled',updated_at=$3::timestamptz WHERE workspace_id=$1::uuid AND recipient_hash=$2 AND status='pending' RETURNING id`,[workspaceId,hash,this.clock()]);
+        VALUES ($1::uuid,$2::uuid,$3,'unsubscribe','outbound') ON CONFLICT (workspace_id,email_hash) DO NOTHING RETURNING id`, [randomUUID(), workspaceId, hash]);
+      await tx.query(`UPDATE outbound_jobs SET status='cancelled',updated_at=$3::timestamptz WHERE workspace_id=$1::uuid AND recipient_hash=$2 AND status IN ('pending','pending_approval') RETURNING id`, [workspaceId, hash, this.clock()]);
     });
+  }
+
+  /**
+   * G9: Lists messages awaiting human review and explicit sign-off before send.
+   */
+  async listPendingApprovals(workspaceId: string, campaignId?: string): Promise<OutboundApprovalItem[]> {
+    const rows = await this.database.query<{
+      id: string;
+      workspace_id: string;
+      campaign_id: string;
+      campaign_name: string;
+      campaign_steps: any;
+      recipient_email: string;
+      step_number: number;
+      status: string;
+      scheduled_at: Date;
+      created_at: Date;
+    }>(
+      `SELECT j.id, j.workspace_id, j.campaign_id, c.name AS campaign_name, c.steps AS campaign_steps,
+              j.recipient_email, j.step_number, j.status, j.scheduled_at, j.created_at
+       FROM outbound_jobs j
+       JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
+       WHERE j.workspace_id = $1::uuid
+         AND j.status = 'pending_approval'
+         AND ($2::uuid IS NULL OR j.campaign_id = $2::uuid)
+       ORDER BY j.created_at ASC
+       LIMIT 100`,
+      [workspaceId, campaignId ?? null]
+    );
+
+    return rows.map(r => {
+      let subject: string | undefined;
+      let bodySnippet: string | undefined;
+      try {
+        const steps = Array.isArray(r.campaign_steps) ? r.campaign_steps : JSON.parse(r.campaign_steps || '[]');
+        const step = steps.find((s: any) => (s.stepNumber ?? s.step) === r.step_number);
+        if (step) {
+          subject = step.subject;
+          const body = step.bodyTemplate || step.bodySnippet || step.body || '';
+          bodySnippet = body.length > 200 ? body.slice(0, 197) + '...' : body;
+        }
+      } catch {
+        // Fallback gracefully if steps cannot be decoded
+      }
+
+      return {
+        id: r.id,
+        workspaceId: r.workspace_id,
+        campaignId: r.campaign_id,
+        campaignName: r.campaign_name,
+        recipientEmail: r.recipient_email,
+        stepNumber: r.step_number,
+        subject,
+        bodySnippet,
+        status: 'pending_approval' as const,
+        scheduledAt: new Date(r.scheduled_at).toISOString(),
+        createdAt: new Date(r.created_at).toISOString(),
+      };
+    });
+  }
+
+  /**
+   * G9: Explicit human approval transitions queued messages from 'pending_approval' to 'pending',
+   * making them schedulable. Dispatch remains disabled system-wide.
+   */
+  async approve(workspaceId: string, input: { jobIds?: string[]; all?: boolean; campaignId?: string }): Promise<{ approvedCount: number }> {
+    if (input.all) {
+      const rows = await this.database.query<{ id: string }>(
+        `UPDATE outbound_jobs SET status='pending', updated_at=$3::timestamptz
+         WHERE workspace_id=$1::uuid AND status='pending_approval'
+           AND ($2::uuid IS NULL OR campaign_id=$2::uuid)
+         RETURNING id`,
+        [workspaceId, input.campaignId ?? null, this.clock()]
+      );
+      return { approvedCount: rows.length };
+    }
+    const jobIds = input.jobIds ?? [];
+    if (!jobIds.length) return { approvedCount: 0 };
+    for (const id of jobIds) z.string().uuid().parse(id);
+    const rows = await this.database.query<{ id: string }>(
+      `UPDATE outbound_jobs SET status='pending', updated_at=$3::timestamptz
+       WHERE workspace_id=$1::uuid AND id = ANY($2::uuid[]) AND status='pending_approval'
+       RETURNING id`,
+      [workspaceId, jobIds, this.clock()]
+    );
+    return { approvedCount: rows.length };
+  }
+
+  /**
+   * G9: Rejection transitions queued messages to 'rejected', permanently preventing dispatch.
+   */
+  async reject(workspaceId: string, input: { jobIds?: string[]; all?: boolean; campaignId?: string; reason?: string }): Promise<{ rejectedCount: number }> {
+    if (input.all) {
+      const rows = await this.database.query<{ id: string }>(
+        `UPDATE outbound_jobs SET status='rejected', updated_at=$3::timestamptz
+         WHERE workspace_id=$1::uuid AND status='pending_approval'
+           AND ($2::uuid IS NULL OR campaign_id=$2::uuid)
+         RETURNING id`,
+        [workspaceId, input.campaignId ?? null, this.clock()]
+      );
+      return { rejectedCount: rows.length };
+    }
+    const jobIds = input.jobIds ?? [];
+    if (!jobIds.length) return { rejectedCount: 0 };
+    for (const id of jobIds) z.string().uuid().parse(id);
+    const rows = await this.database.query<{ id: string }>(
+      `UPDATE outbound_jobs SET status='rejected', updated_at=$3::timestamptz
+       WHERE workspace_id=$1::uuid AND id = ANY($2::uuid[]) AND status='pending_approval'
+       RETURNING id`,
+      [workspaceId, jobIds, this.clock()]
+    );
+    return { rejectedCount: rows.length };
+  }
+
+  /**
+   * G9: Summary counts for the approval queue.
+   */
+  async getApprovalStats(workspaceId: string): Promise<ApprovalQueueStats> {
+    const rows = await this.database.query<{ status: string; count: string | number }>(
+      `SELECT status, count(*)::int AS count
+       FROM outbound_jobs
+       WHERE workspace_id = $1::uuid
+         AND status IN ('pending_approval', 'pending', 'approved', 'rejected')
+       GROUP BY status`,
+      [workspaceId]
+    );
+    let pendingCount = 0;
+    let approvedCount = 0;
+    let rejectedCount = 0;
+    for (const r of rows) {
+      const c = Number(r.count) || 0;
+      if (r.status === 'pending_approval') pendingCount += c;
+      else if (r.status === 'pending' || r.status === 'approved') approvedCount += c;
+      else if (r.status === 'rejected') rejectedCount += c;
+    }
+    return { pendingCount, approvedCount, rejectedCount };
   }
 }

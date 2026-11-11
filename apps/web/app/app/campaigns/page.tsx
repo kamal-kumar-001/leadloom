@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
 import { fetchWorkspaceCampaigns, type WorkspaceCampaignRow } from '../../../lib/engine-client';
 import { notify } from '@/lib/notify';
+import { ApprovalQueue } from '../../../components/campaigns/approval-queue';
 import {
   Send,
   Plus,
@@ -130,7 +131,10 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* 1. Real Workspace Campaigns List */}
+      {/* 1. G9: Approval-Before-Send Queue */}
+      <ApprovalQueue onStatusChange={loadCampaigns} />
+
+      {/* 2. Real Workspace Campaigns List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-text-primary">Workspace Sequences</h2>

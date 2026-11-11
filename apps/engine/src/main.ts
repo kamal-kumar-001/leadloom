@@ -44,7 +44,7 @@ Module({})(RuntimeModule);
  */
 export interface RuntimeServices {
  credentials: Pick<CredentialService,'save'|'list'|'delete'>;
- outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'>;
+ outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'>;
  sessionKey: Buffer;
  /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
  nextAuthBridgeKey?: Buffer;
@@ -238,16 +238,52 @@ export async function createApplication(services?:RuntimeServices) {
    if(!id.success)return reply.code(400).send({error:'Invalid credential ID'});
    return {deleted:await services.credentials.delete(session.workspaceId,id.data)};
   });
-  const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime()}).strict();
+  const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime(),requiresApproval:z.boolean().optional()}).strict();
   fastify.post('/outbound/jobs',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
    const parsed=Enqueue.safeParse(request.body);
    if(!parsed.success)return reply.code(400).send({error:'Invalid job request'});
    try {
-    const id=await services.outbound.enqueue({...parsed.data,workspaceId:session.workspaceId,scheduledAt:new Date(parsed.data.scheduledAt)});
-    return reply.code(202).send({id,status:'pending',sendingEnabled:false});
+    const status=parsed.data.requiresApproval===false?'pending':'pending_approval';
+    const id=await services.outbound.enqueue({...parsed.data,workspaceId:session.workspaceId,scheduledAt:new Date(parsed.data.scheduledAt),status});
+    return reply.code(202).send({id,status,sendingEnabled:false});
    } catch {return reply.code(400).send({error:'Job could not be queued'});}
+  });
+  // G9: Approval-before-send queue routes. Human review required before any send; sending stays disabled.
+  fastify.get('/outbound/approvals',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply);if(!session)return;
+   const cId=request.query?.campaignId?z.string().uuid().safeParse(request.query.campaignId):null;
+   const campaignId=cId?.success?cId.data:undefined;
+   const [items,stats]=await Promise.all([
+    services.outbound.listPendingApprovals(session.workspaceId,campaignId),
+    services.outbound.getApprovalStats(session.workspaceId),
+   ]);
+   return {items,stats,sendingEnabled:false};
+  });
+  fastify.post('/outbound/approvals/approve',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   const b=z.object({jobIds:z.array(z.string().uuid()).optional(),all:z.boolean().optional(),campaignId:z.string().uuid().optional()}).strict().safeParse(request.body);
+   if(!b.success)return reply.code(400).send({error:'Invalid approval request'});
+   const result=await services.outbound.approve(session.workspaceId,b.data);
+   return {...result,sendingEnabled:false};
+  });
+  fastify.post('/outbound/approvals/reject',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   const b=z.object({jobIds:z.array(z.string().uuid()).optional(),all:z.boolean().optional(),campaignId:z.string().uuid().optional(),reason:z.string().max(255).optional()}).strict().safeParse(request.body);
+   if(!b.success)return reply.code(400).send({error:'Invalid rejection request'});
+   return services.outbound.reject(session.workspaceId,b.data);
+  });
+  fastify.post('/outbound/approvals/:id/approve',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid job ID'});
+   const result=await services.outbound.approve(session.workspaceId,{jobIds:[id.data]});
+   return {...result,sendingEnabled:false};
+  });
+  fastify.post('/outbound/approvals/:id/reject',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid job ID'});
+   return services.outbound.reject(session.workspaceId,{jobIds:[id.data]});
   });
   fastify.post('/outbound/suppressions',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;

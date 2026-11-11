@@ -547,3 +547,64 @@ export async function fetchConnectorStatus(): Promise<{ connectors: ConnectorSta
   if (result.data) return { connectors: result.data.connectors };
   return { connectors: [], error: result.error || 'Engine status unavailable' };
 }
+
+export interface OutboundApprovalRow {
+  id: string;
+  workspaceId: string;
+  campaignId: string;
+  campaignName: string;
+  recipientEmail: string;
+  stepNumber: number;
+  subject?: string;
+  bodySnippet?: string;
+  status: 'pending_approval' | 'pending' | 'approved' | 'rejected' | 'cancelled';
+  scheduledAt: string;
+  createdAt: string;
+}
+
+export interface ApprovalQueueStats {
+  pendingCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+}
+
+export interface ApprovalQueueResponse {
+  items: OutboundApprovalRow[];
+  stats: ApprovalQueueStats;
+  sendingEnabled: false;
+}
+
+export async function fetchApprovalQueue(campaignId?: string): Promise<{ data: ApprovalQueueResponse | null; error?: string }> {
+  const query = campaignId ? `?campaignId=${encodeURIComponent(campaignId)}` : '';
+  const result = await engineFetch<ApprovalQueueResponse>(`/outbound/approvals${query}`, { method: 'GET' });
+  if (result.data) return { data: result.data };
+  return { data: null, error: result.error || 'Failed to fetch approval queue' };
+}
+
+export async function approveOutboundJobs(input: {
+  jobIds?: string[];
+  all?: boolean;
+  campaignId?: string;
+}): Promise<{ approvedCount: number; sendingEnabled: false; error?: string }> {
+  const result = await engineFetch<{ approvedCount: number; sendingEnabled: false }>('/outbound/approvals/approve', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (result.data) return result.data;
+  return { approvedCount: 0, sendingEnabled: false, error: result.error || 'Approval failed' };
+}
+
+export async function rejectOutboundJobs(input: {
+  jobIds?: string[];
+  all?: boolean;
+  campaignId?: string;
+  reason?: string;
+}): Promise<{ rejectedCount: number; error?: string }> {
+  const result = await engineFetch<{ rejectedCount: number }>('/outbound/approvals/reject', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (result.data) return result.data;
+  return { rejectedCount: 0, error: result.error || 'Rejection failed' };
+}
+

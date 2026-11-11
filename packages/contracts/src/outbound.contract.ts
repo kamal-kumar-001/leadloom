@@ -62,3 +62,57 @@ export const InboundReplyEventSchema = z.object({
   receivedAt: z.string().datetime(),
 });
 export type InboundReplyEvent = z.infer<typeof InboundReplyEventSchema>;
+
+export const OutboundApprovalStatusEnum = z.enum([
+  'pending_approval',
+  'pending',
+  'approved',
+  'rejected',
+  'cancelled',
+]);
+export type OutboundApprovalStatus = z.infer<typeof OutboundApprovalStatusEnum>;
+
+export const OutboundApprovalItemSchema = z.object({
+  id: z.string().uuid(),
+  workspaceId: z.string().uuid(),
+  campaignId: z.string().uuid(),
+  campaignName: z.string(),
+  recipientEmail: z.string().email(),
+  stepNumber: z.number().int().positive(),
+  subject: z.string().optional(),
+  bodySnippet: z.string().optional(),
+  status: OutboundApprovalStatusEnum,
+  scheduledAt: z.string(),
+  createdAt: z.string(),
+});
+export type OutboundApprovalItem = z.infer<typeof OutboundApprovalItemSchema>;
+
+export const ApprovalQueueStatsSchema = z.object({
+  pendingCount: z.number().int().nonnegative(),
+  approvedCount: z.number().int().nonnegative(),
+  rejectedCount: z.number().int().nonnegative(),
+});
+export type ApprovalQueueStats = z.infer<typeof ApprovalQueueStatsSchema>;
+
+export const ApprovalQueueResponseSchema = z.object({
+  items: z.array(OutboundApprovalItemSchema),
+  stats: ApprovalQueueStatsSchema,
+  sendingEnabled: z.literal(false),
+});
+export type ApprovalQueueResponse = z.infer<typeof ApprovalQueueResponseSchema>;
+
+export const ApproveOutboundJobRequestSchema = z.object({
+  jobIds: z.array(z.string().uuid()).optional(),
+  all: z.boolean().optional(),
+  campaignId: z.string().uuid().optional(),
+});
+export type ApproveOutboundJobRequest = z.infer<typeof ApproveOutboundJobRequestSchema>;
+
+export const RejectOutboundJobRequestSchema = z.object({
+  jobIds: z.array(z.string().uuid()).optional(),
+  all: z.boolean().optional(),
+  campaignId: z.string().uuid().optional(),
+  reason: z.string().max(255).optional(),
+});
+export type RejectOutboundJobRequest = z.infer<typeof RejectOutboundJobRequestSchema>;
+
