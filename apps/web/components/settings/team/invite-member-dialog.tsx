@@ -140,7 +140,7 @@ export function InviteMemberDialog({
 
       // Success: Per rule, inform that no email was sent
       setSuccessNotice(
-        'No email was sent. Ask them to sign up with this address, then open Settings and accept the invitation.'
+        'No email was sent. Tell them to sign in (or sign up) with this address, then open Settings and accept the invitation.'
       );
       notify.success('Invitation created.');
       onInviteSuccess();
@@ -181,7 +181,7 @@ export function InviteMemberDialog({
               id="invite-dialog-description"
               className="mt-1 text-xs text-text-muted leading-relaxed"
             >
-              Invite a new user to join this workspace. Existing accounts cannot be invited.
+              Invite someone to join this workspace. They accept from Settings after signing in.
             </p>
           </div>
         </div>

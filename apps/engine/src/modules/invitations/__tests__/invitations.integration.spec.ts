@@ -81,9 +81,9 @@ describe.runIf(RUN)('invitations on real Postgres (gated)', () => {
     await prisma.$executeRawUnsafe(`UPDATE workspaces SET preferences = '{"x":1}'::jsonb WHERE id = $1::uuid`, g.workspaceId);
     expect(await inv().accept(g.userId, m.invitation.id)).toEqual({ ok: false, reason: 'has_workspace_data' });
   });
-  it('an address that already has an account cannot be invited; invitations are workspace-scoped', async () => {
+  it('an address that already has an account can be invited and accepts only while its workspace is pristine; invitations are workspace-scoped', async () => {
     const a = await owner(); const b = await owner(); const existing = await accountVia(`ex-${tag}@example.invalid`);
-    expect(await inv().invite(a.workspaceId, a.userId, `ex-${tag}@example.invalid`, 'member')).toEqual({ ok: false, reason: 'account_exists' });
+    const exInv: any = await inv().invite(a.workspaceId, a.userId, `ex-${tag}@example.invalid`, 'member'); expect(exInv.ok).toBe(true);
     await invite(a, `la-${tag}@example.invalid`);
     expect(await inv().list(b.workspaceId)).toHaveLength(0); expect(existing.userId).toBeTruthy();
   });

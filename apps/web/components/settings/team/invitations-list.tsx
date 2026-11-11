@@ -87,7 +87,7 @@ export function InvitationsList({
       <div className="p-3 rounded-xl bg-canvas-elevated border border-border-subtle flex items-start gap-2.5 text-text-muted">
         <Info className="w-4 h-4 text-brand-loom shrink-0 mt-0.5" />
         <p className="text-[11px] leading-relaxed">
-          No invitation emails are sent. Ask invitees to sign up with their invited email address, then open Settings to accept their invitation.
+          No invitation emails are sent. Tell invitees to sign in or sign up with their invited email address, then open Settings to accept.
         </p>
       </div>
 

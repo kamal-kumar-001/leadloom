@@ -50,7 +50,8 @@ export class InvitationService {
     const now = this.now();
     if ((await this.store.countOpen(workspaceId)) >= MAX_OPEN_INVITES) return { ok: false, reason: 'limit_reached' };
     if ((await this.store.countCreatedSince(workspaceId, new Date(now.getTime() - 86_400_000))) >= MAX_INVITES_PER_DAY) return { ok: false, reason: 'limit_reached' };
-    if (await this.store.accountExists(email)) return { ok: false, reason: 'account_exists' };
+    // An address that already has an account may be invited: nothing moves until that user accepts while
+    // signed in with a verified identity, and accept refuses unless their own workspace is pristine.
     const made = await this.store.create({ workspaceId, email, role: role as Role, invitedBy: actorUserId, expiresAt: new Date(now.getTime() + INVITE_TTL_DAYS * 86_400_000) });
     return made ? { ok: true, invitation: made } : { ok: false, reason: 'already_invited' };
   }

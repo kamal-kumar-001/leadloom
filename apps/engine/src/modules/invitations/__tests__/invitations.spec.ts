@@ -31,7 +31,7 @@ describe('InvitationService', () => {
     expect(ok.ok && ok.invitation.email).toBe('new@y.example');
     expect(await svc.invite(w, a, 'new@y.example', 'member')).toEqual({ ok: false, reason: 'already_invited' });
     st.accounts.add('taken@y.example');
-    expect(await svc.invite(w, a, 'taken@y.example', 'member')).toEqual({ ok: false, reason: 'account_exists' });
+    expect((await svc.invite(w, a, 'taken@y.example', 'member')).ok).toBe(true);
   });
   it('only the workspace owner may invite an admin', async () => {
     const st = new MemStore(); const svc = new InvitationService(st); const w = randomUUID(), owner = randomUUID(), admin = randomUUID(); st.owners.add(owner);

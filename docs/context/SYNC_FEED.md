@@ -311,3 +311,11 @@
   - Zero create/generate mutations or actions added; shell left untouched (note to Gamma: `/app/validator` topbar sample claim can be removed once desired).
   - Desktop table view with responsive stacked mobile view to guarantee no horizontal overflow at 390px.
 - Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (0 errors), `npm run build --workspace @leadloom/web` (18/18 routes compiled clean).
+
+---
+
+### [2026-11-11T17:20:00+05:30] Continuity worker (Instinct) | team invites verified in a real browser; invite rule relaxed | Non-Breaking
+- Local stack: real PostgreSQL 16 + pgvector, engine with `LEADLOOM_TEAM_INVITES_ENABLED=true`, built web, headless Chrome. Not deployed; production flag still unset/off.
+- Verified end to end (two to three real accounts): invite, accept after sign-in, sign in again, role shown as Member, members and pending lists, revoke (revoked invitee sees nothing to accept), role change, remove (member session ends and sign-in is refused), member sees no invite controls.
+- Change: an address that already has an account can now be invited. Nothing moves until that user accepts while signed in; accept still refuses unless their own workspace is pristine (`has_workspace_data`). Engine unit + real-Postgres tests updated and pass (17/17). Copy updated; still "No email was sent".
+- Added `docs/plan/PUMPGTM_GAP.md` (sourced gap list and build plan).
