@@ -268,7 +268,7 @@ export default function MailboxesPage() {
             <EmptyState
               icon={<Mail className="w-6 h-6 text-text-muted" />}
               title="No mailboxes connected yet"
-              description="Connect an IMAP/SMTP sender to verify connection and start outbound sequences."
+              description="Connect an IMAP/SMTP sender to verify and store the login. Sending is not enabled yet."
               action={
                 isAdmin && isConnectFeatureEnabled ? (
                   <Button
