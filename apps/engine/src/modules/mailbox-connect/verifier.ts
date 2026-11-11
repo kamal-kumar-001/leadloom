@@ -28,11 +28,13 @@ const withDeadline = <T>(p: Promise<T>): Promise<T> => Promise.race([p, new Prom
  * skips the address policy and TLS requirement so a local test server can be used.
  */
 export class RealConnectionVerifier implements ConnectionVerifier {
-  constructor(private readonly opts: { allowPrivateHosts?: boolean } = {}) {}
+  /** `tls` is a TEST-ONLY fixture hook (never passed by main.ts): a resolver, a trusted CA and a socket-address remap, so the strict TLS/pinning path can run against a local server. The public-address policy still applies to what the resolver returns. */
+  constructor(private readonly opts: { allowPrivateHosts?: boolean; tls?: { resolve?: (h: string) => Promise<string[]>; ca?: string; connectTo?: (pinned: string) => string } } = {}) {}
 
   private async pin(host: string): Promise<string | null> {
     if (this.opts.allowPrivateHosts) return isIP(host) ? host : host === 'localhost' ? '127.0.0.1' : host;
-    return resolvePublic(host);
+    const ip = await resolvePublic(host, this.opts.tls?.resolve);
+    return ip && this.opts.tls?.connectTo ? this.opts.tls.connectTo(ip) : ip;
   }
 
   async verify(ep: MailboxEndpoint): Promise<ConnectionResult> {
@@ -42,7 +44,7 @@ export class RealConnectionVerifier implements ConnectionVerifier {
       const ip = await this.pin(ep.smtpHost); if (!ip) throw Object.assign(new Error('host'), { code: 'ENOTFOUND' });
       const nodemailer = await import('nodemailer');
       const base = buildSmtpOptions({ host: ip, port: ep.smtpPort, user: ep.email, authType: 'password', password: ep.password }) as any;
-      const t = nodemailer.createTransport({ ...base, name: 'leadloom', requireTLS: strict && ep.smtpPort !== 465, tls: { servername: ep.smtpHost, rejectUnauthorized: true, minVersion: 'TLSv1.2' }, greetingTimeout: 10_000, logger: false, debug: false });
+      const t = nodemailer.createTransport({ ...base, name: 'leadloom', requireTLS: strict && ep.smtpPort !== 465, tls: { servername: ep.smtpHost, rejectUnauthorized: true, minVersion: 'TLSv1.2', ...(this.opts.tls?.ca ? { ca: this.opts.tls.ca } : {}) }, greetingTimeout: 10_000, logger: false, debug: false });
       try { await withDeadline(t.verify()); } finally { t.close(); }
     } catch (e) { smtp = classify(e); }
     let imap: CheckCode | 'skipped' = 'skipped';
@@ -52,7 +54,7 @@ export class RealConnectionVerifier implements ConnectionVerifier {
         const ip = await this.pin(ep.imapHost); if (!ip) throw Object.assign(new Error('host'), { code: 'ENOTFOUND' });
         const { ImapFlow } = await import('imapflow');
         const base = buildImapOptions({ host: ip, port: ep.imapPort, user: ep.email, authType: 'password', password: ep.password }) as any;
-        const c = new ImapFlow({ ...base, secure: ep.imapPort === 993, servername: ep.imapHost, doSTARTTLS: strict && ep.imapPort === 143 ? true : undefined, tls: { servername: ep.imapHost, rejectUnauthorized: true, minVersion: 'TLSv1.2' }, connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000, disableAutoIdle: true } as any);
+        const c = new ImapFlow({ ...base, secure: ep.imapPort === 993, servername: ep.imapHost, doSTARTTLS: strict && ep.imapPort !== 993 ? true : undefined, tls: { servername: ep.imapHost, rejectUnauthorized: true, minVersion: 'TLSv1.2', ...(this.opts.tls?.ca ? { ca: this.opts.tls.ca } : {}) }, connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000, disableAutoIdle: true } as any);
         c.on('error', () => undefined);
         try { await withDeadline(c.connect()); await withDeadline(c.logout()); } finally { c.close(); }
       } catch (e) { imap = classify(e); }

@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -63,5 +67,32 @@ describe.runIf(RUN)('mailbox connect on real Postgres + a local SMTP server (gat
     expect(await svc.test(w, made.mailbox.id)).toMatchObject({ ok: true, mailbox: { connectionStatus: 'ok' } });
     expect(await svc.test(w2, made.mailbox.id)).toEqual({ ok: false, reason: 'not_found' });
     expect(await svc.remove(w2, made.mailbox.id)).toBe(false); expect(await svc.remove(w, made.mailbox.id)).toBe(true);
+  });
+
+  it('STRICT path (public-address policy, pinned IP, SNI, required STARTTLS, cert validation) against local TLS servers with a test CA', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mbtls-')); const HOST = 'mail.example.test';
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, 'k.pem'), '-out', join(dir, 'c.pem'), '-days', '2', '-subj', `/CN=${HOST}`, '-addext', `subjectAltName=DNS:${HOST}`], { stdio: 'ignore' });
+    const cert = readFileSync(join(dir, 'c.pem'), 'utf8'), key = readFileSync(join(dir, 'k.pem'), 'utf8');
+    const { SMTPServer } = createRequire(SMTP!)('smtp-server'); const hc = createRequire(SMTP!)('hoodiecrow-imap');
+    const smtp = new SMTPServer({ authOptional: false, secure: false, key, cert, onAuth(a: any, _s: any, cb: any) { a.password === PASS ? cb(null, { user: a.username }) : cb(new Error('Invalid login')); } });
+    const plain = new SMTPServer({ authOptional: false, secure: false, disabledCommands: ['STARTTLS'], allowInsecureAuth: true, onAuth(a: any, _s: any, cb: any) { cb(null, { user: a.username }); } });
+    const imap = hc({ plugins: ['STARTTLS'], secureConnection: false, credentials: { key, cert }, users: { u: { password: PASS } } });
+    await Promise.all([new Promise<void>((r) => smtp.listen(2526, '127.0.0.1', () => r())), new Promise<void>((r) => plain.listen(2527, '127.0.0.1', () => r())), new Promise<void>((r) => imap.listen(2144, '127.0.0.1', () => r()))]);
+    const mk = (over: any = {}) => new RealConnectionVerifier({ tls: { resolve: async () => ['93.184.216.34'], ca: cert, connectTo: () => '127.0.0.1', ...over } });
+    const base = { email: 'u', password: PASS, smtpHost: HOST, smtpPort: 2526, imapHost: HOST, imapPort: 2144 };
+    try {
+      const good = await mk().verify({ ...base, password: PASS });
+      expect(good.smtp).toBe('ok');
+      expect((await mk().verify({ ...base, password: 'bad' })).smtp).toBe('auth_failed');
+      expect((await mk({ ca: undefined }).verify(base)).smtp).toBe('tls_error'); // untrusted self-signed cert is refused
+      expect((await mk().verify({ ...base, smtpHost: 'other.example.test' })).smtp).toBe('tls_error'); // SNI/hostname mismatch is refused
+      expect((await mk().verify({ ...base, smtpPort: 2527 })).smtp).not.toBe('ok'); // server without STARTTLS: password is never sent in clear
+      expect((await mk({ resolve: async () => ['10.0.0.5'] }).verify(base))).toEqual({ smtp: 'unreachable', imap: 'unreachable' }); // private resolution refused, no socket opened
+      expect((await mk({ resolve: async () => ['8.8.8.8', '127.0.0.1'] }).verify(base)).smtp).toBe('unreachable'); // mixed answers refused
+      expect(good.imap).toBe('ok'); // IMAP over mandatory STARTTLS with a trusted cert
+      expect((await mk({ ca: undefined }).verify(base)).imap).toBe('tls_error');
+      expect((await mk().verify({ ...base, imapHost: 'other.example.test' })).imap).toBe('tls_error');
+      expect((await mk().verify({ ...base, password: 'bad' })).imap).toBe('auth_failed');
+    } finally { smtp.close(); plain.close(); imap.close?.(); }
   });
 });
