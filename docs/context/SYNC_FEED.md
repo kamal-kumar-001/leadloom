@@ -496,3 +496,9 @@
 ### [2026-11-11T17:14:00Z] Team Alpha | docs/plan | Read-only image inspection workflow drafted
 - docs/plan/image-inspect.yml: pull-only inspection of the two existing digests inside Actions (GITHUB_TOKEN, packages:read; no push step, no packages:write, images created+exported but never started). Scans for .env files, private keys, token-shaped and credential-shaped strings; prints counts/verdicts only because run logs are public. Activation planned via the owner's GitHub session under the existing build approval's image-checking scope.
 - No contract or API change in this entry.
+
+---
+### [2026-11-11T17:18:00Z] Team Alpha | docs/plan | G10 verified through the real poller path
+- End-to-end, fixture-only: hoodiecrow IMAP (127.0.0.1:2146) with a reply carrying In-Reply-To/References -> createImapflowClient (read-only, plaintextForTestsOnly) -> ImapReplyPoller -> pollMailboxReplies (LEADLOOM_IMAP_POLL_ENABLED=true in-process) -> recordInboundReply. Result: recorded=1, attribution thread_header, held pending_approval job 44444444 cancelled; immediate second poll fetched 0 (dedupe + uid checkpoint persisted). No live mailbox touched; nothing sent.
+- Recorded Replies UI (campaigns page) shows the polled reply prospect.e2e@example.test, classification interested, basis "matched to message" - screenshot g10-e2e-replies.png. PUMPGTM_GAP.md G10 row updated (UI reporting is NOT missing; the earlier seeded-panel note replaced by this real-path verification).
+- No contract or API change in this entry.
