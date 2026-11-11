@@ -491,3 +491,8 @@
 - Build-input inspection at SHA 3df93fa: no secret files/dumps in repo, .dockerignore covers .git/.env/data dirs, no ARG/ENV secrets in Dockerfiles, GITHUB_TOKEN only in the login step. Sole credential-shaped string: synthetic localhost placeholder in engine Dockerfile. LIMIT: not a bit-exact layer enumeration (no read:packages token; minting ruled out). Bit-exact check needs a vault read:packages token or an approved read-only inspect run.
 - Publishing paused pending a preventive control (owner decision: workflow verify step / verify-and-flip checklist / repo-private-at-completion). Existing packages must be re-verified Private before any future push.
 - No contract or API change in this entry.
+
+---
+### [2026-11-11T17:14:00Z] Team Alpha | docs/plan | Read-only image inspection workflow drafted
+- docs/plan/image-inspect.yml: pull-only inspection of the two existing digests inside Actions (GITHUB_TOKEN, packages:read; no push step, no packages:write, images created+exported but never started). Scans for .env files, private keys, token-shaped and credential-shaped strings; prints counts/verdicts only because run logs are public. Activation planned via the owner's GitHub session under the existing build approval's image-checking scope.
+- No contract or API change in this entry.
