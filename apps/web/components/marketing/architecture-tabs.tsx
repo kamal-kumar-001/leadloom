@@ -109,6 +109,11 @@ export function ArchitectureTabs() {
         </div>
 
         {/* Code Body */}
+        {activeTab === 'sdk' && (
+          <p className="px-4 pt-3 text-[10px] font-mono uppercase tracking-widest text-text-muted bg-canvas/60">
+            Planned provider interface - example only, not usable yet
+          </p>
+        )}
         <pre className="p-6 text-xs font-mono text-text-secondary overflow-x-auto leading-relaxed bg-canvas/60">
           <code>{activeContent}</code>
         </pre>

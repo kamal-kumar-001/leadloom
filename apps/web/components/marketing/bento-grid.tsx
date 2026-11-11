@@ -15,7 +15,7 @@ export function BentoGridSection() {
           Weave signals into revenue without breaking context
         </h2>
         <p className="mt-3 text-sm sm:text-base text-text-secondary">
-          No CSV exports. No broken Zapier syncs. Everything happens in one continuous, reactive canvas.
+          The planned workflow: no CSV exports, no broken syncs - everything in one continuous, reactive canvas.
         </p>
       </div>
 
