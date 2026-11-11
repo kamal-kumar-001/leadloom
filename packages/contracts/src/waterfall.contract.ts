@@ -11,6 +11,13 @@ export const BYOKProviderEnum = z.enum([
   'deepseek',
   'groq',
   'perplexity',
+  // Engine-registered connectors (G6): key storage only; no provider call is
+  // implied by accepting the key.
+  'pdl',
+  'zerobounce',
+  'neverbounce',
+  'serper',
+  'ollama',
 ]);
 export type BYOKProvider = z.infer<typeof BYOKProviderEnum>;
 

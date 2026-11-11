@@ -44,7 +44,11 @@ export function ConnectorCard({
   credential,
   onConfigure,
 }: ConnectorCardProps) {
-  const isConnected = !!credential && credential.isValid;
+  // Stored and verified are distinct states. A saved key that has never passed
+  // a live test-connection is stored, not connected; the card must not call it
+  // "Not Configured" (the key exists) nor "Connected" (it is unproven).
+  const hasStoredKey = !!credential;
+  const isVerified = !!credential && credential.isValid;
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     latencyMs: number;
@@ -84,7 +88,7 @@ export function ConnectorCard({
                 </h3>
                 {meta.isLocal && (
                   <Badge variant="matrix" className="text-[10px] px-1.5 py-0">
-                    Runs locally
+                    Self-hosted endpoint
                   </Badge>
                 )}
               </div>
@@ -92,10 +96,14 @@ export function ConnectorCard({
             </div>
           </div>
 
-          {isConnected ? (
+          {isVerified ? (
             <Badge variant="subtle" className="text-signal-verified border-signal-verified/30 text-[10px] flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-signal-verified" />
               Connected
+            </Badge>
+          ) : hasStoredKey ? (
+            <Badge variant="matrix" className="text-[10px] text-text-muted border-border-subtle">
+              Key saved (unverified)
             </Badge>
           ) : (
             <Badge variant="matrix" className="text-[10px] text-text-muted border-border-subtle">
@@ -109,7 +117,7 @@ export function ConnectorCard({
         </p>
 
         {/* Masked Key & Security Pill */}
-        {isConnected && credential ? (
+        {hasStoredKey && credential ? (
           <div className="mb-4 bg-canvas-muted/80 rounded-lg p-2.5 border border-border-subtle">
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="text-text-muted font-mono text-[11px] flex items-center gap-1.5">
@@ -153,7 +161,7 @@ export function ConnectorCard({
       </div>
 
       <div className="flex items-center gap-2 pt-2 border-t border-border-subtle">
-        {isConnected && meta.testable ? (
+        {hasStoredKey && meta.testable ? (
           <>
             <Button
               variant="outline"
@@ -174,6 +182,15 @@ export function ConnectorCard({
               Rotate Key
             </Button>
           </>
+        ) : hasStoredKey ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onConfigure(meta)}
+            className="w-full text-xs h-8 px-3"
+          >
+            Rotate Key
+          </Button>
         ) : (
           <Button
             variant="primary"

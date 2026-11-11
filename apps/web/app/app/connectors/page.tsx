@@ -31,11 +31,11 @@ const DISPLAY: Record<string, { category: ConnectorMeta['category']; description
   serper: { category: 'Search Signals', description: 'Google search signals for trigger monitoring.', icon: '\ud83d\udd0e', docsUrl: 'https://serper.dev/documentation' },
   openai: { category: 'AI Intelligence', description: 'Account intelligence synthesis and copy drafting.', icon: '\ud83e\udd16', docsUrl: 'https://platform.openai.com/docs/api-reference' },
   anthropic: { category: 'AI Intelligence', description: 'Company research and intent reasoning.', icon: '\ud83e\udde0', docsUrl: 'https://docs.anthropic.com/en/api/getting-started' },
-  ollama: { category: 'Local AI', description: 'LLM inference on your own machine; prompts stay local.', icon: '\ud83e\udd99', docsUrl: 'https://ollama.com', isLocal: true },
+  ollama: { category: 'Local AI', description: 'Self-hosted LLM endpoint you configure; requests go to the base URL you provide.', icon: '\ud83e\udd99', docsUrl: 'https://ollama.com', isLocal: true },
 };
 
 // Providers the vault save path accepts today (BYOKProviderEnum in contracts).
-const VAULT_PROVIDERS = new Set(['apollo', 'hunter', 'anymail_finder', 'dropcontact', 'prospeo', 'openai', 'anthropic', 'deepseek', 'groq', 'perplexity']);
+const VAULT_PROVIDERS = new Set(['apollo', 'hunter', 'anymail_finder', 'dropcontact', 'prospeo', 'openai', 'anthropic', 'deepseek', 'groq', 'perplexity', 'pdl', 'zerobounce', 'neverbounce', 'serper', 'ollama']);
 
 export default function ConnectorsPage() {
   const [credentials, setCredentials] = useState<Record<string, MaskedBYOKCredential>>({});
