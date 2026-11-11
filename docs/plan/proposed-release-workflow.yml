@@ -5,11 +5,13 @@
 # release and browned out the co-hosted apps.
 #
 # Preconditions:
-#   - Repo is public; the default GITHUB_TOKEN can push GHCR packages for this repo.
-#   - Make the GHCR packages public (one click each after first push) so the host
-#     needs no registry login. If kept private, the host needs a one-time
-#     `docker login ghcr.io` with a read:packages token.
-#   - If the host is arm64 (check: uname -m), uncomment the platforms line.
+#   - The default GITHUB_TOKEN can push GHCR packages for this repo.
+#   - Packages stay PRIVATE (the first-publish default). The host pulls with a
+#     one-time `docker login ghcr.io` using a read:packages token. Making the
+#     packages public is a separate disclosure decision and is NOT part of this
+#     workflow or its approval.
+#   - Host is x86_64 (confirmed by read-only diagnostic 2026-11-11), matching
+#     the hosted runner's linux/amd64 output. No buildx platform line needed.
 name: release-images
 on:
   workflow_dispatch:
@@ -40,7 +42,6 @@ jobs:
           context: .
           file: docker/engine.Dockerfile
           push: true
-          # platforms: linux/arm64   # uncomment ONLY if the host is arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/leadloom-engine:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/leadloom-engine:release
@@ -50,7 +51,6 @@ jobs:
           context: .
           file: docker/web.Dockerfile
           push: true
-          # platforms: linux/arm64   # uncomment ONLY if the host is arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/leadloom-web:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/leadloom-web:release

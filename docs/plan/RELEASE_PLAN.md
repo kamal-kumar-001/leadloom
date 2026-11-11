@@ -14,24 +14,29 @@ Live today: `94fa7ab` (deployed 12:40 IST 2026-11-11). Migrations through 202611
 - `COPY . .` before `npm ci` in both Dockerfiles means a code change reinstalls dependencies. That is wasted work and a possible contributor, NOT an established root cause of the export stall.
 - Unknown and not yet checked (read-only host questions): host CPU architecture, Docker runtime (Desktop VM vs engine), free disk now, image sizes.
 
-## Recommended route (decision-ready, 2026-11-11 evening)
+## Recommended route (proposal, not yet decision-ready facts)
 
-RECOMMENDED: prebuilt images built by GitHub Actions, pulled by the host. This removes the only known stall source (the ~1h image build/export I/O on the shared host) from the release entirely. The host then does `docker compose pull` + `up -d`: the brownout window for pos/feefree shrinks from up-to-an-hour of disk saturation to the seconds-minutes of a container replace. Rollback is clean: images are tagged with the git SHA, the previous tag stays in the registry, and `docker compose up` with the previous tag restores the old stack in minutes (migrations 20261118-23 are additive, so old code runs fine against the migrated DB).
+PROPOSED: build the two production images off-host (GitHub Actions), push them PRIVATE to GHCR, and have the host pull them instead of building. This removes on-host build work - the step that stalled for about an hour last time - but it does NOT remove pull, layer extraction, or container replacement, which also stress the Docker VM. How long any brownout lasts is UNMEASURED; no uptime or duration is promised.
 
-What it needs from Kamal (three approvals, all one-time):
-1. Add ONE workflow file (`.github/workflows/release-images.yml`) to the public repo that builds the three compose images on a manually dispatched release tag and pushes them to GitHub Container Registry under his account. The repo's built-in GITHUB_TOKEN is enough; no new secret is needed if the GHCR package is public (the repo itself is public). Public repos get free Actions minutes. The draft workflow is in docs/plan/proposed-release-workflow.yml - it is inert until moved into .github/workflows/, which only Kamal's yes authorizes.
-2. Run `uname -m && docker version --format '{{.Server.Arch}} / {{.Server.Driver}}'` on the host once (read-only, 5 seconds). If the host is arm64 instead of x86_64 the workflow needs one extra buildx line; better to know before the release, not during.
-3. Approve the updated update.sh that pulls the prebuilt tag instead of building (prepared in the same release PR; current update.sh keeps working for route B).
+What is actually established:
+- Host arch is x86_64 and Docker is a VM-backed runtime (read-only diagnostic, 2026-11-11 19:39), so standard GH runner images (linux/amd64) match.
+- / has 33G free. Whether that is ample is UNKNOWN until the real compressed image sizes and extracted coexistence footprint are measured; estimates are not evidence.
+- Migrations 20261118-23 are additive (new columns/tables with defaults). That alone does NOT prove old-code compatibility or a safe rollback; there is no backup/restore runbook and no rollback test. Treat migration rollback as UNSUPPORTED until one exists.
+- The release build covers only engine + web (the scraper service is on an unused profile and has no Dockerfile; irrelevant to this release).
 
-What remains unknown, stated honestly:
-- Host CPU architecture (blocks nothing until the first build; see ask 2).
-- Exact image sizes (est. 1-2 GiB total pull; 33G free disk is ample either way).
-- Whether GHCR public pulls need any host login. They do not for public packages; if Kamal prefers the package private, the host needs a one-time `docker login ghcr.io` with a read:packages token.
+The minimal approval choice for Kamal, nothing bundled:
+1. Allow one workflow file (draft inert at docs/plan/proposed-release-workflow.yml) to be activated at .github/workflows/release-images.yml. It builds engine + web on GitHub-hosted runners and pushes to GHCR PRIVATE (the default on first publish). Public-repo hosted-runner COMPUTE is generally free; Actions storage and retention are not necessarily free, and no cost claim is made here beyond that.
+2. Allow a one-time `docker login ghcr.io` on the host with a read:packages token so the host can pull the private images. (Making the packages public instead would be a separate disclosure decision; the repo being public does not cover it, and it is not requested.)
+3. Allow the pull-based update.sh variant in the same main commit as the release (main only, no release branch), run by the host owner in a supervised window.
 
-FALLBACK (route B): on-host build as today, with a supervised window and the known residual risk that pos/feefree time out for up to about an hour if the export stall recurs. The Dockerfile layering fix (package.json before COPY . .) is intentionally NOT committed: it is unverifiable without a real build and the stall root cause is unproven. It rides along only if route B is chosen.
+What can be verified only AFTER that approval, in order, none guaranteed before observation:
+- Real compressed image sizes from the first build's registry metadata, then extracted and side-by-side disk footprint on the host (read-only `docker images` / `system df`).
+- Actual pull duration and host load during a supervised pull (watch pos/feefree health externally throughout).
+- Container-replace behavior with the new images, with the previous tag still present locally.
+- Rollback-by-repull of the previous tag: only claimable after it has been exercised once.
+- Until those are observed, the honest statement is: "build risk moves off the host; pull/extract/replace risk remains and is unmeasured; rollback is planned but unproven."
 
-NOT RECOMMENDED: ad-hoc cross-load of images built on an unknown-arch machine, or pausing co-hosted apps during the build (both trade the user's other products' availability or correctness for convenience).
-
+NOT RECOMMENDED: ad-hoc cross-loaded images from an unknown-arch machine; pausing co-hosted apps; committing the Dockerfile layering fix unverified (it rides along only if on-host build is chosen after measurement).
 ## Release (once a route is chosen)
 `update.sh` order is build, then `prisma migrate deploy` + `migrate status` with the new image, then replace containers; if migration fails nothing is replaced. Last step runs `docker image prune -f` (existing behavior, dangling images only; not a new cleanup). After: `/login` 200, `/` 200, engine `/health`, pos and feefree 200, only 20261118 newly applied.
 

@@ -451,3 +451,9 @@
 - No contract or API change in this entry.
 
 ---
+
+---
+### [2026-11-11T16:45:00Z] Team Alpha | engine/ai-researcher + docs/plan | Release-plan correction + G4 heuristics
+- Corrected RELEASE_PLAN.md "Recommended route" per review: build risk moves off-host, but pull/extract/container-replace risk is unmeasured (no uptime/duration promise); 33G ample is UNKNOWN until real image sizes measured; additive migrations do NOT prove rollback (no backup/restore runbook, rollback unsupported until tested); host arch x86_64 from 19:39 diagnostic; GHCR packages stay PRIVATE (first-publish default), public is a separate disclosure decision; hosted-runner compute generally free for public repos, no storage/retention cost claim. Workflow draft comment fixed to private-by-default.
+- G4: removed ai-researcher.service.ts (fabricated fixed 0.88 confidence and templated claims). New WebsiteSignalService emits honest heuristic signals only: keyword tech hints, hiring/pricing/scaling mentions, wordCount; summary/confidence always null, source 'heuristic_keywords'. Not wired to any route; wired enrichment still requires a BYOK LLM with per-claim provenance. 3 new tests; engine 326 passed / 36 skipped, tsc clean.
+- No contract or API change in this entry.
