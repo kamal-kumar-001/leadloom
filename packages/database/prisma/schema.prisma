@@ -151,6 +151,9 @@ model ValidationExperiment {
   icpSpec           Json?    @map("icp_spec")
   sequenceSubject   String?  @map("sequence_subject")
   sequenceBody      String?  @map("sequence_body")
+  outreachSent      Int      @default(0) @map("outreach_sent")
+  replies           Int      @default(0)
+  positiveReplies   Int      @default(0) @map("positive_replies")
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

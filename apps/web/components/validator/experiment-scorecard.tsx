@@ -3,7 +3,7 @@
 import React from 'react';
 import { Badge, Card } from '@leadloom/ui';
 import { X } from 'lucide-react';
-import type { ExperimentScorecard } from '../../lib/engine-client';
+import { recordOutreach, type ExperimentScorecard } from '../../lib/engine-client';
 
 function pct(rate: number): string {
   return `${Math.round(rate * 100)}%`;
@@ -25,12 +25,36 @@ function Metric({ label, value }: { label: string; value: string }) {
  * verdict means there is not enough signal, never implied demand.
  */
 export function ExperimentScorecardPanel({
-  scorecard,
+  scorecard: initial,
   onClose,
 }: {
   scorecard: ExperimentScorecard;
   onClose: () => void;
 }) {
+  const [scorecard, setScorecard] = React.useState(initial);
+  const [sent, setSent] = React.useState(String(initial.metrics.outreachSent || ''));
+  const [replies, setReplies] = React.useState(String(initial.metrics.replies || ''));
+  const [positive, setPositive] = React.useState(String(initial.metrics.positiveReplies || ''));
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  async function onSaveOutreach(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setSaveError(null);
+    const res = await recordOutreach(scorecard.experimentId, {
+      outreachSent: Number(sent || 0),
+      replies: Number(replies || 0),
+      positiveReplies: Number(positive || 0),
+    });
+    setSaving(false);
+    if (res.error || !res.data) {
+      setSaveError(res.error || 'The numbers could not be saved.');
+      return;
+    }
+    setScorecard(res.data);
+  }
+
   const m = scorecard.metrics;
   const hasPageData = m.visitors > 0 || m.waitlistCount > 0;
   const hasOutreachData = m.outreachSent > 0;
@@ -82,6 +106,33 @@ export function ExperimentScorecardPanel({
         ) : (
           <p className="text-xs text-text-muted">No outreach recorded yet. These numbers are entered by your team, not estimated.</p>
         )}
+        <form onSubmit={onSaveOutreach} className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-end">
+          {[
+            { label: 'Outreach sent', val: sent, set: setSent },
+            { label: 'Replies', val: replies, set: setReplies },
+            { label: 'Positive replies', val: positive, set: setPositive },
+          ].map((f) => (
+            <label key={f.label} className="flex-1">
+              <span className="block text-[10px] uppercase font-mono text-text-muted mb-1">{f.label}</span>
+              <input
+                type="number"
+                min={0}
+                required
+                value={f.val}
+                onChange={(e) => f.set(e.target.value)}
+                className="w-full rounded-md border border-border-muted bg-canvas-elevated px-3 py-1.5 text-sm text-text-primary focus:border-brand-loom focus:outline-none focus:ring-1 focus:ring-brand-loom"
+              />
+            </label>
+          ))}
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-brand-loom px-4 py-1.5 text-sm font-semibold text-canvas disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save numbers'}
+          </button>
+        </form>
+        {saveError && <p className="text-xs text-signal-failed mt-1">{saveError}</p>}
       </div>
 
       <p className="text-xs text-text-secondary border-t border-border-subtle pt-3">{scorecard.actionableSummary}</p>

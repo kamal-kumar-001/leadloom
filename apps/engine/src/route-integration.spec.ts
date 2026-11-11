@@ -90,6 +90,12 @@ describe('waterfall/validator route integration', () => {
       expect((await server.inject({ method: 'POST', url: `/validator/pages/${slug}/leads`, payload: lead })).statusCode).toBe(404);
       expect((await server.inject({ method: 'GET', url: `/validator/pages/${slug}` })).statusCode).toBe(404);
 
+      // Owner records observed outreach numbers; invalid shapes are rejected.
+      expect((await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/outreach`, headers: auth, payload: { outreachSent: 10, replies: 12, positiveReplies: 2 } })).statusCode).toBe(400);
+      const outreach = await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/outreach`, headers: auth, payload: { outreachSent: 25, replies: 4, positiveReplies: 1 } });
+      expect(outreach.statusCode).toBe(200);
+      expect(outreach.json().metrics).toMatchObject({ outreachSent: 25, replies: 4, positiveReplies: 1 });
+
       // Owner publishes explicitly, then waitlist submission works with no session header.
       const published = await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/publish`, headers: auth });
       expect(published.statusCode).toBe(200);

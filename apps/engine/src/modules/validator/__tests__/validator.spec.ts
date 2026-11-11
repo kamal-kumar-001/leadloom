@@ -137,6 +137,9 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     expect(leadResult.success).toBe(true);
     expect(leadResult.totalWaitlist).toBe(1);
 
+    // 2b. Public traffic reaches the minimum sample for a verdict
+    for (let i = 0; i < 30; i++) await service.getPublicPage('leadloom-gtm');
+
     // 3. Update outreach responses
     const updatedScorecard = await service.updateOutreachMetrics(
       generated.experimentId,

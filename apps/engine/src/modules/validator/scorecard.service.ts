@@ -4,10 +4,18 @@ import {
   ValidationVerdict,
 } from '@leadloom/contracts';
 
+/** Minimum observed samples before any non-pending verdict. Rates on smaller samples are noise. */
+export const MIN_PAGE_LOADS_FOR_VERDICT = 30;
+export const MIN_OUTREACH_FOR_VERDICT = 20;
+
 export class ScorecardService {
   /**
    * Computes the weighted validation score and Go/No-Go verdict based on PRD Section 5.2 formula:
    * Score = ((PageConvRate / 0.08 * 0.35) + (ReplyRate / 0.05 * 0.35) + (PositiveResonance / 0.40 * 0.30)) * 100
+   *
+   * The verdict stays 'pending' until BOTH the page side and the outreach side
+   * reach minimum observed samples; a small-sample rate is reported as a raw
+   * metric, never turned into a verdict.
    */
   public computeScorecard(
     experimentId: string,
@@ -17,15 +25,14 @@ export class ScorecardService {
     sequenceSubject: string,
     sequenceBody: string
   ): ValidationScorecardResponse {
-    // If not enough data collected yet (e.g. < 10 visitors and 0 outreach), mark as pending
-    if (metrics.visitors < 10 && metrics.outreachSent === 0) {
+    if (metrics.visitors < MIN_PAGE_LOADS_FOR_VERDICT || metrics.outreachSent < MIN_OUTREACH_FOR_VERDICT) {
       return {
         experimentId,
         hypothesis,
         verdict: 'pending',
         verdictScore: 0,
         metrics,
-        actionableSummary: 'Validation experiment recently initialized. Awaiting outbound replies and page traffic.',
+        actionableSummary: `Not enough data for a verdict yet: ${metrics.visitors}/${MIN_PAGE_LOADS_FOR_VERDICT} page loads and ${metrics.outreachSent}/${MIN_OUTREACH_FOR_VERDICT} outreach recorded. The raw metrics above are real observations; the rates are not meaningful at this sample size.`,
         pageUrl,
         sequenceSubject,
         sequenceBody,
@@ -44,13 +51,13 @@ export class ScorecardService {
 
     if (verdictScore >= 80) {
       verdict = 'high_pull';
-      actionableSummary = `🔥 High customer pull detected (Score ${verdictScore}/100). Conversion rate is ${(metrics.pageConversionRate * 100).toFixed(1)}% and positive resonance is ${(metrics.positiveResonanceRate * 100).toFixed(1)}%. Greenlight engineering MVP.`;
+      actionableSummary = `High customer pull detected (Score ${verdictScore}/100). Signups per page load: ${(metrics.pageConversionRate * 100).toFixed(1)}%, positive resonance: ${(metrics.positiveResonanceRate * 100).toFixed(1)}%. Strong signal within the current sample.`;
     } else if (verdictScore >= 45) {
       verdict = 'pivot_positioning';
-      actionableSummary = `⚠️ Moderate traction with positioning friction (Score ${verdictScore}/100). Visitors are interested but outreach reply resonance is below 40%. Recommend adjusting headline and value proposition.`;
+      actionableSummary = `Moderate traction with positioning friction (Score ${verdictScore}/100). Page interest is present but outreach resonance is below target in the current sample.`;
     } else {
       verdict = 'low_interest';
-      actionableSummary = `❄️ Low customer interest (Score ${verdictScore}/100). Low conversion and low outreach response across targeted ICP. Recommend killing or fundamentally rethinking hypothesis before writing code.`;
+      actionableSummary = `Low customer interest (Score ${verdictScore}/100). Weak page and outreach response in the current sample.`;
     }
 
     return {

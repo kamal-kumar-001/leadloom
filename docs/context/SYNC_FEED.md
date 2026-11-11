@@ -633,3 +633,9 @@
 - Decomposer: choice-question text now per-branch and unit-consistent with its options (was: fixed "How large is your team handling this problem?" against budget/bottleneck/hours options). New regression test asserts question/option unit consistency for all four branches.
 - Scorecard panel: "Signup rate" renamed "Signups per page load" (denominator is raw page loads, not unique visitors).
 - Engine suite 373 passed, EXIT:0 direct. Browser-verified: new label + new-experiment preview shows consistent units.
+
+## 2026-11-12 03:24 IST — Outreach recording UI + verdict sample gate + schema repair
+- POST /validator/experiments/:id/outreach (session + write + validator entitlement; integer/consistency validation) records owner-observed outreach numbers; scorecard panel has a save form that refreshes metrics.
+- Verdict honesty: ScorecardService now requires BOTH >=30 page loads AND >=20 outreach before any non-pending verdict (was: any outreach > 0 unlocked "high_pull... Greenlight engineering MVP" on tiny samples); pending summary names progress (X/30, Y/20) and states rates are not meaningful at small samples; verdict summaries reworded to "signal within the current sample", no MVP greenlight directives.
+- Schema repair: ValidationExperiment was missing outreachSent/replies/positiveReplies in schema.prisma (20261127 added columns only); reads silently returned 0 on the real Prisma path while the spec fake masked it. Fields added, client regenerated; real-PG browser e2e exposed and now proves the write path.
+- Suite 373 passed EXIT:0 direct; browser-verified outreach save + pending gate.

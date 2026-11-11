@@ -388,6 +388,11 @@ export async function fetchOwnerPage(experimentId: string): Promise<{ data: (imp
   return { data: res.data, error: res.error };
 }
 
+export async function recordOutreach(experimentId: string, input: { outreachSent: number; replies: number; positiveReplies: number }): Promise<{ data: ExperimentScorecard | null; error?: string }> {
+  const res = await engineFetch<ExperimentScorecard>(`/validator/experiments/${experimentId}/outreach`, { method: 'POST', body: JSON.stringify(input) });
+  return { data: res.data, error: res.error };
+}
+
 export async function setExperimentPublish(experimentId: string, publish: boolean): Promise<{ data: { slug: string; status: string } | null; error?: string }> {
   const res = await engineFetch<{ slug: string; status: string }>(`/validator/experiments/${experimentId}/${publish ? 'publish' : 'unpublish'}`, { method: 'POST', body: '{}' });
   return { data: res.data, error: res.error };

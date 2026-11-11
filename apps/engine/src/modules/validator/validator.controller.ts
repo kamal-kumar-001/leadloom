@@ -22,6 +22,14 @@ export class ValidatorController {
     };
   }
 
+  /** Owner-recorded outreach numbers (real observed inputs only). */
+  public async recordOutreach(experimentId: string, workspaceId: string, body: unknown): Promise<ValidationScorecardResponse> {
+    const b = (body ?? {}) as Record<string, unknown>;
+    const nums = ['outreachSent', 'replies', 'positiveReplies'].map((k) => Number(b[k]));
+    if (nums.some((n) => !Number.isInteger(n) || n < 0)) throw new Error('Invalid outreach metrics');
+    return this.validatorService.updateOutreachMetrics(experimentId, workspaceId, nums[0], nums[1], nums[2]);
+  }
+
   /** Owner-only preview of exact page copy, any status; not a page load. */
   public async getOwnerPage(experimentId: string, workspaceId: string) {
     return this.validatorService.getOwnerPage(experimentId, workspaceId);
