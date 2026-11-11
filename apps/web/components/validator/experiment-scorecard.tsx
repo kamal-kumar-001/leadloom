@@ -63,7 +63,7 @@ export function ExperimentScorecardPanel({
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <Metric label="Page loads" value={String(m.visitors)} />
             <Metric label="Waitlist signups" value={String(m.waitlistCount)} />
-            <Metric label="Signup rate" value={pct(m.pageConversionRate)} />
+            <Metric label="Signups per page load" value={pct(m.pageConversionRate)} />
           </div>
         ) : (
           <p className="text-xs text-text-muted">No page traffic yet. Share the published page to start measuring real interest.</p>

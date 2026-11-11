@@ -92,6 +92,24 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     }
   });
 
+  it('keeps survey question and answer-option units consistent per branch', () => {
+    const decomposer = new HypothesisDecomposerService();
+    const cases: Array<[string, RegExp, RegExp]> = [
+      // hypothesis, expected choice-question pattern, expected options pattern
+      ['Automated Kubernetes cost-cutter for Series A startups', /engineers/i, /engineers/i],
+      ['Outbound sales tooling for B2B teams', /budget/i, /\$|\/mo/i],
+      ['AI agent orchestration platform', /bottleneck/i, /hallucination|latency|rate limit/i],
+      ['Meal planning for busy parents', /hours per week/i, /hours\/week/i],
+    ];
+    for (const [h, qPattern, optPattern] of cases) {
+      const d = decomposer.decompose({ rawHypothesis: h });
+      const choice = d.smokePage.surveyQuestions.find((q) => q.type === 'choice');
+      expect(choice, h).toBeDefined();
+      expect(choice!.text, h).toMatch(qPattern);
+      for (const opt of choice!.options ?? []) expect(opt, `${h}: ${opt}`).toMatch(optPattern);
+    }
+  });
+
   it('should handle full workflow in ValidatorService from hypothesis to waitlist submission', async () => {
     const service = new ValidatorService();
 

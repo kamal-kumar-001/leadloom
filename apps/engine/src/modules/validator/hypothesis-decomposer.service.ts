@@ -52,6 +52,7 @@ export class HypothesisDecomposerService {
     let headline: string;
     let subheadline: string;
     let surveyQuestion1: string;
+    let surveyQuestion2: string;
     let surveyOptions2: string[];
 
     if (isDevOpsOrCloud) {
@@ -69,6 +70,7 @@ export class HypothesisDecomposerService {
       headline = 'Kubernetes cost visibility for lean engineering teams';
       subheadline = 'We are exploring whether continuous cluster right-sizing and spot allocation matter to teams without a dedicated FinOps lead. Join the early-access list and help shape what gets built.';
       surveyQuestion1 = 'What was your biggest surprise in last month’s cloud infrastructure bill?';
+      surveyQuestion2 = 'How many engineers work on infrastructure at your company?';
       surveyOptions2 = ['1-3 engineers', '4-10 engineers', '10+ engineers'];
     } else if (isSalesOrRevOps) {
       icp = {
@@ -84,7 +86,8 @@ export class HypothesisDecomposerService {
       title = 'Provider-Direct Data Enrichment - Early Access';
       headline = 'Data enrichment with providers you pay directly';
       subheadline = 'We are testing whether running enrichment with your own provider keys beats buying bundled credits. Join the early-access list and tell us how your team buys data today.';
-      surveyQuestion1 = 'What is your current monthly budget for B2B lead enrichment tools?';
+      surveyQuestion1 = 'How does your team buy B2B contact data today?';
+      surveyQuestion2 = 'What is your current monthly budget for B2B lead enrichment tools?';
       surveyOptions2 = ['<$500/mo', '$500-$2,000/mo', '>$2,000/mo'];
     } else if (isAiOrMl) {
       icp = {
@@ -100,8 +103,9 @@ export class HypothesisDecomposerService {
       title = 'LLM Reliability Tooling - Early Access';
       headline = 'Structured outputs and fallbacks for production LLM workflows';
       subheadline = 'We are exploring reliability tooling for agentic workflows. Join the early-access list and share your biggest production bottleneck.';
-      surveyQuestion1 = 'What is your primary bottleneck with LLM agents in production?';
-      surveyOptions2 = ['Hallucinations', 'Token Latency', 'API Rate Limits'];
+      surveyQuestion1 = 'Tell us about a recent LLM failure your team hit in production.';
+      surveyQuestion2 = 'What is your primary bottleneck with LLM agents in production?';
+      surveyOptions2 = ['Hallucinations', 'Token latency', 'API rate limits'];
     } else {
       // General B2B SaaS template
       icp = {
@@ -118,6 +122,7 @@ export class HypothesisDecomposerService {
       headline = rawHypothesis;
       subheadline = 'We are validating whether this problem is worth solving. Join the early-access list and tell us how your team handles it today.';
       surveyQuestion1 = 'What is the most frustrating manual task your team deals with weekly?';
+      surveyQuestion2 = 'How many hours per week does your team lose to it?';
       surveyOptions2 = ['1-5 hours/week', '5-15 hours/week', '15+ hours/week'];
     }
 
@@ -135,7 +140,7 @@ export class HypothesisDecomposerService {
         },
         {
           id: 'q2',
-          text: 'How large is your team handling this problem?',
+          text: surveyQuestion2,
           type: 'choice',
           options: surveyOptions2,
         },

@@ -628,3 +628,8 @@
 - Migration note: 20261128 ADD COLUMN DEFAULT 'draft' means any pre-existing production rows become DRAFT (private), never auto-published; the published backfill was local fixture data only.
 - Engine suite: 372 passed, VITEST-EXIT:0 checked directly.
 - Source-only; live still 94fa7ab, untouched.
+
+## 2026-11-12 03:17 IST — Survey unit consistency + scorecard denominator label
+- Decomposer: choice-question text now per-branch and unit-consistent with its options (was: fixed "How large is your team handling this problem?" against budget/bottleneck/hours options). New regression test asserts question/option unit consistency for all four branches.
+- Scorecard panel: "Signup rate" renamed "Signups per page load" (denominator is raw page loads, not unique visitors).
+- Engine suite 373 passed, EXIT:0 direct. Browser-verified: new label + new-experiment preview shows consistent units.
