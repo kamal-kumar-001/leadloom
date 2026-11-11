@@ -114,4 +114,33 @@ describe('waterfall/validator route integration', () => {
       await app.close();
     }
   });
+
+  it('public validator routes use the shared-store limiter when wired (429 on deny)', async () => {
+    // Shared stub: allows 2 hits per key, then denies; records the keys it saw
+    // so the test proves the route called the shared store, not the fallback.
+    const seen: string[] = [];
+    const publicRateLimit = async (key: string, max: number) => {
+      seen.push(key);
+      return seen.filter((k) => k === key).length <= Math.min(max, 2);
+    };
+    const app = await createApplication({ ...stubCore(), validator: new ValidatorController(new ValidatorService('https://app.test')), publicRateLimit } as never);
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      const auth = { authorization: 'Bearer ' + token() };
+      const created = await server.inject({ method: 'POST', url: '/validator/experiments', headers: auth, payload: { rawHypothesis: 'DevOps teams will pay for zero-markup enrichment' } });
+      const { experimentId, pageUrl } = created.json();
+      const slug = pageUrl.split('/v/')[1];
+      await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/publish`, headers: auth });
+
+      const hit = () => server.inject({ method: 'GET', url: `/validator/pages/${slug}` });
+      expect((await hit()).statusCode).toBe(200);
+      expect((await hit()).statusCode).toBe(200);
+      expect((await hit()).statusCode).toBe(429);
+      expect(seen.length).toBe(3);
+      expect(seen[0]).toContain(`pg:`);
+      expect(seen[0]).toContain(slug);
+    } finally {
+      await app.close();
+    }
+  });
 });

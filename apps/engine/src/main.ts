@@ -71,7 +71,9 @@ export interface RuntimeServices {
  /** Optional: read-only waterfall connector registry reconciled with stored BYOK credentials (masked only). */
  waterfallConnectors?: { list(workspaceId: string): Promise<unknown> };
  connectorTest?: import('./modules/waterfall/connectors/test-connection.service.js').TestConnectionService;
- validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'|'getPublicPage'>;
+ validator?: Pick<ValidatorController,'generate'|'recordOutreach'|'getOwnerPage'|'setPublishStatus'|'getScorecard'|'submitLead'|'getPublicPage'>;
+ /** Optional: shared-store rate limit for public routes (Postgres-backed, holds across replicas/restarts). Wired by main when the validator runs on a real DB; absent in tests, which keep a per-process fallback. */
+ publicRateLimit?: (key: string, max: number) => Promise<boolean>;
  /** Optional: G4 website research (default off; LEADLOOM_RESEARCH_API_ENABLED). Heuristic keyword analysis only - no LLM call, no fabricated claims. */
  websiteSignals?: import('./modules/ai-researcher/website-signals.service.js').WebsiteSignalService;
  /** Optional: URL fetch boundary for research (default off; LEADLOOM_RESEARCH_FETCH_ENABLED). Without it, only pasted page text is analyzed and no egress exists. */
@@ -553,11 +555,13 @@ export async function createApplication(services?:RuntimeServices) {
    // constructed with Prisma; the in-memory fallback is for unit tests only.
    const SLUG_RE=/^[a-z0-9][a-z0-9-]{0,127}$/i;
    // First-line abuse control at the engine (the web proxy has its own per-IP
-   // limiter; direct engine callers must not bypass it). In-memory, per
-   // engine instance: 20 page loads + 5 lead submissions per IP per slug per
-   // 10 minutes. Not a distributed limit - documented, not hidden.
+   // limiter; direct engine callers must not bypass it): 20 page loads + 5
+   // lead submissions per IP per slug per 10 minutes. Uses the shared
+   // Postgres store when wired (production), per-process map otherwise.
    const pubHits=new Map<string,number[]>();
-   const pubLimit=(key:string,max:number):boolean=>{
+   const pubLimit=async(key:string,max:number):Promise<boolean>=>{
+    if(services?.publicRateLimit)return services.publicRateLimit(key,max);
+    // Fallback when no shared store is configured (unit tests, no DB).
     const now=Date.now(),W=600_000;
     const arr=(pubHits.get(key)??[]).filter(t=>now-t<W);
     if(arr.length>=max){pubHits.set(key,arr);return false;}
@@ -566,7 +570,7 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.get('/validator/pages/:slug',async(request:any,reply:any)=>{
     const slug=String(request.params.slug);
     if(!SLUG_RE.test(slug))return reply.code(404).send({error:'Smoke test page not found'});
-    if(!pubLimit(`pg:${request.ip}:${slug}`,20))return reply.code(429).send({error:'Too many requests'});
+    if(!(await pubLimit(`pg:${request.ip}:${slug}`,20)))return reply.code(429).send({error:'Too many requests'});
     const page=await services.validator!.getPublicPage(slug);
     if(!page)return reply.code(404).send({error:'Smoke test page not found'});
     return page;
@@ -574,7 +578,7 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.post('/validator/pages/:slug/leads',async(request:any,reply:any)=>{
     const slug=String(request.params.slug);
     if(!SLUG_RE.test(slug))return reply.code(404).send({error:'Smoke test page not found'});
-    if(!pubLimit(`ld:${request.ip}:${slug}`,5))return reply.code(429).send({error:'Too many submissions. Please try again in 10 minutes.'});
+    if(!(await pubLimit(`ld:${request.ip}:${slug}`,5)))return reply.code(429).send({error:'Too many submissions. Please try again in 10 minutes.'});
     try{return await services.validator!.submitLead(slug,request.body);}
     catch(err){const notFound=(err as Error).message?.includes('not found');return reply.code(notFound?404:400).send({error:notFound?'Smoke test page not found':'Invalid lead submission'});}
    });
@@ -790,6 +794,12 @@ if(require.main===module) {
     const {ValidatorController}=await import('./modules/validator/validator.controller.js');
     const {ValidatorService}=await import('./modules/validator/validator.service.js');
     services.validator=new ValidatorController(new ValidatorService(process.env.APP_BASE_URL??'http://localhost:3000',prisma));
+    // Public /v/ routes get a shared-store limiter so the cap holds across
+    // replicas and restarts (the old per-process map did not - release gap).
+    const {PgSharedLimiter}=await import('./modules/auth/rate-limiter.js');
+    const db=prisma; // narrowed: this block only runs after a successful connect
+    const pubPg=new PgSharedLimiter((text,params)=>db.$queryRawUnsafe(text,...params) as Promise<Array<Record<string,unknown>>>,600_000);
+    services.publicRateLimit=(key,max)=>pubPg.take(key,max);
    }
   }
   const app=await createApplication(services);

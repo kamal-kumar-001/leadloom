@@ -439,3 +439,13 @@ model MailboxSyncState {
 
   @@map("mailbox_sync_state")
 }
+
+model PublicRateLimitHit {
+  id String   @id @default(uuid()) @db.Uuid
+  key String  @db.VarChar(255)
+  ts  DateTime @default(now()) @db.Timestamptz
+
+  @@index([key, ts])
+  @@index([ts])
+  @@map("public_rate_limit_hits")
+}
