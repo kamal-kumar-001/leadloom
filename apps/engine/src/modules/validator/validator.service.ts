@@ -60,6 +60,8 @@ export class ValidatorService {
   private slugToId = new Map<string, string>();
   private decomposer: HypothesisDecomposerService;
   private scorecard: ScorecardService;
+  /** In-memory fallback only: per-slug publication status (Prisma path stores it on the page row). */
+  private pageStatus = new Map<string, 'draft' | 'published'>();
 
   constructor(
     private readonly publicOrigin = 'http://localhost:3000',
@@ -156,6 +158,7 @@ export class ValidatorService {
     };
     this.experiments.set(experimentId, stored);
     this.slugToId.set(decomposed.slug, experimentId);
+    this.pageStatus.set(decomposed.slug, 'draft');
     return { experimentId, pageUrl: this.pageUrl(decomposed.slug), decomposed, scorecard: this.scorecardFor(stored) };
   }
 
@@ -226,11 +229,12 @@ export class ValidatorService {
   /** Public smoke-page payload. Each call is one raw page load: visitors counts loads, not unique people. */
   public async getPublicPage(slug: string): Promise<PublicSmokePage | undefined> {
     if (this.prisma) {
-      const page = await this.prisma.smokeTestPage.findFirst({ where: { slug } });
+      const page = await this.prisma.smokeTestPage.findFirst({ where: { slug, status: 'published' } });
       if (!page) return undefined;
       await this.prisma.smokeTestPage.update({ where: { id: page.id }, data: { visitors: { increment: 1 } } });
       return { slug: page.slug, title: page.title, headline: page.headline, subheadline: page.subheadline, heroCtaText: page.heroCtaText, surveyQuestions: page.surveyQuestions as SmokePageConfig['surveyQuestions'] };
     }
+    if (this.pageStatus.get(slug) !== 'published') return undefined;
     const exp = await this.getExperimentBySlug(slug);
     if (!exp) return undefined;
     exp.metrics.visitors += 1;
@@ -246,7 +250,7 @@ export class ValidatorService {
   public async submitLead(slug: string, lead: SubmitWaitlistLeadRequest): Promise<{ success: boolean; totalWaitlist: number }> {
     const email = lead.email.toLowerCase();
     if (this.prisma) {
-      const page = await this.prisma.smokeTestPage.findFirst({ where: { slug }, include: { waitlistLeads: true } });
+      const page = await this.prisma.smokeTestPage.findFirst({ where: { slug, status: 'published' }, include: { waitlistLeads: true } });
       if (!page) throw new Error(`Smoke test page not found for slug: ${slug}`);
       if (!page.waitlistLeads.some((l: any) => l.email.toLowerCase() === email)) {
         await this.prisma.waitlistLead.create({
@@ -256,6 +260,7 @@ export class ValidatorService {
       }
       return { success: true, totalWaitlist: page.waitlistLeads.length };
     }
+    if (this.pageStatus.get(slug) !== 'published') throw new Error(`Smoke test page not found for slug: ${slug}`);
     const exp = await this.getExperimentBySlug(slug);
     if (!exp) throw new Error(`Smoke test page not found for slug: ${slug}`);
     const alreadyExists = exp.leads.some((l) => l.email.toLowerCase() === email);
@@ -264,6 +269,27 @@ export class ValidatorService {
       exp.metrics = this.metricsFrom({ visitors: exp.metrics.visitors, leadCount: exp.leads.length, outreachSent: exp.metrics.outreachSent, replies: exp.metrics.replies, positiveReplies: exp.metrics.positiveReplies });
     }
     return { success: true, totalWaitlist: exp.leads.length };
+  }
+
+  /**
+   * Publication boundary: a generated page stays an owner-only draft until an
+   * explicit owner publish action. Tenant-scoped; public routes only serve
+   * published pages (drafts are indistinguishable from unknown slugs).
+   */
+  public async setPublishStatus(experimentId: string, workspaceId: string, published: boolean): Promise<{ experimentId: string; slug: string; status: string }> {
+    const status = published ? 'published' : 'draft';
+    if (this.prisma) {
+      const owned = await this.getExperiment(experimentId, workspaceId);
+      if (!owned) throw new Error(`Experiment not found: ${experimentId}`);
+      const page = await this.prisma.smokeTestPage.findFirst({ where: { experimentId } });
+      if (!page) throw new Error(`Experiment not found: ${experimentId}`);
+      await this.prisma.smokeTestPage.update({ where: { id: page.id }, data: { status } });
+      return { experimentId, slug: page.slug, status };
+    }
+    const exp = await this.getExperiment(experimentId, workspaceId);
+    if (!exp) throw new Error(`Experiment not found: ${experimentId}`);
+    this.pageStatus.set(exp.decomposed.slug, status);
+    return { experimentId, slug: exp.decomposed.slug, status };
   }
 
   public async updateOutreachMetrics(

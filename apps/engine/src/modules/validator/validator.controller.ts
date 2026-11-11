@@ -22,6 +22,11 @@ export class ValidatorController {
     };
   }
 
+  /** Owner-only publication boundary: draft -> published and back. */
+  public async setPublishStatus(experimentId: string, workspaceId: string, published: boolean): Promise<{ experimentId: string; slug: string; status: string }> {
+    return this.validatorService.setPublishStatus(experimentId, workspaceId, published);
+  }
+
   public async getScorecard(experimentId: string, workspaceId?: string): Promise<ValidationScorecardResponse> {
     return this.validatorService.getScorecard(experimentId, workspaceId);
   }

@@ -353,6 +353,12 @@ export interface WorkspaceExperimentRow {
   slug: string | null;
   visitors: number;
   waitlistCount: number;
+  pageStatus: 'draft' | 'published';
+}
+
+export async function setExperimentPublish(experimentId: string, publish: boolean): Promise<{ data: { slug: string; status: string } | null; error?: string }> {
+  const res = await engineFetch<{ slug: string; status: string }>(`/validator/experiments/${experimentId}/${publish ? 'publish' : 'unpublish'}`, { method: 'POST', body: '{}' });
+  return { data: res.data, error: res.error };
 }
 
 export async function generateExperiment(input: { rawHypothesis: string; preferredSlug?: string }): Promise<{ data: { experimentId: string; pageUrl: string } | null; error?: string; status?: number }> {

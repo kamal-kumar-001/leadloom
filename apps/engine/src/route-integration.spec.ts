@@ -85,8 +85,15 @@ describe('waterfall/validator route integration', () => {
       expect(scorecard.statusCode).toBe(200);
       expect((await server.inject({ method: 'GET', url: `/validator/experiments/${randomUUID()}/scorecard`, headers: auth })).statusCode).toBe(404);
 
-      // Waitlist submission is public by design: no session header at all.
+      // Draft pages are owner-only: public lead submission is 404 before publish.
       const lead = { email: 'founder@example.com', name: 'Syn Thetic', surveyResponses: { budget: 'yes' } };
+      expect((await server.inject({ method: 'POST', url: `/validator/pages/${slug}/leads`, payload: lead })).statusCode).toBe(404);
+      expect((await server.inject({ method: 'GET', url: `/validator/pages/${slug}` })).statusCode).toBe(404);
+
+      // Owner publishes explicitly, then waitlist submission works with no session header.
+      const published = await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/publish`, headers: auth });
+      expect(published.statusCode).toBe(200);
+      expect(published.json()).toMatchObject({ status: 'published', slug });
       const submitted = await server.inject({ method: 'POST', url: `/validator/pages/${slug}/leads`, payload: lead });
       expect(submitted.statusCode).toBe(200);
       expect(submitted.json()).toMatchObject({ success: true, totalWaitlist: 1 });

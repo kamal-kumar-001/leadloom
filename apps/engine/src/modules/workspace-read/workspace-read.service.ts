@@ -112,7 +112,7 @@ export class WorkspaceReadService {
       where: { workspaceId },
       select: {
         id: true, hypothesis: true, verdict: true, verdictScore: true, createdAt: true,
-        smokeTestPages: { select: { slug: true, visitors: true, _count: { select: { waitlistLeads: true } } }, take: 1 },
+        smokeTestPages: { select: { slug: true, visitors: true, status: true, _count: { select: { waitlistLeads: true } } }, take: 1 },
       },
       orderBy: { createdAt: 'desc' },
       take: LIMIT,
@@ -124,6 +124,7 @@ export class WorkspaceReadService {
       verdictScore: r.verdictScore,
       createdAt: r.createdAt,
       slug: r.smokeTestPages?.[0]?.slug ?? null,
+      pageStatus: r.smokeTestPages?.[0]?.status ?? 'draft',
       visitors: r.smokeTestPages?.[0]?.visitors ?? 0,
       waitlistCount: r.smokeTestPages?.[0]?._count?.waitlistLeads ?? 0,
     }));

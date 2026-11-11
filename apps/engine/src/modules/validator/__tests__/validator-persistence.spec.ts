@@ -19,7 +19,7 @@ function fakePrisma() {
       create: async ({ data }: any) => {
         const { smokeTestPages, ...exp } = data;
         experiments.push({ outreachSent: 0, replies: 0, positiveReplies: 0, createdAt: new Date(), ...exp });
-        if (smokeTestPages?.create) pages.push({ visitors: 0, createdAt: new Date(), ...smokeTestPages.create, experimentId: data.id });
+        if (smokeTestPages?.create) pages.push({ visitors: 0, status: 'draft', createdAt: new Date(), ...smokeTestPages.create, experimentId: data.id });
         return data;
       },
       update: async ({ where, data }: any) => { const e = experiments.find((x) => x.id === where.id); Object.assign(e, data); return e; },
@@ -28,7 +28,7 @@ function fakePrisma() {
       findMany: async ({ where, select }: any) =>
         pages.filter((p) => (where.slug?.startsWith ? p.slug.startsWith(where.slug.startsWith) : true)).map((p) => (select?.slug ? { slug: p.slug } : p)),
       findFirst: async ({ where, include }: any) => {
-        const p = pages.find((x) => x.slug === where.slug);
+        const p = pages.find((x) => (!where.slug || x.slug === where.slug) && (!where.experimentId || x.experimentId === where.experimentId) && (!where.status || x.status === where.status));
         if (!p) return null;
         let out: any = p;
         if (include?.waitlistLeads) out = withLeads(out);
@@ -38,6 +38,7 @@ function fakePrisma() {
       update: async ({ where, data }: any) => {
         const p = pages.find((x) => x.id === where.id);
         if (data.visitors?.increment) p.visitors += data.visitors.increment;
+        if (data.status) p.status = data.status;
         return p;
       },
     },
@@ -59,6 +60,7 @@ describe('ValidatorService persistence (Prisma path)', () => {
     const generated = await svc.generate(WS, { rawHypothesis: 'Automated Kubernetes cost-cutter for Series A startups', preferredSlug: 'k8s-persist' });
     expect(generated.pageUrl).toBe('http://localhost:3000/v/k8s-persist');
 
+    await svc.setPublishStatus(generated.experimentId, WS, true);
     const page = await svc.getPublicPage('k8s-persist');
     expect(page?.headline).toContain('Kubernetes');
     expect(page?.surveyQuestions).toHaveLength(2);
@@ -94,6 +96,32 @@ describe('ValidatorService persistence (Prisma path)', () => {
     await expect(svc.generate(WS, { rawHypothesis: 'Second', preferredSlug: 'taken-slug' })).rejects.toThrow(/already in use/i);
     const auto = await svc.generate(WS, { rawHypothesis: 'Automated Kubernetes cost-cutter for Series A startups' });
     expect(auto.decomposed.slug).toBeTruthy();
+  });
+
+  it('keeps generated pages owner-only drafts until an explicit publish, and unpublish closes them again', async () => {
+    const svc = new ValidatorService('http://localhost:3000', fakePrisma() as any);
+    const gen = await svc.generate(WS, { rawHypothesis: 'Draft boundary test hypothesis' });
+    const slug = gen.pageUrl.split('/v/')[1];
+
+    // Draft: public reads and lead submissions behave like an unknown slug.
+    expect(await svc.getPublicPage(slug)).toBeUndefined();
+    await expect(svc.submitLead(slug, { email: 'a@b.co', surveyResponses: {} })).rejects.toThrow(/not found/);
+
+    // Publish: page renders and collects.
+    const pub = await svc.setPublishStatus(gen.experimentId, WS, true);
+    expect(pub.status).toBe('published');
+    expect(await svc.getPublicPage(slug)).toBeDefined();
+    expect((await svc.submitLead(slug, { email: 'a@b.co', surveyResponses: {} })).success).toBe(true);
+
+    // Unpublish: closed again.
+    await svc.setPublishStatus(gen.experimentId, WS, false);
+    expect(await svc.getPublicPage(slug)).toBeUndefined();
+  });
+
+  it('scopes publish actions to the owning workspace', async () => {
+    const svc = new ValidatorService('http://localhost:3000', fakePrisma() as any);
+    const gen = await svc.generate(WS, { rawHypothesis: 'Tenant scoping for publish' });
+    await expect(svc.setPublishStatus(gen.experimentId, 'ws-other', true)).rejects.toThrow(/not found/);
   });
 
   it('returns undefined for unknown public slugs', async () => {

@@ -518,6 +518,18 @@ export async function createApplication(services?:RuntimeServices) {
     try{return await services.validator!.generate(session.workspaceId,request.body);}
     catch{return reply.code(400).send({error:'Invalid validation request'});}
    });
+   fastify.post('/validator/experiments/:id/publish',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    if(!await allowed(reply,session.workspaceId,'validator'))return;
+    try{return await services.validator!.setPublishStatus(String(request.params.id),session.workspaceId,true);}
+    catch{return reply.code(404).send({error:'Experiment not found'});}
+   });
+   fastify.post('/validator/experiments/:id/unpublish',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    if(!await allowed(reply,session.workspaceId,'validator'))return;
+    try{return await services.validator!.setPublishStatus(String(request.params.id),session.workspaceId,false);}
+    catch{return reply.code(404).send({error:'Experiment not found'});}
+   });
    fastify.get('/validator/experiments/:id/scorecard',async(request:any,reply:any)=>{
     const session=await authorize(request,reply);if(!session)return;
     try{return await services.validator!.getScorecard(String(request.params.id),session.workspaceId);}

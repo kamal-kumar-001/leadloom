@@ -171,6 +171,7 @@ model SmokeTestPage {
   heroCtaText     String   @default("Request Early Access") @map("hero_cta_text") @db.VarChar(255)
   surveyQuestions Json     @default("[]") @map("survey_questions")
   visitors        Int     @default(0)
+  status          String  @default("draft") @db.VarChar(16)
   customDomain    String?  @map("custom_domain") @db.VarChar(255)
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz

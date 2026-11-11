@@ -9,7 +9,7 @@ export const EMAIL_BRAND = {
   textPrimary: '#0f172a',
   textSecondary: '#475569',
   textMuted: '#64748b',
-  accent: '#4f46e5',
-  onAccent: '#ffffff',
-  accentSoft: '#eae9fc',
+  accent: '#3e1f47',
+  onAccent: '#f3e3a0',
+  accentSoft: '#ece9ed',
 } as const;

@@ -105,6 +105,9 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     expect(generated.pageUrl).toBe('http://localhost:3000/v/leadloom-gtm');
     expect(generated.scorecard.verdict).toBe('pending');
 
+    // 1b. Owner publishes the page (draft by default)
+    await service.setPublishStatus(generated.experimentId, 'ws-test', true);
+
     // 2. Public user submits waitlist form
     const leadResult = await service.submitLead('leadloom-gtm', {
       email: 'founder@scaleup.io',

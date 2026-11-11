@@ -1,0 +1,1 @@
+ALTER TABLE "smoke_test_pages" ADD COLUMN IF NOT EXISTS "status" VARCHAR(16) NOT NULL DEFAULT 'draft';

@@ -6,6 +6,7 @@ import { Badge, Button, Card, EmptyState } from '@leadloom/ui';
 import {
   fetchWorkspaceExperiments,
   generateExperiment,
+  setExperimentPublish,
   type WorkspaceExperimentRow,
 } from '../../../lib/engine-client';
 import {
@@ -56,6 +57,7 @@ export default function ValidatorPage() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const loadExperiments = useCallback(async () => {
     setIsLoading(true);
@@ -95,6 +97,18 @@ export default function ValidatorPage() {
     setCreatedUrl(res.data.pageUrl);
     setHypothesis('');
     setPreferredSlug('');
+    await loadExperiments();
+  }
+
+  async function onTogglePublish(exp: WorkspaceExperimentRow) {
+    const publish = exp.pageStatus !== 'published';
+    setPublishingId(exp.id);
+    const res = await setExperimentPublish(exp.id, publish);
+    setPublishingId(null);
+    if (res.error) {
+      setGenerateError(res.error);
+      return;
+    }
     await loadExperiments();
   }
 
@@ -163,11 +177,7 @@ export default function ValidatorPage() {
         {generateError && <p className="text-sm text-signal-failed">{generateError}</p>}
         {createdUrl && (
           <p className="text-sm text-signal-verified">
-            Page created:{' '}
-            <Link href={new URL(createdUrl).pathname} target="_blank" className="underline font-mono">
-              {new URL(createdUrl).pathname}
-            </Link>{' '}
-            - share it to start collecting waitlist signups.
+            Page created as a draft. Review it below, then publish it before sharing - the public link only works once published.
           </p>
         )}
       </Card>
@@ -231,6 +241,7 @@ export default function ValidatorPage() {
                     <th className="py-2.5 px-4 font-medium">Score</th>
                     <th className="py-2.5 px-4 font-medium">Page loads</th>
                     <th className="py-2.5 px-4 font-medium">Waitlist</th>
+                    <th className="py-2.5 px-4 font-medium">Status</th>
                     <th className="py-2.5 px-4 font-medium">Public page</th>
                     <th className="py-2.5 px-4 font-medium text-right">Created date</th>
                   </tr>
@@ -256,17 +267,41 @@ export default function ValidatorPage() {
                       <td className="py-3 px-4 text-text-secondary font-mono text-[11px]">{exp.visitors}</td>
                       <td className="py-3 px-4 text-text-secondary font-mono text-[11px]">{exp.waitlistCount}</td>
                       <td className="py-3 px-4">
-                        {exp.slug ? (
-                          <Link
-                            href={`/v/${exp.slug}`}
-                            target="_blank"
-                            className="inline-flex items-center gap-1 text-brand-loom hover:underline font-mono text-[11px]"
-                          >
-                            /v/{exp.slug}
-                            <ExternalLink className="w-3 h-3" />
-                          </Link>
+                        {exp.pageStatus === 'published' ? (
+                          <Badge variant="verified" className="text-[10px] font-mono">Published</Badge>
                         ) : (
-                          <span className="text-text-muted font-mono text-[11px]">—</span>
+                          <Badge variant="subtle" className="text-[10px] font-mono">Draft</Badge>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {exp.pageStatus === 'published' && exp.slug ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Link
+                              href={`/v/${exp.slug}`}
+                              target="_blank"
+                              className="inline-flex items-center gap-1 text-brand-loom hover:underline font-mono text-[11px]"
+                            >
+                              /v/{exp.slug}
+                              <ExternalLink className="w-3 h-3" />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => onTogglePublish(exp)}
+                              disabled={publishingId === exp.id}
+                              className="text-[11px] font-mono text-text-muted hover:text-text-primary underline disabled:opacity-50"
+                            >
+                              Unpublish
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onTogglePublish(exp)}
+                            disabled={publishingId === exp.id}
+                            className="text-[11px] font-mono text-brand-loom hover:underline disabled:opacity-50"
+                          >
+                            {publishingId === exp.id ? 'Publishing...' : 'Publish'}
+                          </button>
                         )}
                       </td>
                       <td className="py-3 px-4 text-right text-text-muted font-mono text-[11px]">
@@ -298,7 +333,25 @@ export default function ValidatorPage() {
                     <span className="text-[10px] uppercase font-mono text-text-muted">Page loads / Waitlist</span>
                     <span className="font-mono text-[11px] text-text-secondary">{exp.visitors} / {exp.waitlistCount}</span>
                   </div>
-                  {exp.slug && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-mono text-text-muted">Status</span>
+                    <span className="inline-flex items-center gap-2">
+                      {exp.pageStatus === 'published' ? (
+                        <Badge variant="verified" className="text-[10px] font-mono">Published</Badge>
+                      ) : (
+                        <Badge variant="subtle" className="text-[10px] font-mono">Draft</Badge>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onTogglePublish(exp)}
+                        disabled={publishingId === exp.id}
+                        className="text-[11px] font-mono text-brand-loom underline disabled:opacity-50"
+                      >
+                        {exp.pageStatus === 'published' ? 'Unpublish' : 'Publish'}
+                      </button>
+                    </span>
+                  </div>
+                  {exp.pageStatus === 'published' && exp.slug && (
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] uppercase font-mono text-text-muted">Public page</span>
                       <Link href={`/v/${exp.slug}`} target="_blank" className="inline-flex items-center gap-1 text-brand-loom font-mono text-[11px]">

@@ -613,3 +613,11 @@
 - /v/[slug] saved-confirmation styling fix: dropped Tailwind opacity modifiers on CSS-var signal colors (silent drop) → plain tokens.
 - Verified in real browser on local stack (engine :4100 + web :3000, local dev DB): generate→public page→survey+waitlist save→dashboard metrics. Engine suite green.
 - Source-only; live still runs 94fa7ab (invites off). Not deployed.
+
+## 2026-11-12 03:10 IST — Validator publication boundary (draft-by-default)
+- smoke_test_pages.status (draft/published), additive migration 20261128_smoke_page_status, applied to local dev DB + recorded; Prisma client regenerated.
+- Public routes enforce server-side: GET /validator/pages/:slug and POST .../leads return 404 for drafts (no existence leak); POST /validator/experiments/:id/publish|unpublish (session + write role + validator entitlement, tenant-scoped).
+- Dashboard: Draft/Published badge + publish/unpublish action per row; public link shown only when published; generate success copy says draft.
+- Fixed pre-existing otp-template spec break from v3 palette: regenerated packages/contracts/src/brand.contract.ts via scripts/gen-brand.mjs (EMAIL_BRAND now matches tokens).
+- Verified: engine suite 372 passed (EXIT:0 checked directly); API-level draft 404/publish 200/unpublish 404; real-browser UI flow generate-draft -> publish -> waitlist save -> unpublish. Backfilled prior local e2e pages to published.
+- Source-only; live still 94fa7ab, untouched.
