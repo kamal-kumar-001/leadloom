@@ -1,6 +1,7 @@
 import { InboundReplyEventSchema, type InboundReplyEvent } from '@leadloom/contracts';
 import { createHash } from 'node:crypto';
 import { classifyReply } from './unsubscribe';
+import { detectBounce } from './bounce';
 
 /**
  * IMAP inbound polling: fetches new messages for a mailbox and converts them
@@ -104,7 +105,11 @@ export class ImapReplyPoller {
       maxUid = Math.max(maxUid, raw.uid);
       const key = replyDedupeKey(raw, uidValidity);
       if (await this.seen.has(context.mailboxId, key)) continue;
-      const { classification, confidence } = classifyReply(raw.bodyText);
+      // DSNs are machine reports, not replies: classify them before the
+      // keyword baseline so quoted original text is never misread.
+      const { classification, confidence } = detectBounce(raw)
+        ? { classification: 'bounce' as const, confidence: 0.95 }
+        : classifyReply(raw.bodyText);
       const event = InboundReplyEventSchema.parse({
         messageId: raw.messageId || key,
         campaignId: context.campaignId,

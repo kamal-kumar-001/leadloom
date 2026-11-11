@@ -44,6 +44,9 @@ export const OutreachReplyClassificationEnum = z.enum([
   'out_of_office',
   'unsubscribe',
   'neutral',
+  // Machine-generated delivery status notification (RFC 3464); detected
+  // before keyword classification so quoted original text is never misread.
+  'bounce',
 ]);
 export type OutreachReplyClassification = z.infer<typeof OutreachReplyClassificationEnum>;
 

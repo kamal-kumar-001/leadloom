@@ -380,3 +380,7 @@
 
 ### [2026-11-11T13:40:00Z] Engine | IMAP poller strict TLS path | Non-Breaking
 - createImapflowClient connects via buildReadOptions: public-only resolve-once pinned IP, SNI/cert validation, TLS 1.2+, STARTTLS on 143, port allow-list. Plaintext only through the loopback test hook. Still unwired.
+
+### [2026-11-11T13:36:00Z] Team Alpha | contracts/outbound.contract.ts + engine transport | Non-Breaking
+- Added `bounce` to `OutreachReplyClassificationEnum` (DB stores classification as varchar, no migration).
+- New `transport/bounce.ts` DSN detection (RFC 3464 fixtures) classified before keyword baseline; new `transport/backoff.ts` PollBackoff helper (bounded exponential + jitter, reset on success; not yet scheduler-wired).
