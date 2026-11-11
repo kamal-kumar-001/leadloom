@@ -76,11 +76,11 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     expect(lowInterestScorecard.actionableSummary).toContain('Low customer interest');
   });
 
-  it('should handle full workflow in ValidatorService from hypothesis to waitlist submission', () => {
+  it('should handle full workflow in ValidatorService from hypothesis to waitlist submission', async () => {
     const service = new ValidatorService();
 
     // 1. Generate experiment
-    const generated = service.generate({
+    const generated = await service.generate('ws-test', {
       rawHypothesis: 'Wholesale B2B data enrichment with native deliverability',
       preferredSlug: 'leadloom-gtm',
     });
@@ -90,7 +90,7 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     expect(generated.scorecard.verdict).toBe('pending');
 
     // 2. Public user submits waitlist form
-    const leadResult = service.submitLead('leadloom-gtm', {
+    const leadResult = await service.submitLead('leadloom-gtm', {
       email: 'founder@scaleup.io',
       name: 'Sarah Chen',
       company: 'ScaleUp Inc',
@@ -101,8 +101,9 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     expect(leadResult.totalWaitlist).toBe(1);
 
     // 3. Update outreach responses
-    const updatedScorecard = service.updateOutreachMetrics(
+    const updatedScorecard = await service.updateOutreachMetrics(
       generated.experimentId,
+      'ws-test',
       100, // outreach sent
       12,  // replies
       8    // positive replies

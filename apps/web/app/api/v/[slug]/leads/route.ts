@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { engineBase } from '@/lib/engine-server';
 
 // In-memory sliding-window bucket for rate-limiting public waitlist submissions
 interface WindowEntry {
@@ -48,7 +49,7 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const { email, survey } = body;
+    const { email, survey, name, company, referrer } = body;
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return NextResponse.json(
@@ -57,31 +58,28 @@ export async function POST(
       );
     }
 
-    // Try forwarding to engine if available
-    const engineUrl = process.env.NEXT_PUBLIC_ENGINE_URL || 'http://127.0.0.1:3001';
+    // Forward to the engine using its contract field names. No mock success:
+    // if the engine is unreachable or rejects the submission, the visitor
+    // gets an honest error instead of a fake confirmation.
+    const engineUrl = engineBase();
+    let engineRes: Response;
     try {
-      const engineRes = await fetch(`${engineUrl}/validator/pages/${slug}/leads`, {
+      engineRes = await fetch(`${engineUrl}/validator/pages/${encodeURIComponent(slug)}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, survey, clientIp: ip }),
+        body: JSON.stringify({ email, name, company, surveyResponses: survey ?? {}, referrer }),
       });
-
-      if (engineRes.ok) {
-        const engineData = await engineRes.json();
-        return NextResponse.json({ success: true, ...engineData, isMock: false });
-      }
     } catch {
-      // Fallback gracefully
+      return NextResponse.json({ error: 'Your response could not be saved right now. Please try again.' }, { status: 502 });
     }
-
-    // Deterministic mock preview response
-    return NextResponse.json({
-      success: true,
-      leadId: `lead_${Date.now().toString(16)}`,
-      intentScore: 88,
-      isMock: true,
-      message: 'Demo preview: lead recorded successfully with intent telemetry.',
-    });
+    if (engineRes.status === 404) {
+      return NextResponse.json({ error: 'This smoke test page is no longer available.' }, { status: 404 });
+    }
+    if (!engineRes.ok) {
+      return NextResponse.json({ error: 'Your response could not be saved right now. Please try again.' }, { status: 502 });
+    }
+    const engineData = await engineRes.json();
+    return NextResponse.json({ success: true, totalWaitlist: engineData.totalWaitlist });
   } catch {
     return NextResponse.json(
       { error: 'Invalid JSON request payload' },

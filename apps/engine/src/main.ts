@@ -71,7 +71,7 @@ export interface RuntimeServices {
  /** Optional: read-only waterfall connector registry reconciled with stored BYOK credentials (masked only). */
  waterfallConnectors?: { list(workspaceId: string): Promise<unknown> };
  connectorTest?: import('./modules/waterfall/connectors/test-connection.service.js').TestConnectionService;
- validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
+ validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'|'getPublicPage'>;
  /** Optional: G4 website research (default off; LEADLOOM_RESEARCH_API_ENABLED). Heuristic keyword analysis only - no LLM call, no fabricated claims. */
  websiteSignals?: import('./modules/ai-researcher/website-signals.service.js').WebsiteSignalService;
  /** Optional: URL fetch boundary for research (default off; LEADLOOM_RESEARCH_FETCH_ENABLED). Without it, only pasted page text is analyzed and no egress exists. */
@@ -515,18 +515,23 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.post('/validator/experiments',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
     if(!await allowed(reply,session.workspaceId,'validator'))return;
-    try{return await services.validator!.generate(request.body);}
+    try{return await services.validator!.generate(session.workspaceId,request.body);}
     catch{return reply.code(400).send({error:'Invalid validation request'});}
    });
    fastify.get('/validator/experiments/:id/scorecard',async(request:any,reply:any)=>{
     const session=await authorize(request,reply);if(!session)return;
-    try{return await services.validator!.getScorecard(String(request.params.id));}
+    try{return await services.validator!.getScorecard(String(request.params.id),session.workspaceId);}
     catch{return reply.code(404).send({error:'Experiment not found'});}
    });
-   // Public by design: smoke-test pages collect waitlist leads without an
-   // account. Strict schema validation only; state lives in ValidatorService
-   // (in-memory until the PRD smoke_test_pages persistence wiring lands, so
-   // experiments and leads reset on restart - no silent durability claims).
+   // Public by design: smoke-test pages render and collect waitlist leads
+   // without an account. Strict schema validation only. State persists in
+   // Postgres (validation_experiments/validation_leads) when the service is
+   // constructed with Prisma; the in-memory fallback is for unit tests only.
+   fastify.get('/validator/pages/:slug',async(request:any,reply:any)=>{
+    const page=await services.validator!.getPublicPage(String(request.params.slug));
+    if(!page)return reply.code(404).send({error:'Smoke test page not found'});
+    return page;
+   });
    fastify.post('/validator/pages/:slug/leads',async(request:any,reply:any)=>{
     try{return await services.validator!.submitLead(String(request.params.slug),request.body);}
     catch(err){const notFound=(err as Error).message?.includes('not found');return reply.code(notFound?404:400).send({error:notFound?'Smoke test page not found':'Invalid lead submission'});}
@@ -742,7 +747,7 @@ if(require.main===module) {
    if(process.env.LEADLOOM_VALIDATOR_API_ENABLED==='true') {
     const {ValidatorController}=await import('./modules/validator/validator.controller.js');
     const {ValidatorService}=await import('./modules/validator/validator.service.js');
-    services.validator=new ValidatorController(new ValidatorService(process.env.APP_BASE_URL??'http://localhost:3000'));
+    services.validator=new ValidatorController(new ValidatorService(process.env.APP_BASE_URL??'http://localhost:3000',prisma));
    }
   }
   const app=await createApplication(services);
