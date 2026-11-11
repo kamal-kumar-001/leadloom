@@ -18,7 +18,7 @@ const UNBUILT_PROVIDERS: UnbuiltProvider[] = [
     id: 'gmail-oauth',
     name: 'Gmail sign-in (OAuth)',
     category: 'Email Authentication',
-    status: 'Planned',
+    status: 'Not Built',
     description:
       "Not built. Needs a Google Cloud OAuth app; Google's verification rules apply.",
     documentationUrl: 'https://support.google.com/cloud/answer/15549945',
@@ -27,9 +27,9 @@ const UNBUILT_PROVIDERS: UnbuiltProvider[] = [
     id: 'linkedin',
     name: 'LinkedIn Direct Messages',
     category: 'Social Outreach',
-    status: 'Not Planned',
+    status: 'No official route',
     description:
-      'No official route for automated messages. Standard platform terms prohibit unofficial headless or automation extensions.',
+      "LinkedIn's official Messages API is limited to approved partners and member-initiated sends; it does not cover automated or scheduled messages.",
     documentationUrl:
       'https://learn.microsoft.com/en-us/linkedin/shared/integrations/communications/messages',
   },

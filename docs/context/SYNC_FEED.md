@@ -338,3 +338,10 @@
   - Built `UnbuiltProvidersCard` showing honest roadmaps for Gmail OAuth, LinkedIn, and X without prices.
   - Handled feature flag 404 on `/workspace/mailbox-presets` gracefully with a disabled card notice when `LEADLOOM_MAILBOX_CONNECT_ENABLED` is off.
 - Verified: `node scripts/check-design.mjs` (0 violations), `npx tsc --noEmit` (0 errors).
+
+---
+
+### [2026-11-11T18:20:00+05:30] Continuity worker (Instinct) | verified Team B mailbox UI (340a10e) in a real browser; 3 fixes | Non-Breaking
+- Local only (real Postgres, local SMTP/IMAP fixtures, headless Chrome): connect with wrong password shows diagnostics and clears the password field; right password shows "Login verified"; remove deletes the row and the stored credential; a member sees the list but no connect/test/remove controls.
+- Fixes: Test connection and Remove sent a JSON content-type with no body and the engine answered 400 (fixed in `lib/engine-client.ts`); "Other" provider no longer pre-fills Gmail hosts; LinkedIn card now states only the sourced fact (Messages API is partner-only) instead of an unsourced terms claim. Dev-only: with `LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS` (refused in production) ports >= 1024 are accepted for local fixtures.
+- Not deployed. Not verified against a real mail provider. The page still shows a "Sample data on this page" badge next to real mailbox data (pre-existing, not changed).

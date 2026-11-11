@@ -89,6 +89,9 @@ export function ConnectMailboxDialog({
         setSmtpPort(activePreset.smtpPort);
         setImapHost(activePreset.imapHost);
         setImapPort(activePreset.imapPort);
+      } else {
+        setSmtpHost('');
+        setImapHost('');
       }
       setErrorMessage(null);
       setConnectionDetails(null);

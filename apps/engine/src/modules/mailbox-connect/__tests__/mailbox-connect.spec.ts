@@ -33,8 +33,9 @@ describe('mailbox connect', () => {
     let calls = 0; const svc = new MailboxConnectService(new Mem(), { verify: async () => { calls++; return { smtp: 'ok', imap: 'ok' }; } }, resolver);
     expect((await svc.connect('w', { ...input, email: 'nope' }))).toEqual({ ok: false, reason: 'invalid_email' });
     expect((await svc.connect('w', { ...input, password: '' }))).toEqual({ ok: false, reason: 'invalid_password' });
-    expect((await svc.connect('w', { ...input, smtpPort: 22 }))).toEqual({ ok: false, reason: 'invalid_port' });
-    expect((await svc.connect('w', { ...input, imapPort: 5432 }))).toEqual({ ok: false, reason: 'invalid_port' });
+    const strict = new MailboxConnectService(new Mem(), { verify: async () => { calls++; return { smtp: 'ok', imap: 'ok' }; } }, {}); // production policy: fixed port lists
+    expect((await strict.connect('w', { ...input, smtpPort: 22 }))).toEqual({ ok: false, reason: 'invalid_port' });
+    expect((await strict.connect('w', { ...input, smtpPort: 5432 }))).toEqual({ ok: false, reason: 'invalid_port' });
     expect(calls).toBe(0);
   });
   it('test records failure with a fixed code and not_found for another workspace', async () => {

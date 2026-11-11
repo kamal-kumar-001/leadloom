@@ -484,8 +484,7 @@ export async function testMailboxConnection(id: string): Promise<{
 }> {
   try {
     const res = await fetch(`/api/engine/workspace/mailboxes/${id}/test`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', // no body: a JSON content-type with an empty body is rejected (400) by the engine
       credentials: 'same-origin',
     });
     const json = await res.json().catch(() => ({}));
@@ -513,7 +512,6 @@ export async function deleteMailbox(id: string): Promise<{
   try {
     const res = await fetch(`/api/engine/workspace/mailboxes/${id}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
     });
     const json = await res.json().catch(() => ({}));

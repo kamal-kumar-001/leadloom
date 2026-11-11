@@ -46,8 +46,8 @@ export type HostCheck = { ok: true } | { ok: false; code: 'invalid_host' | 'priv
 
 /** Hostname must be a public DNS name (no IP literals), and must resolve only to public addresses. */
 export async function checkMailHost(host: string, port: number, allowedPorts: number[], allowPrivate = false, resolve: (h: string) => Promise<string[]> = async (h) => (await lookup(h, { all: true })).map((a) => a.address)): Promise<HostCheck> {
+  if (allowPrivate) return allowedPorts.includes(port) || (Number.isInteger(port) && port >= 1024 && port <= 65535) ? { ok: true } : { ok: false, code: 'invalid_port' }; // dev/test fixtures only: never reachable in production
   if (!allowedPorts.includes(port)) return { ok: false, code: 'invalid_port' };
-  if (allowPrivate) return { ok: true };
   if (!HOST.test(host) || isIP(host) !== 0) return { ok: false, code: 'invalid_host' };
   let addrs: string[];
   try { addrs = await resolve(host); } catch { return { ok: false, code: 'invalid_host' }; }
