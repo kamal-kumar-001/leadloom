@@ -43,6 +43,13 @@ export class CampaignRecipientsRepository {
     return { upserted };
   }
 
+  /** True only when the campaign belongs to this workspace (route 404 check, no existence leak). */
+  async campaignExists(workspaceId: string, campaignId: string): Promise<boolean> {
+    const rows = await this.database.query<{ id: string }>(
+      'SELECT id FROM campaigns WHERE workspace_id=$1::uuid AND id=$2::uuid', [workspaceId, campaignId]);
+    return rows.length === 1;
+  }
+
   /** Tenant-scoped read; returns [] for another workspace's campaign (no existence leak). */
   async listRecipients(workspaceId: string, campaignId: string): Promise<CampaignRecipientRow[]> {
     const rows = await this.database.query<Record<string, unknown>>(

@@ -23,6 +23,7 @@ import { CredentialService } from './modules/vault/credential.service';
 import { VaultService } from './modules/vault/vault.service';
 import { PrismaCredentialRepository } from './modules/vault/prisma-credential.repository';
 import { AtomicDispatchRepository } from './modules/outbound/atomic-dispatch.repository';
+import { CampaignRecipientsRepository } from './modules/outbound/campaign-recipients.repository';
 import { PrismaDispatchDatabase } from './modules/outbound/prisma-database';
 import type { WaterfallController } from './modules/waterfall/waterfall.controller';
 import type { ValidatorController } from './modules/validator/validator.controller';
@@ -46,6 +47,7 @@ Module({})(RuntimeModule);
 export interface RuntimeServices {
  credentials: Pick<CredentialService,'save'|'list'|'delete'|'use'|'markTestResult'|'findLatestByProvider'>;
  outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'|'listInboundReplies'|'releaseApproved'>;
+ recipients?: import('./modules/outbound/campaign-recipients.repository').CampaignRecipientsRepository;
  sessionKey: Buffer;
  /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
  nextAuthBridgeKey?: Buffer;
@@ -291,6 +293,29 @@ export async function createApplication(services?:RuntimeServices) {
   // recipientId links the job to a campaign_recipients row (live fields); recipient fixes inline fields at enqueue.
   // A template with variables resolves strictly: without recipient data the enqueue fails closed (nothing enters the queue).
   const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime(),recipientId:z.string().uuid().optional(),recipient:EnqueueRecipient.optional()}).strict();
+  // Campaign recipients: the entry path into the recipient store that per-recipient resolution reads.
+  const RecipientInput=z.object({email:z.string().email().max(320),firstName:z.string().max(120).nullish(),lastName:z.string().max(120).nullish(),companyName:z.string().max(200).nullish(),title:z.string().max(200).nullish(),customFields:z.record(z.string(),z.unknown()).optional()}).strict();
+  const RecipientsBody=z.object({recipients:z.array(RecipientInput).min(1).max(500)}).strict();
+  fastify.post('/campaigns/:campaignId/recipients',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
+   if(!services.recipients)return reply.code(503).send({error:'Recipient store unavailable'});
+   const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
+   const parsed=RecipientsBody.safeParse(request.body);
+   if(!campaignId.success||!parsed.success)return reply.code(400).send({error:'Invalid recipients request'});
+   if(!await services.recipients.campaignExists(session.workspaceId,campaignId.data))return reply.code(404).send({error:'Campaign not found'});
+   const res=await services.recipients.addRecipients(session.workspaceId,campaignId.data,parsed.data.recipients);
+   return reply.code(200).send(res);
+  });
+  fastify.get('/campaigns/:campaignId/recipients',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,false);if(!session)return;
+   if(!services.recipients)return reply.code(503).send({error:'Recipient store unavailable'});
+   const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
+   if(!campaignId.success)return reply.code(400).send({error:'Invalid campaign id'});
+   if(!await services.recipients.campaignExists(session.workspaceId,campaignId.data))return reply.code(404).send({error:'Campaign not found'});
+   return reply.code(200).send({recipients:await services.recipients.listRecipients(session.workspaceId,campaignId.data)});
+  });
+
   fastify.post('/outbound/jobs',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
@@ -586,7 +611,7 @@ if(require.main===module) {
    prisma=new PrismaClient();await prisma.$connect();vault=VaultService.fromEnv();
    const unsubscribeKey=process.env.LEADLOOM_UNSUBSCRIBE_KEY?Buffer.from(process.env.LEADLOOM_UNSUBSCRIBE_KEY,'base64'):undefined;
    if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
-   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma),undefined,{sendingEnabled:process.env.LEADLOOM_OUTBOUND_SENDING_ENABLED==='true'}),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
+   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma),undefined,{sendingEnabled:process.env.LEADLOOM_OUTBOUND_SENDING_ENABLED==='true'}),recipients:new CampaignRecipientsRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
    services.accessGuard=new PrismaAccessGuard(prisma);
    services.reads=new WorkspaceReadService(prisma as any);
    if(process.env.LEADLOOM_ENTITLEMENTS_ENFORCED==='true') {

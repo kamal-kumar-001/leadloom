@@ -552,3 +552,7 @@
 - POST /outbound/jobs now accepts optional recipientId (links to a campaign_recipients row) or inline recipient fields; resolution failures return 400 with an actionable detail ('Message does not resolve...'), other errors stay generic.
 - Local dev DB: migrations 20261124+20261125 applied locally only; LIVE DB untouched (live runs 94fa7ab, migrations live through 20261117 only).
 - Full engine suite: 354 passed, 36 skipped, 0 failed; tsc clean; next build clean. Sending stays OFF everywhere.
+---
+### [2026-11-12 00:47 IST] Team A - recipient import routes (backend; UI next)
+- POST /campaigns/:id/recipients (write role + outbound_sending entitlement, max 500 per call) upserts into campaign_recipients via CampaignRecipientsRepository; GET lists (read role). Both 404 on another workspace's campaign (no existence leak). Emails normalized. This is the real entry path into the recipient store that per-recipient resolution reads; previously rows could only be created repository-direct.
+- Route test on PGlite with real migrations: 401/403/400/404 + upsert/list round trip with email normalization. Touched-module suite 154 passed/9 skipped; tsc clean. UI (paste-CSV on campaign page) is the next increment. Sending OFF; live 94fa7ab.
