@@ -29,8 +29,15 @@ The minimal approval choice for Kamal, nothing bundled:
 2. Allow a one-time `docker login ghcr.io` on the host with a read:packages token so the host can pull the private images. (Making the packages public instead would be a separate disclosure decision; the repo being public does not cover it, and it is not requested.)
 3. Allow the pull-based update.sh variant in the same main commit as the release (main only, no release branch), run by the host owner in a supervised window.
 
-What can be verified only AFTER that approval, in order, none guaranteed before observation:
-- Real compressed image sizes from the first build's registry metadata, then extracted and side-by-side disk footprint on the host (read-only `docker images` / `system df`).
+First-build MEASURED results (run 43062288976, 2026-11-11 16:50-16:54 UTC, success in 3m17s):
+- leadloom-engine: 11 layers, 668.0 MB compressed; image index sha256:0bb659f5..., amd64 manifest sha256:bd26e514...
+- leadloom-web: 8 layers, 106.3 MB compressed; image index sha256:a55baf08..., amd64 manifest sha256:ca996750...
+- Total pull size approx 774 MB compressed. Extracted and old+new coexistence footprint still UNMEASURED (only readable on the host after an approved pull); with about 0.8 GB compressed input, 33G free has ample margin for any realistic extraction factor, but the exact number is recorded after the first host pull.
+- VISIBILITY INCIDENT, corrected: packages connected to a PUBLIC repo inherit PUBLIC visibility on first publish via Actions - the "first publish defaults private" assumption was wrong. Both packages were publicly readable for about 17 minutes (16:52-17:09 UTC). Contents are builds of this public repo's own code; the build context excludes .env/secrets via .dockerignore, so no credential exposure. Both packages were set to Private through the owner's GitHub session and anonymous pull now returns 403 (verified from outside, both packages). The repo token cannot read the private packages (404 masked), matching gate 2: host pull needs a read:packages login.
+- Durable lesson recorded in the workflow draft: after every first publish of a new package, verify actual visibility and set Private explicitly.
+
+Remaining verifiables after later gates, in order, none guaranteed before observation:
+- Extracted and side-by-side disk footprint on the host (read-only `docker images` / `system df`).
 - Actual pull duration and host load during a supervised pull (watch pos/feefree health externally throughout).
 - Container-replace behavior with the new images, with the previous tag still present locally.
 - Rollback-by-repull of the previous tag: only claimable after it has been exercised once.

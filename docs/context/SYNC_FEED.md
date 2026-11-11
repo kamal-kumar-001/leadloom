@@ -477,3 +477,10 @@
 - First run dispatched via the Actions UI (workflow_dispatch, ref: main); API dispatch confirmed unavailable to the repo token (403). Run status at dispatch: queued.
 - Scope reminder: approval covers build + PRIVATE GHCR push only. Package visibility to be verified from the registry/package page after the run, not assumed from the first-publish default.
 - No contract or API change in this entry.
+
+---
+### [2026-11-11T17:10:00Z] Team Alpha | docs/plan | First release build: measured results + visibility correction
+- Run 43062288976 SUCCEEDED in 3m17s (queued 16:50:37Z, done 16:54:02Z). Measured: leadloom-engine 11 layers / 668.0 MB compressed (index sha256:0bb659f5, amd64 manifest bd26e514); leadloom-web 8 layers / 106.3 MB compressed (index a55baf08, amd64 ca996750). Total pull approx 774 MB compressed; extracted/coexistence footprint still unmeasured until an approved host pull.
+- VISIBILITY INCIDENT + correction: both packages published PUBLIC (repo-connected inheritance on first publish from a public repo, contrary to the assumed private default). Publicly readable about 17 minutes; contents are builds of this public repo's code, no secrets in build context (.dockerignore verified). Set both to Private via the owner's GitHub browser session; anonymous pull now 403 (verified externally). Repo token gets masked 404 on private packages, consistent with gate 2 (host needs read:packages login - still unapproved).
+- RELEASE_PLAN.md updated with measured facts and the visibility lesson; workflow draft comment corrected.
+- No contract or API change in this entry.

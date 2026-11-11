@@ -11,7 +11,7 @@
 #     repo-scoped token and are therefore UNVERIFIED until the first run. The
 #     declaration does not override repo/org policy; if the first run is
 #     blocked, Kamal checks Settings > Actions > General > Workflow permissions.
-#   - Packages stay PRIVATE (the first-publish default). The host pulls with a
+#   - Packages must be PRIVATE. WARNING, verified 2026-11-11: a package first-published from a PUBLIC repo's workflow inherits the repo's PUBLIC visibility - the 'first publish defaults private' assumption is wrong for repo-connected packages. After the first run of this workflow for any new package, verify actual visibility and set the package to Private in its settings before relying on it. The host pulls with a
 #     one-time `docker login ghcr.io` using a read:packages token. Making the
 #     packages public is a separate disclosure decision and is NOT part of this
 #     workflow or its approval.
