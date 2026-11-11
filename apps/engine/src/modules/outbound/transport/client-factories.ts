@@ -15,6 +15,8 @@ export interface MailboxClientConfig {
   authType: 'oauth2' | 'password';
   accessToken?: string;
   password?: string;
+  /** Fixtures only: connect without TLS. Production callers must never set this. */
+  plaintextForTestsOnly?: boolean;
 }
 
 export function buildSmtpOptions(config: MailboxClientConfig): Record<string, unknown> {
@@ -55,7 +57,8 @@ export function buildImapOptions(config: MailboxClientConfig): Record<string, un
   return {
     host: config.host,
     port: config.port,
-    secure: config.port !== 143,
+    secure: config.plaintextForTestsOnly ? false : config.port !== 143,
+    ...(config.plaintextForTestsOnly ? { disableAutoEnable: true } : {}),
     auth,
     logger: false, // never log credentials or message content
   };
@@ -80,8 +83,22 @@ export async function createNodemailerSmtpClient(config: MailboxClientConfig): P
   };
 }
 
-/** Real IMAP client via imapflow. Call only inside the authorized worker. */
-export async function createImapflowClient(config: MailboxClientConfig): Promise<ImapClient> {
+export interface ImapReadLimits {
+  /** Max messages returned per poll; the next poll continues from the last uid. */
+  maxBatch?: number;
+  /** Max retained characters of each message body. */
+  maxBodyChars?: number;
+}
+
+/**
+ * Real IMAP client via imapflow. Call only inside the authorized worker.
+ * Read-only by construction: the mailbox is opened with EXAMINE (readOnly), so messages are
+ * never marked read, moved or deleted. Fetch is by UID and bounded per poll. Message content is
+ * untrusted data: it is returned to the caller, never executed or acted on here.
+ */
+export async function createImapflowClient(config: MailboxClientConfig, limits: ImapReadLimits = {}): Promise<ImapClient> {
+  const maxBatch = Math.max(1, limits.maxBatch ?? 100);
+  const maxBodyChars = Math.max(0, limits.maxBodyChars ?? 20000);
   const { ImapFlow } = await import('imapflow');
   return {
     async fetchSince(sinceUid: number): Promise<RawInboundMessage[]> {
@@ -89,18 +106,21 @@ export async function createImapflowClient(config: MailboxClientConfig): Promise
       const out: RawInboundMessage[] = [];
       try {
         await client.connect();
-        const mailbox = await client.mailboxOpen('INBOX');
+        const mailbox = await client.mailboxOpen('INBOX', { readOnly: true });
         if (mailbox.exists > 0) {
-          const range = sinceUid > 0 ? `${sinceUid + 1}:*` : '1:*';
-          for await (const msg of client.fetch(range, { uid: true, envelope: true, bodyParts: ['text'] })) {
+          const found = (await client.search({ uid: `${Math.max(0, sinceUid) + 1}:*` }, { uid: true })) || [];
+          const uids = found.filter((u: number) => u > sinceUid).sort((a: number, b: number) => a - b).slice(0, maxBatch);
+          if (uids.length === 0) return out;
+          for await (const msg of client.fetch(uids.join(','), { uid: true, envelope: true, bodyParts: ['text'] }, { uid: true })) {
             const envelope = msg.envelope;
-            if (!msg.uid || !envelope?.messageId || !envelope.from?.[0]?.address) continue;
+            if (!msg.uid || msg.uid <= sinceUid) continue; // '*' always yields the newest message
+            if (!envelope?.messageId || !envelope.from?.[0]?.address) continue;
             out.push({
               uid: msg.uid,
               messageId: envelope.messageId,
               fromEmail: envelope.from[0].address,
-              subject: envelope.subject ?? '',
-              bodyText: msg.bodyParts?.get('text')?.toString('utf8') ?? '',
+              subject: (envelope.subject ?? '').slice(0, 998),
+              bodyText: (msg.bodyParts?.get('text')?.toString('utf8') ?? '').slice(0, maxBodyChars),
               inReplyTo: envelope.inReplyTo || undefined,
               receivedAt: envelope.date ? new Date(envelope.date) : new Date(),
             });
@@ -109,7 +129,8 @@ export async function createImapflowClient(config: MailboxClientConfig): Promise
       } finally {
         await client.logout().catch(() => undefined);
       }
-      return out.sort((a, b) => a.uid - b.uid);
+      out.sort((a, b) => a.uid - b.uid);
+      return out.slice(0, maxBatch);
     },
   };
 }

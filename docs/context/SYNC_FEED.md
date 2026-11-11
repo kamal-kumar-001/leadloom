@@ -365,3 +365,8 @@
 
 ### [2026-11-11T13:30:00Z] Web | /app/connectors labels and spacing | Non-Breaking
 - Removed page-wide sample badge; only the key-vault catalog is labelled sample (costs and hit rates illustrative). "Connect Vault Key" now "Save key". Page padding fixed.
+
+---
+
+### [2026-11-11T13:25:00Z] Engine | IMAP reply fetch hardening | Non-Breaking
+- createImapflowClient now opens INBOX read-only, fetches by UID (previously sequence numbers), searches then fetches at most maxBatch (default 100) UIDs per poll, and caps retained body at 20000 chars. Not wired to any scheduler; no live mailbox is polled. Gated fixture test against hoodiecrow.
