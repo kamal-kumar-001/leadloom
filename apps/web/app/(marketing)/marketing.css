@@ -1,0 +1,179 @@
+/**
+ * Marketing segment design system.
+ * Implements the named text styles, motion curve and reveal patterns from the
+ * landing-page-design skill (elayadesign/ai-design-skills, MIT), adapted to
+ * LeadLoom's token palette and Kamal's LANDING.md rules (light theme, current
+ * colors, token gradients, honest status labels).
+ *
+ * Font: Manrope only, loaded as --font-manrope in the marketing layout.
+ * All sizes resolve to the Tailwind default type scale; weights cap at 700.
+ */
+
+.marketing-root {
+  font-family: var(--font-manrope), system-ui, sans-serif;
+  font-style: normal;
+}
+
+/* ---------- Named text styles (skill B1) ---------- */
+
+.marketing-root :is(.heading-1, .heading-2, .heading-3, .heading-4, .heading-5, .heading-6) {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  color: var(--text-primary);
+}
+
+.marketing-root .heading-1 { font-size: 2.25rem; line-height: 2.5rem; }
+.marketing-root .heading-2 { font-size: 1.875rem; line-height: 2.25rem; }
+.marketing-root .heading-3 { font-size: 1.875rem; line-height: 2.25rem; }
+.marketing-root .heading-4 { font-size: 1.5rem; line-height: 2rem; }
+.marketing-root .heading-5 { font-size: 1.25rem; line-height: 1.75rem; }
+.marketing-root .heading-6 { font-size: 1.125rem; line-height: 1.75rem; }
+
+@media (min-width: 640px) {
+  .marketing-root .heading-1 { font-size: 3.75rem; line-height: 1; }
+  .marketing-root .heading-2 { font-size: 3rem; line-height: 1; }
+  .marketing-root .heading-3 { font-size: 2.25rem; line-height: 2.5rem; }
+  .marketing-root .heading-4 { font-size: 1.875rem; line-height: 2.25rem; }
+  .marketing-root .heading-5 { font-size: 1.5rem; line-height: 2rem; }
+  .marketing-root .heading-6 { font-size: 1.25rem; line-height: 1.75rem; }
+}
+
+.marketing-root :is(.title-1, .title-2, .title-3, .title-4, .title-5) { font-weight: 500; color: var(--text-primary); }
+.marketing-root .title-1 { font-size: 1.25rem; line-height: 1.75rem; }
+.marketing-root .title-2 { font-size: 1.125rem; line-height: 1.75rem; }
+.marketing-root .title-3 { font-size: 1rem; line-height: 1.5rem; }
+.marketing-root .title-4 { font-size: 0.875rem; line-height: 1.25rem; }
+.marketing-root .title-5 { font-size: 0.75rem; line-height: 1rem; }
+
+.marketing-root .body-1 { font-size: 1rem; line-height: 1.5rem; font-weight: 600; }
+.marketing-root .body-2 { font-size: 1rem; line-height: 1.5rem; font-weight: 500; }
+.marketing-root .body-3 { font-size: 1rem; line-height: 1.5rem; font-weight: 400; }
+.marketing-root .body-4 { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; }
+.marketing-root .body-5 { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; }
+.marketing-root .body-6 { font-size: 0.875rem; line-height: 1.25rem; font-weight: 400; }
+
+.marketing-root .button-lg { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; }
+.marketing-root .button-md { font-size: 1rem; line-height: 1.5rem; font-weight: 600; }
+.marketing-root .button-sm { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; }
+.marketing-root .button-xsm { font-size: 0.75rem; line-height: 1rem; font-weight: 600; }
+
+.marketing-root .caption-1 { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; }
+.marketing-root .caption-2 { font-size: 0.875rem; line-height: 1.25rem; font-weight: 400; }
+.marketing-root .caption-3 { font-size: 0.75rem; line-height: 1rem; font-weight: 600; }
+.marketing-root .caption-4 { font-size: 0.75rem; line-height: 1rem; font-weight: 500; }
+.marketing-root .caption-5 { font-size: 0.75rem; line-height: 1rem; font-weight: 400; }
+
+.marketing-root :is(.body-1, .body-2, .body-3, .body-4, .body-5, .body-6) {
+  text-wrap: pretty;
+  color: var(--text-secondary);
+}
+
+/* ---------- Hero heading gradient (skill B5, light theme) ---------- */
+
+/* Hero heading gradient (skill B5 structure, brand palette per Kamal 2026-11-12) */
+.marketing-root .hero-title {
+  background: linear-gradient(90deg, var(--accent-loom) 0%, color-mix(in srgb, var(--accent-loom) 52%, #f8fafc) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------- Motion (skill B7) ---------- */
+
+.marketing-root {
+  --ease-base: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.marketing-root .motion-base {
+  transition-timing-function: var(--ease-base);
+}
+
+/* Scroll reveal: rise 32px, fade in, once. */
+.marketing-root .reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition:
+    opacity 700ms var(--ease-base),
+    transform 700ms var(--ease-base);
+  will-change: opacity, transform;
+}
+.marketing-root .reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Tagline reveal (skill B11): words start muted, activate one at a time. */
+.marketing-root .tagline-word {
+  opacity: 0.3;
+  transition: opacity 500ms var(--ease-base);
+}
+.marketing-root .tagline-word.active {
+  opacity: 1;
+}
+
+/* Mobile menu link entrance: 24px rise + fade, staggered 60ms (skill B7). */
+@keyframes menuLinkIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.marketing-root .menu-link {
+  opacity: 0;
+  animation: menuLinkIn 400ms var(--ease-base) forwards;
+}
+
+/* Hamburger lines transform between states (skill B7). */
+.marketing-root .menu-line {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 9999px;
+  transition:
+    transform 500ms var(--ease-base),
+    opacity 300ms var(--ease-base);
+}
+
+/* Skip to content (skill B10). */
+.marketing-root .skip-link {
+  position: fixed;
+  top: -100px;
+  left: 16px;
+  z-index: 100;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--accent-loom);
+  color: var(--on-accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: top 300ms var(--ease-base);
+}
+.marketing-root .skip-link:focus {
+  top: 16px;
+}
+
+/* Visible focus ring on every interactive element (skill B9). */
+.marketing-root :is(a, button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-root .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .marketing-root .tagline-word {
+    opacity: 1;
+    transition: none;
+  }
+  .marketing-root .menu-link {
+    animation: none;
+    opacity: 1;
+  }
+  .marketing-root .menu-line {
+    transition: none;
+  }
+}

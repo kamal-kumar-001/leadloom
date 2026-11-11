@@ -17,7 +17,7 @@
   /* Border Tokens */
   --border-subtle: #1e2333;
   --border-muted: #2a3047;
-  --border-focus: #6366f1;
+  --border-focus: #F3E3A0;
 
   /* Typography / Text Tokens */
   --text-primary: #f8fafc;
@@ -26,18 +26,21 @@
   --text-inverse: #090a0f;
   --text-mono: #e2e8f0;
 
-  /* Accent & Brand Colors */
-  --accent-loom: #6366f1;
-  --accent-loom-glow: rgba(99, 102, 241, 0.15);
+  /* Accent & Brand Colors (Kamal, 2026-11-12: dark purple + butter yellow)
+     Dark theme: butter is the readable accent on dark surfaces; purple is
+     the secondary tone. Text/icons on accent fills use the opposite color. */
+  --accent-loom: #F3E3A0;
+  --accent-loom-glow: rgba(243, 227, 160, 0.12);
   --accent-hover: color-mix(in srgb, var(--accent-loom) 82%, #000);
-  --on-accent: #ffffff; /* text/icons on accent fills, same in both themes */
-  --accent-weave: #a855f7;
-  --accent-weave-glow: rgba(168, 85, 247, 0.15);
+  --on-accent: #3E1F47;
+  --accent-weave: #3E1F47;
+  --accent-weave-glow: rgba(62, 31, 71, 0.40);
   --accent-matrix: #10b981;
   --accent-matrix-glow: rgba(16, 185, 129, 0.15);
 
   /* Signal / Verification Telemetry */
   --signal-verified: #10b981;
+  --signal-verified-strong: #34d399; /* small text on dark surfaces, AA */
   --signal-catchall: #f59e0b;
   --signal-failed: #ef4444;
   --signal-throttled: #ec4899;
@@ -68,7 +71,7 @@
   /* Border Tokens */
   --border-subtle: #e2e8f0;
   --border-muted: #cbd5e1;
-  --border-focus: #4f46e5;
+  --border-focus: #3E1F47;
 
   /* Typography / Text Tokens */
   --text-primary: #0f172a;
@@ -77,18 +80,21 @@
   --text-inverse: #f8fafc;
   --text-mono: #1e293b;
 
-  /* Accent & Brand Colors */
-  --accent-loom: #4f46e5;
-  --accent-loom-glow: rgba(79, 70, 229, 0.12);
+  /* Accent & Brand Colors (Kamal, 2026-11-12: dark purple + butter yellow)
+     Light theme: purple is the primary accent on light surfaces; butter is
+     the secondary tone and the text/icon color on purple fills. */
+  --accent-loom: #3E1F47;
+  --accent-loom-glow: rgba(62, 31, 71, 0.10);
   --accent-hover: color-mix(in srgb, var(--accent-loom) 82%, #000);
-  --on-accent: #ffffff;
-  --accent-weave: #9333ea;
-  --accent-weave-glow: rgba(147, 51, 234, 0.12);
+  --on-accent: #F3E3A0;
+  --accent-weave: #F3E3A0;
+  --accent-weave-glow: rgba(243, 227, 160, 0.45);
   --accent-matrix: #059669;
   --accent-matrix-glow: rgba(5, 150, 105, 0.12);
 
   /* Signal / Verification Telemetry */
   --signal-verified: #059669;
+  --signal-verified-strong: #047857; /* small text on light surfaces, AA 5.1:1 */
   --signal-catchall: #d97706;
   --signal-failed: #dc2626;
   --signal-throttled: #db2777;
