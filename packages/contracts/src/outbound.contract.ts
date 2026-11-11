@@ -90,6 +90,8 @@ export const OutboundApprovalItemSchema = z.object({
   senderMailboxIds: z.array(z.string()).optional(),
   /** True when the stored approval snapshot matches current campaign content; false means the content changed since queueing and approval will refresh the snapshot and require a second deliberate approval. */
   stale: z.boolean().optional(),
+  /** Set when the message can no longer be resolved for this recipient (unknown variable or missing value); the job stays held until the template or recipient is fixed. */
+  resolutionErrors: z.array(z.string()).optional(),
   status: OutboundApprovalStatusEnum,
   scheduledAt: z.string(),
   createdAt: z.string(),

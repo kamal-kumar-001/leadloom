@@ -15,7 +15,7 @@ const connection = (db: any): SqlConnection => ({
 
 beforeEach(async () => {
   pg = new PGlite({ extensions: { vector } });
-  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261120_outbound_approval_status', '20261121_outbound_approval_hardening']) {
+  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261120_outbound_approval_status', '20261121_outbound_approval_hardening', '20261124_campaign_recipients', '20261125_job_recipient_resolution']) {
     await pg.exec(
       readFileSync(
         fileURLToPath(new URL(`../../../../../../packages/database/prisma/migrations/${migration}/migration.sql`, import.meta.url)),
@@ -72,6 +72,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'lead-approval@example.invalid',
       idempotencyKey: 'key-1',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
 
@@ -96,6 +97,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'lead-1@example.invalid',
       idempotencyKey: 'key-1',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
     await repo.enqueue({
@@ -104,6 +106,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'lead-2@example.invalid',
       idempotencyKey: 'key-2',
       stepNumber: 2,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
 
@@ -111,8 +114,8 @@ describe('G9 Approval-before-send queue behavior', () => {
     expect(approvals).toHaveLength(2);
     expect(approvals[0].recipientEmail).toBe('lead-1@example.invalid');
     expect(approvals[0].campaignName).toBe('Cloud Infrastructure Outreach');
-    expect(approvals[0].subject).toBe('Quick question about {{company}} infrastructure');
-    expect(approvals[0].bodySnippet).toContain('Hi {{name}}');
+    expect(approvals[0].subject).toBe('Quick question about Acme infrastructure');
+    expect(approvals[0].bodySnippet).toContain('Hi Ada');
 
     expect(approvals[1].recipientEmail).toBe('lead-2@example.invalid');
     expect(approvals[1].stepNumber).toBe(2);
@@ -131,6 +134,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'approved-lead@example.invalid',
       idempotencyKey: 'key-app',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
 
@@ -177,6 +181,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'stale-lead@example.invalid',
       idempotencyKey: 'key-stale',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
 
@@ -205,6 +210,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'invalidate-lead@example.invalid',
       idempotencyKey: 'key-inv',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
     expect((await repo.approve(workspaceId, { jobIds: [id] })).approvedCount).toBe(1);
@@ -229,6 +235,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'rejected-lead@example.invalid',
       idempotencyKey: 'key-rej',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
 
@@ -261,6 +268,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'batch-1@example.invalid',
       idempotencyKey: 'batch-1',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
     await repo.enqueue({
@@ -269,6 +277,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'batch-2@example.invalid',
       idempotencyKey: 'batch-2',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
 
@@ -286,6 +295,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'stop-sequence@example.invalid',
       idempotencyKey: 'key-stop',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
 
@@ -305,6 +315,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'approved-optout@example.invalid',
       idempotencyKey: 'key-optout',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
     expect((await repo.approve(workspaceId, { jobIds: [id] })).approvedCount).toBe(1);
@@ -321,6 +332,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'approved-reject@example.invalid',
       idempotencyKey: 'key-arej',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
     expect((await repo.approve(workspaceId, { jobIds: [id] })).approvedCount).toBe(1);
@@ -338,6 +350,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'race-lead@example.invalid',
       idempotencyKey: 'key-race',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
     await repo.reject(workspaceId, { jobIds: [id] });
@@ -356,6 +369,7 @@ describe('G9 Approval-before-send queue behavior', () => {
       recipientEmail: 'tenant-test@example.invalid',
       idempotencyKey: 'key-tenant',
       stepNumber: 1,
+      recipient: { firstName: 'Ada', companyName: 'Acme' },
       scheduledAt: now,
     });
 

@@ -15,6 +15,8 @@ const MIGRATIONS = [
   '20261121_outbound_approval_hardening',
   '20261122_inbound_replies',
   '20261123_inbound_replies_ambiguity',
+  '20261124_campaign_recipients',
+  '20261125_job_recipient_resolution',
 ];
 
 let pg: PGlite, repo: AtomicDispatchRepository;

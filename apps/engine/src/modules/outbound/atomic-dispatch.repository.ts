@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { OutboundApprovalItem, ApprovalQueueStats } from '@leadloom/contracts';
-import { approvalContentHash, buildApprovalSnapshot } from './approval-snapshot';
+import { approvalContentHash, buildResolvedApprovalSnapshot, type ApprovalSnapshot } from './approval-snapshot';
+import type { RecipientFields } from './recipient-resolution';
 import { attributeReply, recipientHashOf } from './reply-attribution';
 import type { DispatchRepository, DispatchSnapshot, SendReservation } from './dispatch.service';
 
@@ -34,6 +35,55 @@ export class AtomicDispatchRepository implements DispatchRepository {
      */
     private readonly options: { sendingEnabled?: boolean } = {},
   ) {}
+
+  /** Live recipient fields: from the campaign_recipients row when linked, else inline fields fixed at enqueue, else email-only. */
+  private async recipientFieldsFor(db: SqlConnection, workspaceId: string, job: { recipient_email: string; recipient_id: string | null; recipient_fields: unknown }): Promise<RecipientFields> {
+    if (job.recipient_id) {
+      const rows = await db.query<Record<string, unknown>>(
+        'SELECT email, first_name, last_name, company_name, title, custom_fields FROM campaign_recipients WHERE workspace_id=$1::uuid AND id=$2::uuid',
+        [workspaceId, job.recipient_id]);
+      const r = rows[0];
+      if (r) {
+        return {
+          email: String(r.email),
+          firstName: (r.first_name as string) ?? null,
+          lastName: (r.last_name as string) ?? null,
+          companyName: (r.company_name as string) ?? null,
+          title: (r.title as string) ?? null,
+          customFields: (r.custom_fields as Record<string, unknown>) ?? {},
+        };
+      }
+    }
+    const stored = job.recipient_fields && typeof job.recipient_fields === 'object' ? (job.recipient_fields as Record<string, unknown>) : {};
+    return {
+      email: job.recipient_email,
+      firstName: (stored.firstName as string) ?? null,
+      lastName: (stored.lastName as string) ?? null,
+      companyName: (stored.companyName as string) ?? null,
+      title: (stored.title as string) ?? null,
+      customFields: (stored.customFields as Record<string, unknown>) ?? {},
+    };
+  }
+
+  /**
+   * Recomputes the approval snapshot from CURRENT campaign steps, mailbox scope
+   * and LIVE recipient fields, with strict per-recipient resolution: the hash
+   * signs off on the actual message a person would receive. Fails closed:
+   * unresolvable templates return errors instead of a snapshot.
+   */
+  private async currentApproval(db: SqlConnection, workspaceId: string, campaignId: string, job: {
+    recipient_email: string; recipient_id: string | null; recipient_fields: unknown; step_number: number; steps: unknown;
+  }): Promise<{ ok: true; snapshot: ApprovalSnapshot; hash: string } | { ok: false; errors: string[] }> {
+    const mailboxRows = await db.query<{ mailbox_id: string }>(
+      'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, campaignId]);
+    const fields = await this.recipientFieldsFor(db, workspaceId, job);
+    const res = buildResolvedApprovalSnapshot({
+      campaignId, stepNumber: job.step_number, recipientEmail: job.recipient_email,
+      campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id), recipientFields: fields,
+    });
+    if (!res.ok) return { ok: false, errors: res.errors };
+    return { ok: true, snapshot: res.snapshot, hash: approvalContentHash(res.snapshot) };
+  }
 
   async snapshot(workspaceId: string, campaignId: string): Promise<DispatchSnapshot | null> {
     const now = this.clock();
@@ -114,6 +164,10 @@ export class AtomicDispatchRepository implements DispatchRepository {
     idempotencyKey: string;
     stepNumber: number;
     scheduledAt: Date;
+    /** Links the job to its campaign_recipients row: live fields, so an edit invalidates the approval hash. */
+    recipientId?: string;
+    /** Inline fields fixed at enqueue (no row to edit later). One of recipientId/recipient is required when the step template uses variables. */
+    recipient?: Omit<RecipientFields, 'email'>;
   }): Promise<string> {
     const email = z.string().email().parse(input.recipientEmail.trim().toLowerCase());
     z.string().min(1).max(255).parse(input.idempotencyKey);
@@ -125,16 +179,38 @@ export class AtomicDispatchRepository implements DispatchRepository {
     if (!campaignRows[0]) throw new Error('Idempotency conflict or unknown campaign');
     const mailboxRows = await this.database.query<{ mailbox_id: string }>(
       'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [input.workspaceId, input.campaignId]);
-    const snapshot = buildApprovalSnapshot({
+    let fields: RecipientFields;
+    if (input.recipientId) {
+      z.string().uuid().parse(input.recipientId);
+      const rows0 = await this.database.query<Record<string, unknown>>(
+        'SELECT email, first_name, last_name, company_name, title, custom_fields FROM campaign_recipients WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid AND id=$3::uuid',
+        [input.workspaceId, input.campaignId, input.recipientId]);
+      const r = rows0[0];
+      if (!r || String(r.email).toLowerCase() !== email) throw new Error('Unknown recipient for this campaign');
+      fields = {
+        email,
+        firstName: (r.first_name as string) ?? null,
+        lastName: (r.last_name as string) ?? null,
+        companyName: (r.company_name as string) ?? null,
+        title: (r.title as string) ?? null,
+        customFields: (r.custom_fields as Record<string, unknown>) ?? {},
+      };
+    } else {
+      fields = { email, ...(input.recipient ?? {}) };
+    }
+    const resolved = buildResolvedApprovalSnapshot({
       campaignId: input.campaignId, stepNumber: input.stepNumber, recipientEmail: email,
-      campaignSteps: campaignRows[0].steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
+      campaignSteps: campaignRows[0].steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id), recipientFields: fields,
     });
+    if (!resolved.ok) throw new Error(`Message does not resolve for this recipient: ${resolved.errors.join('; ')}`);
+    const snapshot = resolved.snapshot;
     const contentHash = approvalContentHash(snapshot);
+    const inlineFields = input.recipientId ? null : input.recipient ? JSON.stringify(input.recipient) : null;
     const rows = await this.database.query<{ id: string }>(`INSERT INTO outbound_jobs
-      (id,workspace_id,campaign_id,recipient_email,recipient_hash,idempotency_key,step_number,scheduled_at,status,approval_content_hash,approval_snapshot,updated_at)
-      SELECT $1::uuid,c.workspace_id,c.id,$4,$5,$6,$7,$8::timestamptz,'pending_approval',$9,$10::jsonb,$11::timestamptz FROM campaigns c WHERE c.workspace_id=$2::uuid AND c.id=$3::uuid
+      (id,workspace_id,campaign_id,recipient_email,recipient_hash,idempotency_key,step_number,scheduled_at,status,approval_content_hash,approval_snapshot,recipient_id,recipient_fields,updated_at)
+      SELECT $1::uuid,c.workspace_id,c.id,$4,$5,$6,$7,$8::timestamptz,'pending_approval',$9,$10::jsonb,$12::uuid,$13::jsonb,$11::timestamptz FROM campaigns c WHERE c.workspace_id=$2::uuid AND c.id=$3::uuid
       ON CONFLICT (workspace_id,idempotency_key) DO NOTHING RETURNING id`,
-      [id, input.workspaceId, input.campaignId, email, hash, input.idempotencyKey, input.stepNumber, input.scheduledAt, contentHash, JSON.stringify(snapshot), this.clock()]);
+      [id, input.workspaceId, input.campaignId, email, hash, input.idempotencyKey, input.stepNumber, input.scheduledAt, contentHash, JSON.stringify(snapshot), this.clock(), input.recipientId ?? null, inlineFields]);
     if (rows[0]) return rows[0].id;
     const [existing] = await this.database.query<{ id: string; campaign_id: string; recipient_hash: string; step_number: number; scheduled_at: Date }>(
       'SELECT id,campaign_id,recipient_hash,step_number,scheduled_at FROM outbound_jobs WHERE workspace_id=$1::uuid AND idempotency_key=$2', [input.workspaceId, input.idempotencyKey]);
@@ -171,10 +247,12 @@ export class AtomicDispatchRepository implements DispatchRepository {
       approval_snapshot: any;
       approval_content_hash: string | null;
       mailbox_ids: string[] | null;
+      recipient_id: string | null;
+      recipient_fields: unknown;
     }>(
       `SELECT j.id, j.workspace_id, j.campaign_id, c.name AS campaign_name, c.steps AS campaign_steps,
               j.recipient_email, j.step_number, j.status, j.scheduled_at, j.created_at,
-              j.approval_snapshot, j.approval_content_hash,
+              j.approval_snapshot, j.approval_content_hash, j.recipient_id, j.recipient_fields,
               (SELECT array_agg(cm.mailbox_id) FROM campaign_mailboxes cm
                 WHERE cm.workspace_id = j.workspace_id AND cm.campaign_id = j.campaign_id) AS mailbox_ids
        FROM outbound_jobs j
@@ -187,7 +265,7 @@ export class AtomicDispatchRepository implements DispatchRepository {
       [workspaceId, campaignId ?? null]
     );
 
-    return rows.map(r => {
+    return Promise.all(rows.map(async r => {
       let subject: string | undefined;
       let bodySnippet: string | undefined;
       let bodyTemplate: string | undefined;
@@ -217,15 +295,21 @@ export class AtomicDispatchRepository implements DispatchRepository {
       // Stale when no snapshot is stored yet, or the stored hash no longer matches
       // the current campaign content + recipient + mailbox context. A stale item's
       // first approval only refreshes the snapshot; a second deliberate approval signs off.
+      let resolutionErrors: string[] | undefined;
       try {
         if (!r.approval_content_hash || !stored) {
           stale = true;
         } else {
-          const current = buildApprovalSnapshot({
-            campaignId: r.campaign_id, stepNumber: r.step_number, recipientEmail: r.recipient_email,
-            campaignSteps: steps, mailboxIds: (r.mailbox_ids ?? []).map(String),
+          const cur = await this.currentApproval(this.database, workspaceId, r.campaign_id, {
+            recipient_email: r.recipient_email, recipient_id: r.recipient_id, recipient_fields: r.recipient_fields,
+            step_number: r.step_number, steps,
           });
-          stale = approvalContentHash(current) !== r.approval_content_hash;
+          if (!cur.ok) {
+            stale = true;
+            resolutionErrors = cur.errors;
+          } else {
+            stale = cur.hash !== r.approval_content_hash;
+          }
         }
       } catch {
         stale = true;
@@ -243,11 +327,12 @@ export class AtomicDispatchRepository implements DispatchRepository {
         bodyTemplate,
         senderMailboxIds,
         stale,
+        resolutionErrors,
         status: 'pending_approval' as const,
         scheduledAt: new Date(r.scheduled_at).toISOString(),
         createdAt: new Date(r.created_at).toISOString(),
       };
-    });
+    }));
   }
 
   /**
@@ -282,21 +367,18 @@ export class AtomicDispatchRepository implements DispatchRepository {
     let approvedCount = 0, staleCount = 0;
     for (const cand of candidates) {
       const outcome = await this.database.transaction(async (tx) => {
-        const locked = await tx.query<{ id: string; recipient_email: string; step_number: number; approval_content_hash: string | null; steps: unknown }>(
-          `SELECT j.id, j.recipient_email, j.step_number, j.approval_content_hash, c.steps
+        const locked = await tx.query<{ id: string; recipient_email: string; recipient_id: string | null; recipient_fields: unknown; step_number: number; approval_content_hash: string | null; steps: unknown }>(
+          `SELECT j.id, j.recipient_email, j.recipient_id, j.recipient_fields, j.step_number, j.approval_content_hash, c.steps
            FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
            WHERE j.workspace_id = $1::uuid AND j.id = $2::uuid AND j.status = 'pending_approval'
              AND c.id = (SELECT id FROM campaigns WHERE workspace_id=$1::uuid AND id=$3::uuid FOR UPDATE)`,
           [workspaceId, cand.id, cand.campaign_id]);
         const job = locked[0];
         if (!job) return 'skipped' as const; // raced with reject/suppress/another approve
-        const mailboxRows = await tx.query<{ mailbox_id: string }>(
-          'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, cand.campaign_id]);
-        const current = buildApprovalSnapshot({
-          campaignId: cand.campaign_id, stepNumber: job.step_number, recipientEmail: job.recipient_email,
-          campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
-        });
-        const currentHash = approvalContentHash(current);
+        const cur = await this.currentApproval(tx, workspaceId, cand.campaign_id, job);
+        if (!cur.ok) return 'stale' as const; // no longer resolvable: keep held, reviewer sees the resolution error
+        const current = cur.snapshot;
+        const currentHash = cur.hash;
         if (job.approval_content_hash === currentHash) {
           await tx.query(
             `UPDATE outbound_jobs SET status='approved', approved_at=$3::timestamptz, updated_at=$3::timestamptz
@@ -332,9 +414,9 @@ export class AtomicDispatchRepository implements DispatchRepository {
     return this.database.transaction(async (tx) => {
       // Campaign row lock serializes release against approve/edit races.
       const jobs = await tx.query<{
-        id: string; campaign_id: string; recipient_email: string; step_number: number; steps: unknown; approval_content_hash: string | null;
+        id: string; campaign_id: string; recipient_email: string; recipient_id: string | null; recipient_fields: unknown; step_number: number; steps: unknown; approval_content_hash: string | null;
       }>(
-        `SELECT j.id, j.campaign_id, j.recipient_email, j.step_number, c.steps, j.approval_content_hash
+        `SELECT j.id, j.campaign_id, j.recipient_email, j.recipient_id, j.recipient_fields, j.step_number, c.steps, j.approval_content_hash
          FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
          WHERE j.workspace_id = $1::uuid AND j.campaign_id = $2::uuid AND j.status = 'approved'
            AND c.id = (SELECT id FROM campaigns WHERE workspace_id=$1::uuid AND id=$2::uuid FOR UPDATE)
@@ -342,25 +424,26 @@ export class AtomicDispatchRepository implements DispatchRepository {
         [workspaceId, campaignId]);
       let released = 0, stale = 0;
       for (const job of jobs) {
-        const mailboxRows = await tx.query<{ mailbox_id: string }>(
-          'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, job.campaign_id]);
-        const current = buildApprovalSnapshot({
-          campaignId: job.campaign_id, stepNumber: job.step_number, recipientEmail: job.recipient_email,
-          campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
-        });
-        const currentHash = approvalContentHash(current);
-        if (job.approval_content_hash === currentHash) {
+        const cur = await this.currentApproval(tx, workspaceId, job.campaign_id, job);
+        if (cur.ok && job.approval_content_hash === cur.hash) {
           const updated = await tx.query(
             `UPDATE outbound_jobs SET status='pending', updated_at=$3::timestamptz
              WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='approved' RETURNING id`,
             [workspaceId, job.id, this.clock()]);
           if (updated.length === 1) released++;
         } else {
-          // Content changed since approval: never release; require deliberate re-approval.
-          await tx.query(
-            `UPDATE outbound_jobs SET status='pending_approval', approved_at=NULL, approval_content_hash=$3, approval_snapshot=$4::jsonb, updated_at=$5::timestamptz
-             WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='approved'`,
-            [workspaceId, job.id, currentHash, JSON.stringify(current), this.clock()]);
+          // Content changed (or no longer resolves) since approval: never release; require deliberate re-approval.
+          if (cur.ok) {
+            await tx.query(
+              `UPDATE outbound_jobs SET status='pending_approval', approved_at=NULL, approval_content_hash=$3, approval_snapshot=$4::jsonb, updated_at=$5::timestamptz
+               WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='approved'`,
+              [workspaceId, job.id, cur.hash, JSON.stringify(cur.snapshot), this.clock()]);
+          } else {
+            await tx.query(
+              `UPDATE outbound_jobs SET status='pending_approval', approved_at=NULL, updated_at=$3::timestamptz
+               WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='approved'`,
+              [workspaceId, job.id, this.clock()]);
+          }
           stale++;
         }
       }
@@ -382,21 +465,16 @@ export class AtomicDispatchRepository implements DispatchRepository {
    */
   async invalidateStaleApprovals(workspaceId: string, campaignId: string): Promise<{ invalidatedCount: number }> {
     const jobs = await this.database.query<{
-      id: string; campaign_id: string; recipient_email: string; step_number: number; steps: unknown; approval_content_hash: string | null;
+      id: string; campaign_id: string; recipient_email: string; recipient_id: string | null; recipient_fields: unknown; step_number: number; steps: unknown; approval_content_hash: string | null;
     }>(
-      `SELECT j.id, j.campaign_id, j.recipient_email, j.step_number, c.steps, j.approval_content_hash
+      `SELECT j.id, j.campaign_id, j.recipient_email, j.recipient_id, j.recipient_fields, j.step_number, c.steps, j.approval_content_hash
        FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
        WHERE j.workspace_id = $1::uuid AND j.campaign_id = $2::uuid AND j.status = 'approved'`,
       [workspaceId, campaignId]);
     let invalidatedCount = 0;
     for (const job of jobs) {
-      const mailboxRows = await this.database.query<{ mailbox_id: string }>(
-        'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, job.campaign_id]);
-      const currentHash = approvalContentHash(buildApprovalSnapshot({
-        campaignId: job.campaign_id, stepNumber: job.step_number, recipientEmail: job.recipient_email,
-        campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
-      }));
-      if (job.approval_content_hash !== currentHash) {
+      const cur = await this.currentApproval(this.database, workspaceId, job.campaign_id, job);
+      if (!cur.ok || job.approval_content_hash !== cur.hash) {
         await this.database.query(
           `UPDATE outbound_jobs SET status='pending_approval', approved_at=NULL, updated_at=$3::timestamptz
            WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='approved'`,
