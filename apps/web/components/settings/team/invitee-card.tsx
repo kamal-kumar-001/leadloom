@@ -52,7 +52,8 @@ export function InviteeCard({
         role: res.data?.role || inv.role,
       });
       notify.success(`Accepted invitation to join ${inv.workspaceName}.`);
-      // No refresh: the engine just ended this session, so every reload would answer 401.
+      // The engine just ended this session: tell the parent to hide the old workspace's controls.
+      onRefresh();
     } catch {
       notify.error('Failed to accept invitation. Please try again.');
     } finally {

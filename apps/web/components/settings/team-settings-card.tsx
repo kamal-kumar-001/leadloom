@@ -31,6 +31,8 @@ export function TeamSettingsCard() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isUnavailable, setIsUnavailable] = useState(false);
+  // After accepting an invitation the engine ends this session; hide the old workspace's controls.
+  const [sessionEnded, setSessionEnded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
@@ -156,9 +158,10 @@ export function TeamSettingsCard() {
       {/* Invitee Card for any signed-in user who has open invitations */}
       <InviteeCard
         invitations={myInvitations}
-        onRefresh={loadData}
+        onRefresh={() => setSessionEnded(true)}
       />
 
+      {!sessionEnded && (
       <Card className="p-5 sm:p-6 space-y-5">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -293,6 +296,7 @@ export function TeamSettingsCard() {
           </div>
         )}
       </Card>
+      )}
 
       {/* Invite Member Dialog */}
       <InviteMemberDialog
