@@ -639,3 +639,8 @@
 - Verdict honesty: ScorecardService now requires BOTH >=30 page loads AND >=20 outreach before any non-pending verdict (was: any outreach > 0 unlocked "high_pull... Greenlight engineering MVP" on tiny samples); pending summary names progress (X/30, Y/20) and states rates are not meaningful at small samples; verdict summaries reworded to "signal within the current sample", no MVP greenlight directives.
 - Schema repair: ValidationExperiment was missing outreachSent/replies/positiveReplies in schema.prisma (20261127 added columns only); reads silently returned 0 on the real Prisma path while the spec fake masked it. Fields added, client regenerated; real-PG browser e2e exposed and now proves the write path.
 - Suite 373 passed EXIT:0 direct; browser-verified outreach save + pending gate.
+
+## 2026-11-12 03:27 IST — Verdict score labeled heuristic + outreach validation tests
+- Scorecard summaries (pending and all verdicts) now state the score is a product heuristic (PRD 5.2 weights) over raw page loads (repeat/bot traffic included) and team-entered outreach - not statistical validation; pending summary no longer implies rates become meaningful after thresholds. Panel carries a basis/limits line.
+- Route tests added: negative values and positiveReplies>replies rejected (replies>sent already covered).
+- Suite 373 passed EXIT:0 direct; browser-verified pending copy.

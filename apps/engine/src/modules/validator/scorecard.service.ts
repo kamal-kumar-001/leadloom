@@ -32,7 +32,7 @@ export class ScorecardService {
         verdict: 'pending',
         verdictScore: 0,
         metrics,
-        actionableSummary: `Not enough data for a verdict yet: ${metrics.visitors}/${MIN_PAGE_LOADS_FOR_VERDICT} page loads and ${metrics.outreachSent}/${MIN_OUTREACH_FOR_VERDICT} outreach recorded. The raw metrics above are real observations; the rates are not meaningful at this sample size.`,
+        actionableSummary: `Not enough data for a verdict yet: ${metrics.visitors}/${MIN_PAGE_LOADS_FOR_VERDICT} page loads and ${metrics.outreachSent}/${MIN_OUTREACH_FOR_VERDICT} outreach recorded. These thresholds are a product heuristic, not a statistical bar: page loads are raw (repeat and bot traffic included) and outreach numbers are team-entered.`,
         pageUrl,
         sequenceSubject,
         sequenceBody,
@@ -51,13 +51,13 @@ export class ScorecardService {
 
     if (verdictScore >= 80) {
       verdict = 'high_pull';
-      actionableSummary = `High customer pull detected (Score ${verdictScore}/100). Signups per page load: ${(metrics.pageConversionRate * 100).toFixed(1)}%, positive resonance: ${(metrics.positiveResonanceRate * 100).toFixed(1)}%. Strong signal within the current sample.`;
+      actionableSummary = `Heuristic score from PRD 5.2 weights over raw page loads (repeat/bot traffic included) and team-entered outreach - not statistical validation. High customer pull detected (Score ${verdictScore}/100). Signups per page load: ${(metrics.pageConversionRate * 100).toFixed(1)}%, positive resonance: ${(metrics.positiveResonanceRate * 100).toFixed(1)}%. Strong signal within the current sample.`;
     } else if (verdictScore >= 45) {
       verdict = 'pivot_positioning';
-      actionableSummary = `Moderate traction with positioning friction (Score ${verdictScore}/100). Page interest is present but outreach resonance is below target in the current sample.`;
+      actionableSummary = `Heuristic score from PRD 5.2 weights over raw page loads (repeat/bot traffic included) and team-entered outreach - not statistical validation. Moderate traction with positioning friction (Score ${verdictScore}/100). Page interest is present but outreach resonance is below target in the current sample.`;
     } else {
       verdict = 'low_interest';
-      actionableSummary = `Low customer interest (Score ${verdictScore}/100). Weak page and outreach response in the current sample.`;
+      actionableSummary = `Heuristic score from PRD 5.2 weights over raw page loads (repeat/bot traffic included) and team-entered outreach - not statistical validation. Low customer interest (Score ${verdictScore}/100). Weak page and outreach response in the current sample.`;
     }
 
     return {

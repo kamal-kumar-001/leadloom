@@ -136,6 +136,9 @@ export function ExperimentScorecardPanel({
       </div>
 
       <p className="text-xs text-text-secondary border-t border-border-subtle pt-3">{scorecard.actionableSummary}</p>
+      <p className="text-[10px] font-mono text-text-muted">
+        Basis: heuristic score (PRD 5.2 weights) over raw page loads - repeat and bot traffic included - and team-entered outreach numbers. Not statistical validation.
+      </p>
     </Card>
   );
 }

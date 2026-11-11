@@ -92,6 +92,8 @@ describe('waterfall/validator route integration', () => {
 
       // Owner records observed outreach numbers; invalid shapes are rejected.
       expect((await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/outreach`, headers: auth, payload: { outreachSent: 10, replies: 12, positiveReplies: 2 } })).statusCode).toBe(400);
+      expect((await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/outreach`, headers: auth, payload: { outreachSent: -5, replies: 0, positiveReplies: 0 } })).statusCode).toBe(400);
+      expect((await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/outreach`, headers: auth, payload: { outreachSent: 10, replies: 4, positiveReplies: 5 } })).statusCode).toBe(400);
       const outreach = await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/outreach`, headers: auth, payload: { outreachSent: 25, replies: 4, positiveReplies: 1 } });
       expect(outreach.statusCode).toBe(200);
       expect(outreach.json().metrics).toMatchObject({ outreachSent: 25, replies: 4, positiveReplies: 1 });
