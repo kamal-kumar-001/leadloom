@@ -446,3 +446,8 @@
 - Credential isValid/lastVerifiedAt are now persisted truth surfaced via the masked list. (9b501f8)
 
 ---
+### [2026-11-11T16:30:00Z] Team Alpha | docs/plan | Planning only
+- G1 verified locally (two-account invite flow); removed-member recovery options drafted for owner decision (G1_MEMBER_RECOVERY_OPTIONS.md). G2 mailbox connect verified against local fixture mail servers; RELEASE_PLAN.md updated to main 4900244 with migrations 20261118-20261123 and flag posture.
+- No contract or API change in this entry.
+
+---
