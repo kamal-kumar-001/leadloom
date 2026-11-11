@@ -22,7 +22,8 @@ function SignupForm() {
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
 
-  const [email, setEmail] = useState('');
+  // Landing "Find Leads" CTA prefills the email via /signup?email=...
+  const [email, setEmail] = useState(() => (searchParams.get('email') || '').trim());
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

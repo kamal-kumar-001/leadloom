@@ -4,6 +4,7 @@ export * from './magnetic-button';
 export * from './spotlight-card';
 export * from './badge';
 export * from './theme-provider';
+export * from './brand-mark';
 export * from './tailwind-preset';
 export * from './card';
 export * from './feature-gate';

@@ -2,23 +2,15 @@
 
 import React, { useState } from 'react';
 import { Badge } from '@leadloom/ui';
-import { Terminal, Shield, Cpu, Copy, Check } from 'lucide-react';
+import { Database, Shield, Cpu, Copy, Check } from 'lucide-react';
 
-const DOCKER_SNIPPET = `version: '3.8'
-services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    deploy:
-      resources: { limits: { memory: 1024M } }
-  redis:
-    image: redis:7-alpine
-    command: redis-server --maxmemory 384mb --maxmemory-policy allkeys-lru
-  api:
-    image: leadloom/engine:latest
-    environment: [ LEADLOOM_MASTER_KEY=sk_master_aes256_... ]
-  web:
-    image: leadloom/web:latest
-    ports: ["3000:3000"]`;
+const STACK_SNIPPET = `# LeadLoom hosted stack - nothing for you to run
+web:      Next.js (App Router), token-driven light/dark theming
+api:      NestJS engine, queue-based waterfall runs
+data:     PostgreSQL 16 + pgvector, Redis 7 queues
+workers:  containerized scraping and sequencing workers
+secrets:  AES-256-GCM envelope encryption for your provider keys
+delivery: SMTP/IMAP mailbox pool with rotation`;
 
 const SDK_SNIPPET = `import { defineProvider, ExitCondition } from '@leadloom/engine';
 
@@ -44,11 +36,11 @@ const SECURITY_SNIPPET = `# LeadLoom Security Invariants
 - Automated SPF, DKIM, and DMARC Verification UDP Handshake`;
 
 export function ArchitectureTabs() {
-  const [activeTab, setActiveTab] = useState<'docker' | 'sdk' | 'security'>('docker');
+  const [activeTab, setActiveTab] = useState<'stack' | 'sdk' | 'security'>('stack');
   const [copied, setCopied] = useState(false);
 
   const activeContent =
-    activeTab === 'docker' ? DOCKER_SNIPPET : activeTab === 'sdk' ? SDK_SNIPPET : SECURITY_SNIPPET;
+    activeTab === 'stack' ? STACK_SNIPPET : activeTab === 'sdk' ? SDK_SNIPPET : SECURITY_SNIPPET;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(activeContent);
@@ -63,10 +55,10 @@ export function ArchitectureTabs() {
           Developer-First Transparency
         </Badge>
         <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary">
-          Own your stack. Inspect every queue.
+          Hosted for you. Visible to you.
         </h2>
         <p className="mt-3 text-sm sm:text-base text-text-secondary">
-          No black boxes. Inspect every queue and every provider call.
+          Your keys, your providers, your data - no hidden credits or middleman markups.
         </p>
       </div>
 
@@ -75,14 +67,14 @@ export function ArchitectureTabs() {
         <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2 bg-canvas-elevated/40">
           <div className="flex gap-2">
             <button
-              onClick={() => setActiveTab('docker')}
+              onClick={() => setActiveTab('stack')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-colors ${
-                activeTab === 'docker'
+                activeTab === 'stack'
                   ? 'bg-canvas-elevated text-brand-loom border border-border-subtle'
                   : 'text-text-muted hover:text-text-primary'
               }`}
             >
-              <Terminal className="w-3.5 h-3.5" /> docker-compose.yml
+              <Database className="w-3.5 h-3.5" /> stack.md
             </button>
             <button
               onClick={() => setActiveTab('sdk')}

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Button, MagneticButton, Badge, SpotlightCard } from '@leadloom/ui';
+import { Button, Badge, SpotlightCard, BrandMark } from '@leadloom/ui';
 import { SmoothScrollProvider } from '../../components/marketing/smooth-scroll-provider';
 import dynamic from 'next/dynamic';
 import { AmbientLoomFallback } from '../../components/marketing/3d/ambient-fallback';
@@ -12,7 +12,8 @@ import { SavingsCalculator } from '../../components/marketing/savings-calculator
 import { BentoGridSection } from '../../components/marketing/bento-grid';
 import { IdeaValidatorShowcase } from '../../components/marketing/idea-validator-showcase';
 import { ArchitectureTabs } from '../../components/marketing/architecture-tabs';
-import { ArrowRight, Terminal, Star, CheckCircle, HelpCircle, Shield, ChevronDown } from 'lucide-react';
+import { EmailCta } from '../../components/marketing/email-cta';
+import { ArrowRight, CheckCircle, ChevronDown } from 'lucide-react';
 
 export default function MarketingPage() {
   const [hoveredCta, setHoveredCta] = useState<'indigo' | 'matrix'>('indigo');
@@ -28,8 +29,8 @@ export default function MarketingPage() {
       a: 'You connect your own Apollo, Hunter, or OpenAI keys and pay each provider directly at their own price. Your total depends on the providers and the volume you use.',
     },
     {
-      q: 'Can I really run the entire engine on a $5/month VPS?',
-      a: 'Yes. LeadLoom is containerized to run comfortably under 3.5GB RAM on a 4GB VPS (Hetzner, OVH, or Linode) using PostgreSQL 16 + pgvector, Redis 7, NestJS, and Next.js.',
+      q: 'Is LeadLoom hosted or do I run it myself?',
+      a: 'LeadLoom is hosted for you - there is nothing to install or run. The engine runs on our infrastructure (Next.js, NestJS, PostgreSQL 16 + pgvector, Redis 7) and you connect your own provider keys.',
     },
     {
       q: 'How does the Pre-Product Idea Validator smoke-test ideas?',
@@ -45,7 +46,7 @@ export default function MarketingPage() {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2.5 font-bold tracking-tight text-lg">
               <span className="w-8 h-8 rounded-lg bg-brand-loom/20 border border-brand-loom/40 flex items-center justify-center text-brand-loom">
-                🧵
+                <BrandMark className="w-5 h-5" />
               </span>
               <span>LeadLoom</span>
             </Link>
@@ -58,18 +59,15 @@ export default function MarketingPage() {
             </nav>
 
             <div className="flex items-center gap-3">
-              <a
-                href="https://github.com/kamal-kumar-001/leadloom"
-                target="_blank"
-                rel="noreferrer"
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-muted text-xs font-mono text-text-muted hover:text-text-primary hover:border-brand-loom/40 transition-colors"
+              <Link
+                href="/login"
+                className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
               >
-                <Star className="w-3.5 h-3.5 fill-current text-brand-loom" />
-                <span>Source code</span>
-              </a>
-              <Link href="/workspace">
+                Sign in
+              </Link>
+              <Link href="#find-leads">
                 <Button size="sm" variant="primary">
-                  <span>Open Canvas</span>
+                  <span>Find Leads</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
               </Link>
@@ -95,30 +93,16 @@ export default function MarketingPage() {
               Plug in your own Apollo, Hunter, and OpenAI keys to run adaptive waterfalls, validate startup ideas, and sequence cold email.
             </p>
 
-            {/* Magnetic CTA Group */}
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <MagneticButton>
-                <Link
-                  href="/workspace"
-                  onMouseEnter={() => setHoveredCta('indigo')}
-                >
-                  <Button size="lg" variant="primary" className="text-base px-8 py-3.5">
-                    <span>Open Demo Workspace</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </Link>
-              </MagneticButton>
-
-              <MagneticButton>
-                <button
-                  onMouseEnter={() => setHoveredCta('matrix')}
-                  onClick={() => navigator.clipboard.writeText('docker compose up -d')}
-                  className="inline-flex items-center gap-2 rounded-md border border-border-muted bg-canvas-elevated px-6 py-3.5 text-sm font-mono text-text-secondary hover:text-brand-matrix hover:border-brand-matrix/40 transition-colors shadow-sm"
-                >
-                  <Terminal className="w-4 h-4" />
-                  <span>$ docker compose up -d</span>
-                </button>
-              </MagneticButton>
+            {/* Email CTA: starts sign-up only (email prefills /signup) */}
+            <div
+              className="mt-8 flex flex-col items-center gap-3"
+              onMouseEnter={() => setHoveredCta('matrix')}
+              onMouseLeave={() => setHoveredCta('indigo')}
+            >
+              <EmailCta id="find-leads" />
+              <p className="text-xs text-text-muted">
+                Your email only prefills sign-up. Nothing is stored or sent from this page.
+              </p>
             </div>
           </div>
 
@@ -206,7 +190,7 @@ export default function MarketingPage() {
                   </li>
                 </ul>
               </div>
-              <Link href="/workspace" className="mt-8">
+              <Link href="/signup" className="mt-8">
                 <Button variant="outline" className="w-full">
                   Get started
                 </Button>
@@ -242,9 +226,9 @@ export default function MarketingPage() {
                   </li>
                 </ul>
               </div>
-              <Link href="/workspace" className="mt-8">
+              <Link href="/signup" className="mt-8">
                 <Button variant="primary" className="w-full">
-                  Explore Demo Workspace
+                  Get started
                 </Button>
               </Link>
             </SpotlightCard>
@@ -290,15 +274,10 @@ export default function MarketingPage() {
               Ready to take back your GTM margins?
             </h2>
             <p className="mt-4 text-sm sm:text-base text-text-secondary max-w-xl mx-auto">
-              Join 2,000+ growth engineers weaving signals into qualified revenue without paying middleman taxes.
+              Bring your own provider keys and weave buying signals into qualified pipeline - no middleman markups.
             </p>
-            <div className="mt-8 flex justify-center gap-4">
-              <Link href="/workspace">
-                <Button size="lg" variant="primary">
-                  <span>Open Free Workspace</span>
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
+            <div className="mt-8 flex justify-center">
+              <EmailCta id="find-leads-bottom" />
             </div>
           </div>
         </section>
@@ -308,8 +287,8 @@ export default function MarketingPage() {
           <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
             <span>© 2026 LeadLoom. All rights reserved.</span>
             <div className="flex items-center gap-6">
-              <Link href="/workspace" className="hover:text-text-primary">Workspace</Link>
-              <a href="#architecture" className="hover:text-text-primary">Docker Monolith</a>
+              <Link href="/login" className="hover:text-text-primary">Sign in</Link>
+              <a href="#architecture" className="hover:text-text-primary">Architecture</a>
             </div>
           </div>
         </footer>

@@ -46,14 +46,8 @@ const pages = [
   {
     path: '/',
     name: 'homepage',
-    expectText: 'Simulated data only', // public demo banner
+    expectText: 'Find Leads', // hero email CTA (demo workspace removed)
     expectSelector: 'canvas', // Living Loom 3D canvas mounts on the client
-  },
-  {
-    path: '/workspace',
-    name: 'demo workspace',
-    expectText: 'Demo data',
-    expectSelector: null,
   },
 ];
 
