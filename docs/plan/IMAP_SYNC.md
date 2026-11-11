@@ -9,7 +9,7 @@ Source only. Nothing here is wired to a scheduler, endpoint or live mailbox. Fix
 - Migration `20261119_mailbox_uid_validity` (additive, nullable column).
 
 ## What does NOT exist yet (must precede any live use)
-- Strict TLS / public-host pinning: DONE on the poller path (buildReadOptions: port allow-list, resolve once, public-only, pinned IP, SNI, TLS1.2+, STARTTLS on 143), unit-tested with fake resolvers; not yet tested against a real TLS fixture on this path.
+- Strict TLS / public-host pinning: DONE on the poller path (buildReadOptions: port allow-list, resolve once, public-only, pinned IP, SNI, TLS1.2+, STARTTLS on 143). Proven against a real local TLS fixture (gated `imap-tls-fixture.integration.spec.ts`): 993 implicit-TLS fetch, 143 STARTTLS upgrade, CA-mismatch rejection, and non-public-DNS refusal even with a socket-remap hook. Hooks remap only the final dial target (loopback fixture); every policy decision runs for real.
 - A caller that resolves the mailbox credential. Tenant check lives at that caller: it must load the mailbox by `(workspace_id from the session, mailbox_id)` and the campaign by the same workspace before polling. `mailboxId` alone is not a tenant check.
 - DSN/bounce handling: DONE as deterministic detection (`bounce.ts`, RFC 3464-style fixtures, no live data). A DSN is classified `bounce` before the keyword baseline so quoted original text is never misread; failed-recipient and RFC 3463 status extraction exists for the future suppression wiring (NOT persisted yet).
 - Poll error backoff: DONE as a tested helper (`PollBackoff`: bounded exponential backoff with jitter, reset on success). Not yet wired to a scheduler (no scheduler exists).

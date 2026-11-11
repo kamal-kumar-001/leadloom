@@ -89,11 +89,11 @@ export async function createNodemailerSmtpClient(config: MailboxClientConfig): P
   };
 }
 
-/** TEST-ONLY fixture hook for the strict path (never passed by production callers): resolver, trusted CA, socket remap. The public-address policy still applies to what the resolver returns. */
+/** TEST-ONLY fixture hook for the strict path (never passed by production callers): resolver, trusted CA, socket remap. The public-address policy still applies to what the resolver returns, and the port allow-list still applies to the configured port; the remap only changes the final dial target (for a loopback fixture). */
 export interface ImapStrictTestHooks {
   resolve?: (host: string) => Promise<string[]>;
   ca?: string;
-  connectTo?: (pinnedIp: string) => string;
+  connectTo?: (pinnedIp: string) => string | { host: string; port?: number };
 }
 
 export interface ImapReadLimits {
@@ -114,9 +114,13 @@ export async function buildReadOptions(config: MailboxClientConfig, hooks: ImapS
   if (![143, 993].includes(config.port)) throw new Error('IMAP port not allowed');
   const ip = await resolvePublic(config.host, hooks.resolve);
   if (!ip) throw new Error('IMAP host is not a resolvable public host');
+  const dial = hooks.connectTo ? hooks.connectTo(ip) : ip;
+  const dialHost = typeof dial === 'string' ? dial : dial.host;
+  const dialPort = typeof dial === 'string' ? config.port : (dial.port ?? config.port);
   return {
     ...base,
-    host: hooks.connectTo ? hooks.connectTo(ip) : ip,
+    host: dialHost,
+    port: dialPort,
     secure: config.port === 993,
     servername: config.host,
     doSTARTTLS: config.port !== 993 ? true : undefined,
