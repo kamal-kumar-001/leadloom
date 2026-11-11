@@ -463,3 +463,9 @@
 - Corrected the workflow-token claim in durable docs: the draft's `permissions: packages: write` REQUESTS the grant but does not override repo/org Actions policy; unverified until first run (403 on permissions API with repo-scoped token). Recorded verified 2026-11-11 cost facts in RELEASE_PLAN.md: public-repo hosted-runner compute free/unlimited; GHCR container storage+bandwidth currently free (1 month advance-notice policy); overage blocked without payment method / $0 default spending limit.
 - Hardened the inert workflow draft: actions pinned to commit SHAs, security-posture comments (workflow_dispatch only, no PR triggers, .dockerignore excludes .env/.git/secrets, standard free runner only). Still inert in docs/plan; awaiting Kamal's build-only approval asked by main at 22:16.
 - No contract or API change in this entry.
+
+---
+### [2026-11-11T16:50:30Z] Team Alpha | .github/workflows | Workflow ACTIVATED (approved scope: build-only)
+- release-images.yml activated under Kamal's 22:17 "Sure" (WhatsApp, reply context: main's 22:15:54 ask - build off-host, save images privately, no deploy/running-app changes; originals verified in observation DB). Approval covers build + PRIVATE GHCR push only; host login/pull/deploy remain unapproved later gates.
+- Identical to the reviewed inert draft plus: activation header and two read-only imagetools-inspect steps that print image digest and layer sizes to the run log (part of the approved "I'll check the images" step).
+- No contract or API change in this entry.
