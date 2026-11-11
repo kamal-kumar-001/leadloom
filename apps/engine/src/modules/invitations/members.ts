@@ -1,6 +1,6 @@
 import type { Role } from '../auth/rbac';
 
-export interface MemberRow { id: string; email: string; name: string | null; role: Role; verified: boolean; active: boolean; createdAt: Date }
+export interface MemberRow { id: string; email: string; name: string | null; role: Role; verified: boolean; active: boolean; createdAt: Date; isOwner?: boolean }
 export type MemberChange = { ok: true } | { ok: false; reason: 'not_found' | 'last_admin' | 'self' | 'invalid_role' | 'owner_protected' | 'owner_only' };
 
 /** Persistence port. Every method is scoped by workspaceId; a target outside it is simply "not found". */

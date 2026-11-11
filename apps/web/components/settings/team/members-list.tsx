@@ -34,8 +34,8 @@ export function MembersList({
   const [isRemoving, setIsRemoving] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
 
-  // The owner is the member explicitly marked as owner, or the earliest created admin (first item)
-  const resolvedOwnerId = ownerId || (members.length > 0 ? members[0].id : null);
+  // The owner is only the member the server marked as owner; no guess.
+  const resolvedOwnerId = ownerId ?? null;
 
   const handleRoleChange = async (member: TeamMember, newRole: TeamRole) => {
     if (member.role === newRole) return;

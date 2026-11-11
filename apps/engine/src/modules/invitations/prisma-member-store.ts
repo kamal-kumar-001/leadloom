@@ -6,9 +6,10 @@ export class PrismaMemberStore implements MemberStore {
 
   async list(workspaceId: string): Promise<MemberRow[]> {
     const r: any[] = await this.prisma.$queryRawUnsafe(
-      `SELECT id::text AS id, email, name, role, (email_verified_at IS NOT NULL) AS verified, (disabled_at IS NULL) AS active, created_at
+      `SELECT id::text AS id, email, name, role, (email_verified_at IS NOT NULL) AS verified, (disabled_at IS NULL) AS active, created_at,
+              (id = (SELECT owner_user_id FROM workspaces WHERE id = $1::uuid)) AS is_owner
          FROM users WHERE workspace_id = $1::uuid ORDER BY created_at ASC LIMIT 200`, workspaceId);
-    return r.map((x) => ({ id: x.id, email: x.email, name: x.name, role: x.role as Role, verified: x.verified, active: x.active, createdAt: x.created_at }));
+    return r.map((x) => ({ id: x.id, email: x.email, name: x.name, role: x.role as Role, verified: x.verified, active: x.active, createdAt: x.created_at, isOwner: x.is_owner === true }));
   }
 
   private async actorIsOwner(tx: any, workspaceId: string, actorId: string) {

@@ -10,6 +10,8 @@ export interface TeamMember {
   verified: boolean;
   active: boolean;
   createdAt: string;
+  /** Server-reported (workspaces.owner_user_id). Absent or false means not the owner; never inferred. */
+  isOwner?: boolean;
 }
 
 export type InvitationStatus = 'pending' | 'expired' | 'accepted' | 'revoked';

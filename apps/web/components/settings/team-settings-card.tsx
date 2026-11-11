@@ -36,8 +36,8 @@ export function TeamSettingsCard() {
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members');
 
-  // Determine workspace owner: the earliest-created admin user (members[0])
-  const ownerMember = members.length > 0 ? members[0] : null;
+  // Owner comes only from the server (workspaces.owner_user_id). If none is marked, nobody is treated as owner.
+  const ownerMember = members.find((m) => m.isOwner === true) ?? null;
   const isOwner = Boolean(
     (currentUserId && ownerMember?.id === currentUserId) ||
     (shellEmail && ownerMember?.email.toLowerCase() === shellEmail.toLowerCase())
