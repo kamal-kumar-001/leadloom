@@ -37,7 +37,7 @@ const token = (role = 'admin') => {
 };
 const stubCore = () => ({
   credentials: { save: async () => ({}), list: async () => [], delete: async () => false },
-  outbound: { enqueue: async () => randomUUID(), suppress: async () => {} },
+  outbound: { enqueue: async () => randomUUID(), suppress: async () => {}, releaseApproved: async () => ({ released: 0, stale: 0, sendingEnabled: false }) },
   sessionKey: key,
 });
 const PAGE = 'Acme builds a developer API and SDK for Kubernetes cost management. We are hiring engineers - see careers. Pricing starts at $49 per seat. Built for B2B SaaS startups scaling on Docker and PostgreSQL.';
@@ -127,5 +127,23 @@ describe('research route integration', () => {
     const reasons = deriveRelevanceReasons(thin, deriveIcpHints('Hello world'));
     expect(reasons.some((r) => r.includes('No tracked keywords matched'))).toBe(true);
     expect(reasons.some((r) => r.includes('Thin page text'))).toBe(true);
+  });
+});
+
+describe('G3 release route', () => {
+  it('requires write role and reports sendingEnabled honestly when off', async () => {
+    const app = await createApplication(stubCore() as never);
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      const body = { campaignId: randomUUID() };
+      expect((await server.inject({ method: 'POST', url: '/outbound/release', payload: body })).statusCode).toBe(401);
+      expect((await server.inject({ method: 'POST', url: '/outbound/release', headers: { authorization: 'Bearer ' + token('read_only') }, payload: body })).statusCode).toBe(403);
+      const res = await server.inject({ method: 'POST', url: '/outbound/release', headers: { authorization: 'Bearer ' + token() }, payload: body });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ released: 0, stale: 0, sendingEnabled: false });
+      expect((await server.inject({ method: 'POST', url: '/outbound/release', headers: { authorization: 'Bearer ' + token() }, payload: {} })).statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
   });
 });

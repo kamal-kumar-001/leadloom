@@ -23,7 +23,17 @@ export function recipientHash(email: string): string {
  * Native multi-connection PostgreSQL concurrency tests are still required.
  */
 export class AtomicDispatchRepository implements DispatchRepository {
-  constructor(private readonly database: TransactionalDatabase, private readonly clock = () => new Date()) {}
+  constructor(
+    private readonly database: TransactionalDatabase,
+    private readonly clock = () => new Date(),
+    /**
+     * sendingEnabled is the release gate: without it NO code path moves a held
+     * 'approved' job to send-reservable 'pending'. main sets it only from the
+     * LEADLOOM_OUTBOUND_SENDING_ENABLED env flag; every current deployment
+     * leaves it unset, so release() is an honest no-op.
+     */
+    private readonly options: { sendingEnabled?: boolean } = {},
+  ) {}
 
   async snapshot(workspaceId: string, campaignId: string): Promise<DispatchSnapshot | null> {
     const now = this.clock();
@@ -305,6 +315,64 @@ export class AtomicDispatchRepository implements DispatchRepository {
       else if (outcome === 'stale') staleCount++;
     }
     return { approvedCount, staleCount };
+  }
+
+  /**
+   * G3 gated release: 'approved' (held) -> 'pending' (send-reservable). This is
+   * THE send-enablement step, so it is hard-gated on options.sendingEnabled;
+   * when disabled it is an honest no-op. When enabled it releases only jobs
+   * whose approval hash still matches current campaign content (a stale job
+   * goes back to 'pending_approval' for deliberate re-review) and never
+   * releases a suppressed recipient. claim() still re-checks quota, cooldown,
+   * due time and suppression atomically.
+   */
+  async releaseApproved(workspaceId: string, campaignId: string): Promise<{ released: number; stale: number; sendingEnabled: boolean }> {
+    z.string().uuid().parse(campaignId);
+    if (!this.options.sendingEnabled) return { released: 0, stale: 0, sendingEnabled: false };
+    return this.database.transaction(async (tx) => {
+      // Campaign row lock serializes release against approve/edit races.
+      const jobs = await tx.query<{
+        id: string; campaign_id: string; recipient_email: string; step_number: number; steps: unknown; approval_content_hash: string | null;
+      }>(
+        `SELECT j.id, j.campaign_id, j.recipient_email, j.step_number, c.steps, j.approval_content_hash
+         FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
+         WHERE j.workspace_id = $1::uuid AND j.campaign_id = $2::uuid AND j.status = 'approved'
+           AND c.id = (SELECT id FROM campaigns WHERE workspace_id=$1::uuid AND id=$2::uuid FOR UPDATE)
+           AND NOT EXISTS (SELECT 1 FROM suppression_list s WHERE s.workspace_id=j.workspace_id AND s.email_hash=j.recipient_hash)`,
+        [workspaceId, campaignId]);
+      let released = 0, stale = 0;
+      for (const job of jobs) {
+        const mailboxRows = await tx.query<{ mailbox_id: string }>(
+          'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, job.campaign_id]);
+        const current = buildApprovalSnapshot({
+          campaignId: job.campaign_id, stepNumber: job.step_number, recipientEmail: job.recipient_email,
+          campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
+        });
+        const currentHash = approvalContentHash(current);
+        if (job.approval_content_hash === currentHash) {
+          const updated = await tx.query(
+            `UPDATE outbound_jobs SET status='pending', updated_at=$3::timestamptz
+             WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='approved' RETURNING id`,
+            [workspaceId, job.id, this.clock()]);
+          if (updated.length === 1) released++;
+        } else {
+          // Content changed since approval: never release; require deliberate re-approval.
+          await tx.query(
+            `UPDATE outbound_jobs SET status='pending_approval', approved_at=NULL, approval_content_hash=$3, approval_snapshot=$4::jsonb, updated_at=$5::timestamptz
+             WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='approved'`,
+            [workspaceId, job.id, currentHash, JSON.stringify(current), this.clock()]);
+          stale++;
+        }
+      }
+      return { released, stale, sendingEnabled: true };
+    });
+  }
+
+  /** Worker-facing: every active campaign, no workspace filter. Internal only - never exposed on a route. */
+  async listActiveCampaigns(): Promise<Array<{ workspaceId: string; campaignId: string }>> {
+    const rows = await this.database.query<{ workspace_id: string; id: string }>(
+      "SELECT workspace_id, id FROM campaigns WHERE status='active'");
+    return rows.map((r) => ({ workspaceId: r.workspace_id, campaignId: r.id }));
   }
 
   /**

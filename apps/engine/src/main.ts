@@ -45,7 +45,7 @@ Module({})(RuntimeModule);
  */
 export interface RuntimeServices {
  credentials: Pick<CredentialService,'save'|'list'|'delete'|'use'|'markTestResult'|'findLatestByProvider'>;
- outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'|'listInboundReplies'>;
+ outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'|'listInboundReplies'|'releaseApproved'>;
  sessionKey: Buffer;
  /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
  nextAuthBridgeKey?: Buffer;
@@ -340,6 +340,17 @@ export async function createApplication(services?:RuntimeServices) {
    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid job ID'});
    return services.outbound.reject(session.workspaceId,{jobIds:[id.data]});
   });
+  // G3 gated release: moves held 'approved' jobs to send-reservable 'pending'.
+  // The repository is constructed with sendingEnabled only when main sees
+  // LEADLOOM_OUTBOUND_SENDING_ENABLED=true; every current deployment leaves it
+  // unset, so this route honestly reports released:0/sendingEnabled:false.
+  fastify.post('/outbound/release',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
+   const b=z.object({campaignId:z.string().uuid()}).strict().safeParse(request.body);
+   if(!b.success)return reply.code(400).send({error:'Invalid release request'});
+   return services.outbound.releaseApproved(session.workspaceId,b.data.campaignId);
+  });
   fastify.post('/outbound/suppressions',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    const email=z.object({email:z.string().email()}).strict().safeParse(request.body);
@@ -567,7 +578,7 @@ if(require.main===module) {
    prisma=new PrismaClient();await prisma.$connect();vault=VaultService.fromEnv();
    const unsubscribeKey=process.env.LEADLOOM_UNSUBSCRIBE_KEY?Buffer.from(process.env.LEADLOOM_UNSUBSCRIBE_KEY,'base64'):undefined;
    if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
-   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
+   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma),undefined,{sendingEnabled:process.env.LEADLOOM_OUTBOUND_SENDING_ENABLED==='true'}),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
    services.accessGuard=new PrismaAccessGuard(prisma);
    services.reads=new WorkspaceReadService(prisma as any);
    if(process.env.LEADLOOM_ENTITLEMENTS_ENFORCED==='true') {

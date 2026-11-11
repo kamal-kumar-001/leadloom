@@ -528,3 +528,8 @@
 - Topbar 'Sample data on this page' no longer covers the tables page (its persisted tables are real); the demo grid canvas keeps its own 'Sample preview' / 'Demo data' labels. Validator keeps the page-level badge.
 - Gap doc precision: a saved research row is a company/page OBSERVATION, not a discovered buyer or contact lead; person-level discovery is not built.
 - Engine tests: 336 pass (2 new: tenant-scoped rows read incl. cross-tenant null). No contract or API change beyond the new read route.
+---
+### [2026-11-11 23:50 IST] Team A - G3 worker skeleton: gated release + worker loop, sending stays off
+- POST /outbound/release (write role + outbound_sending entitlement) calls AtomicDispatchRepository.releaseApproved: with LEADLOOM_OUTBOUND_SENDING_ENABLED unset it is an honest no-op returning {released:0,stale:0,sendingEnabled:false}; only when explicitly enabled does it move approved jobs whose stored snapshot hash still matches current content back to 'pending' (send-reservable) and reverts stale approvals to 'pending_approval'. Suppressed recipients never release.
+- New OutboundWorker (start/stop/tick) discovers active campaigns via listActiveCampaigns (internal, no workspace filter) and ticks invalidation + release per campaign; per-campaign errors are counted, never fatal. NOT mounted in production bootstrap - no transport/mailbox-pool stack exists yet.
+- Tests: 5 new PGlite release tests (incl. deliberate re-approval after content change then second edit -> stale at release), 3 worker unit tests, 1 route test (401/403/200 sendingEnabled:false/400). Full engine suite: 345 passed, 36 skipped, 0 failed; tsc clean. Sending remains OFF everywhere; live runs 94fa7ab with invites OFF.
