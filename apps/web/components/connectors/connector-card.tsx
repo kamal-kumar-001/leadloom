@@ -127,13 +127,13 @@ export function ConnectorCard({
         {/* Cost & Hit Rate Stats */}
         <div className="grid grid-cols-2 gap-2 py-2 border-t border-border-subtle text-xs mb-4">
           <div>
-            <span className="text-text-muted block text-[10px] uppercase font-mono">Unit Cost</span>
+            <span className="text-text-muted block text-[10px] uppercase font-mono">Unit Cost (illustrative)</span>
             <span className="font-mono font-medium text-text-primary">
               {meta.unitCostUSD === 0 ? '$0.00 / call' : `$${meta.unitCostUSD.toFixed(3)} / call`}
             </span>
           </div>
           <div>
-            <span className="text-text-muted block text-[10px] uppercase font-mono">Hit Rate Est.</span>
+            <span className="text-text-muted block text-[10px] uppercase font-mono">Hit Rate (illustrative)</span>
             <span className="font-mono font-medium text-text-primary">
               {Math.round(meta.hitRateEstimate * 100)}%
             </span>
@@ -171,7 +171,7 @@ export function ConnectorCard({
             className="w-full text-xs gap-1.5 h-8"
           >
             <Lock className="w-3.5 h-3.5" />
-            Connect Vault Key
+            Save key
           </Button>
         )}
       </div>

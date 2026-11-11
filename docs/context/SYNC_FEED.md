@@ -360,3 +360,8 @@
 
 ### [2026-11-11T13:25:00Z] Web | /app/connectors outreach channel status | Non-Breaking
 - Connectors page shows live engine status for outreach channels (GET /workspace/connectors/status). No sample fallback; shows an error line if the engine is unreachable. The BYOK cards below remain sample data.
+
+---
+
+### [2026-11-11T13:30:00Z] Web | /app/connectors labels and spacing | Non-Breaking
+- Removed page-wide sample badge; only the key-vault catalog is labelled sample (costs and hit rates illustrative). "Connect Vault Key" now "Save key". Page padding fixed.

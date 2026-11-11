@@ -183,7 +183,7 @@ export default function ConnectorsPage() {
   const connectedCount = Object.keys(credentials).length;
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 font-sans">
       {/* Top Header & Metrics */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border-subtle">
         <div>
@@ -191,9 +191,6 @@ export default function ConnectorsPage() {
             <h1 className="text-xl font-bold tracking-tight text-text-primary">
               BYOK Connector Hub & Vault
             </h1>
-            <Badge variant="matrix" className="text-xs font-mono">
-              Demo data
-            </Badge>
           </div>
           <p className="text-xs text-text-muted">
             Connect your own API keys. All credentials encrypted via AES-256-GCM envelope vault.
@@ -203,7 +200,7 @@ export default function ConnectorsPage() {
         <div className="flex items-center gap-3">
           <div className="bg-canvas-surface border border-border-subtle rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs">
             <span className="w-2 h-2 rounded-full bg-signal-verified animate-pulse" />
-            <span className="text-text-muted">Active Connectors:</span>
+            <span className="text-text-muted">Keys saved:</span>
             <span className="font-mono font-semibold text-text-primary">
               {connectedCount} / {ALL_CONNECTORS.length}
             </span>
@@ -212,6 +209,12 @@ export default function ConnectorsPage() {
       </div>
 
       <OutreachChannelStatus />
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <h2 className="text-sm font-semibold text-text-primary">Enrichment key vault</h2>
+        <Badge variant="matrix" className="text-xs font-mono">Sample catalog: costs and hit rates are illustrative</Badge>
+        <span className="text-[11px] text-text-muted">Keys you save are stored encrypted. No enrichment provider is called yet.</span>
+      </div>
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">

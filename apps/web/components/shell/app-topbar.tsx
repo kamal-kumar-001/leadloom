@@ -9,7 +9,7 @@ interface AppTopbarProps {
   onToggleMobileMenu?: () => void;
 }
 
-const SAMPLE_ROUTES = ['/app/tables', '/app/connectors', '/app/campaigns', '/app/validator'];
+const SAMPLE_ROUTES = ['/app/tables', '/app/campaigns', '/app/validator'];
 
 export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
   const pathname = usePathname();
