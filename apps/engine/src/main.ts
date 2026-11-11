@@ -10,7 +10,7 @@ import type { ProvisioningService } from './modules/provisioning/provisioning.se
 import type { EntitlementService } from './modules/entitlements/entitlements.service';
 import type { FeatureKey } from '@leadloom/contracts';
 import { verifyBridgeToken } from './modules/auth/nextauth-bridge';
-import { canWrite } from './modules/auth/rbac';
+import { canWrite, isAdmin } from './modules/auth/rbac';
 import { issueSession } from './modules/auth/issuer';
 import { verifyPassword } from './modules/auth/password';
 import { PasswordAccountService, MailUnavailableError, SignupLimitedError as PwSignupLimitedError, InvalidCodeError, WeakPasswordError, InvalidCredentialsError, EmailNotVerifiedError, AccountInactiveError } from './modules/password-auth/password-account.service';
@@ -25,6 +25,7 @@ import { PrismaDispatchDatabase } from './modules/outbound/prisma-database';
 import type { WaterfallController } from './modules/waterfall/waterfall.controller';
 import type { ValidatorController } from './modules/validator/validator.controller';
 import { WorkspaceReadService } from './modules/workspace-read/workspace-read.service';
+import type { InvitationService } from './modules/invitations/invitation.service';
 import { z } from 'zod';
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -54,6 +55,8 @@ export interface RuntimeServices {
  unsubscribeKey?: Buffer;
  /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
  reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listMailboxes'|'listCampaigns'|'listSuppressions'|'listExperiments'>;
+ /** Optional: admin-only workspace invitations (default off; LEADLOOM_TEAM_INVITES_ENABLED). Sends no mail. */
+ invitations?: Pick<InvitationService,'invite'|'list'|'revoke'>;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
@@ -128,6 +131,28 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.get('/workspace/suppressions',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listSuppressions(s.workspaceId);});
    fastify.get('/workspace/experiments',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listExperiments(s.workspaceId);});
    fastify.get('/workspace/campaigns',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listCampaigns(s.workspaceId);});
+  }
+  if(services.invitations) {
+   const inv=services.invitations;
+   const InviteBody=z.object({email:z.string().max(320),role:z.enum(['read_only','member','admin'])}).strict();
+   const adminOnly=async(request:any,reply:any)=>{const s=await authorize(request,reply,true);if(!s)return null;if(!isAdmin(s)){reply.code(403).send({error:'Admin role required'});return null;}return s;};
+   const inviteLimiter=new SlidingWindowLimiter(30,60_000);
+   fastify.get('/workspace/invitations',async(request:any,reply:any)=>{const s=await adminOnly(request,reply);if(!s)return;return inv.list(s.workspaceId);});
+   fastify.post('/workspace/invitations',async(request:any,reply:any)=>{
+    const s=await adminOnly(request,reply);if(!s)return;
+    if(!inviteLimiter.take(s.workspaceId))return reply.code(429).send({error:'Too many requests'});
+    const p=InviteBody.safeParse(request.body);if(!p.success)return reply.code(400).send({error:'Invalid invitation request',code:'invalid_request'});
+    const r=await inv.invite(s.workspaceId,s.sub,p.data.email,p.data.role);
+    if(r.ok)return reply.code(201).send({invitation:r.invitation,emailSent:false});
+    const status=r.reason==='limit_reached'?429:r.reason==='already_member'||r.reason==='already_invited'?409:400;
+    return reply.code(status).send({error:'Invitation not created',code:r.reason});
+   });
+   fastify.delete('/workspace/invitations/:id',async(request:any,reply:any)=>{
+    const s=await adminOnly(request,reply);if(!s)return;
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid invitation ID'});
+    const ok=await inv.revoke(s.workspaceId,s.sub,id.data);
+    return ok?{revoked:true}:reply.code(404).send({error:'Invitation not found'});
+   });
   }
   fastify.get('/vault/credentials',async(request:any,reply:any)=>{
    const session=await authorize(request,reply);if(!session)return;
@@ -357,6 +382,11 @@ if(require.main===module) {
     const {PrismaProvisioningStore}=await import('./modules/provisioning/prisma-provisioning-store.js');
     const creationLimiter=new SlidingWindowLimiter(Number(process.env.LEADLOOM_SIGNUP_HOURLY_CAP??20),3_600_000);
     services.provisioning=new ProvisioningService(new PrismaProvisioningStore(prisma),()=>creationLimiter.take('new-accounts'));
+   }
+   if(process.env.LEADLOOM_TEAM_INVITES_ENABLED==='true') {
+    const {InvitationService}=await import('./modules/invitations/invitation.service.js');
+    const {PrismaInvitationStore}=await import('./modules/invitations/prisma-invitation-store.js');
+    services.invitations=new InvitationService(new PrismaInvitationStore(prisma));
    }
    if(process.env.LEADLOOM_PASSWORD_AUTH_ENABLED==='true') {
     const {createTransactionalEmail}=await import('./modules/email/transactional.js');
