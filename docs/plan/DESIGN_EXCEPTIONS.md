@@ -6,3 +6,5 @@ Updated from `node scripts/check-design.mjs`. Remove a line when fixed.
 - Landing page (Alpha L0) not yet reworked to the light theme and mega menu; text cleaned only.
 - Connectors modal still has a "[Demo mode]" simulation path.
 - 3D scenes and OAuth provider marks use their own colors (allowed).
+- Connectors page: all fixtures; Test Connection calls an engine route that does not exist (fails closed with an error). components/mailboxes/dns-inspector-modal.tsx is unreferenced and still contains invented DNS records; delete or rewrite before reuse.
+- Mailboxes: add-mailbox and DNS check actions are disabled and say "not available yet".

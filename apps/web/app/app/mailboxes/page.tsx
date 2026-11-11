@@ -24,7 +24,6 @@ import {
   HelpCircle,
   XCircle,
 } from 'lucide-react';
-import { DnsInspectorModal } from '../../../components/mailboxes/dns-inspector-modal';
 
 function renderDnsChip(label: 'SPF' | 'DKIM' | 'DMARC', status: string) {
   const s = (status || 'unknown').toLowerCase();
@@ -107,10 +106,6 @@ export default function MailboxesPage() {
     loadSuppressions();
   }, [loadMailboxes, loadSuppressions]);
 
-  const handleConnectProvider = (providerName: string) => {
-    notify.info(`OAuth2 bridge redirect to ${providerName} consent screen`);
-  };
-
   const totalSendLimit = mailboxes.reduce((acc, m) => acc + (m.dailySendLimit || 0), 0);
   const totalSentToday = mailboxes.reduce((acc, m) => acc + (m.sentToday || 0), 0);
   const activeCount = mailboxes.filter((m) => !m.isPaused).length;
@@ -146,23 +141,8 @@ export default function MailboxesPage() {
             <span>Refresh</span>
           </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleConnectProvider('Google Workspace')}
-            className="text-xs gap-1.5"
-          >
-            <span>+ Google Mailbox</span>
-          </Button>
-
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => handleConnectProvider('Microsoft 365')}
-            className="text-xs gap-1.5"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Microsoft 365</span>
+          <Button size="sm" variant="outline" disabled title="Mailbox connection is not available yet" className="text-xs gap-1.5">
+            <span>Add mailbox: not available yet</span>
           </Button>
         </div>
       </div>
@@ -293,14 +273,9 @@ export default function MailboxesPage() {
                       </div>
                     </div>
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setActiveDnsDomain(domain)}
-                      className="text-xs py-1.5 gap-1.5"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5 text-signal-verified" />
-                      <span>Inspect DNS</span>
+                    <Button size="sm" variant="outline" disabled title="DNS checks are not available yet" className="text-xs py-1.5 gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>DNS check: not available yet</span>
                     </Button>
                   </div>
                 </div>
@@ -442,14 +417,6 @@ export default function MailboxesPage() {
         )}
       </div>
 
-      {/* DNS Inspector Modal */}
-      {activeDnsDomain && (
-        <DnsInspectorModal
-          domain={activeDnsDomain}
-          isOpen={!!activeDnsDomain}
-          onClose={() => setActiveDnsDomain(null)}
-        />
-      )}
     </div>
   );
 }
