@@ -138,3 +138,32 @@ describe.skipIf(RUN)('postgres integration (gated: LEADLOOM_INTEGRATION=1)', () 
     expect(RUN).toBe(false);
   });
 });
+
+// Appended: single-transaction persist + watermark, against the gated throwaway DB.
+describe.runIf(RUN)('PrismaSeenMessageStore.persistBatch (gated)', () => {
+  it('commits markers and watermark atomically; replay idempotent; watermark never regresses', async () => {
+    const { PrismaClient } = await import('@leadloom/database');
+    const prisma = new PrismaClient({ datasources: { db: { url: DATABASE_URL } } });
+    const ws = randomUUID();
+    const mb = randomUUID();
+    try {
+      await prisma.workspace.create({ data: { id: ws, name: 'persistbatch-gated' } });
+      await prisma.mailbox.create({ data: { id: mb, workspaceId: ws, email: 'pb@example.com', smtpHost: 'smtp.example.com' } });
+      const { PrismaSeenMessageStore } = await import('./prisma-seen-store');
+      const store = new PrismaSeenMessageStore(prisma);
+      await store.persistBatch(mb, ['k-a', 'k-b'], 10);
+      expect(await store.has(mb, 'k-a')).toBe(true);
+      expect(await store.has(mb, 'k-b')).toBe(true);
+      expect(await store.lastUid(mb)).toBe(10);
+      await store.persistBatch(mb, ['k-a', 'k-c'], 5); // replayed key + lower watermark
+      expect(await store.has(mb, 'k-c')).toBe(true);
+      expect(await store.lastUid(mb)).toBe(10);
+      const dupes: Array<{ n: number }> = await prisma.$queryRawUnsafe(
+        `SELECT count(*)::int AS n FROM outreach_events WHERE mailbox_id = $1::uuid AND message_id = 'k-a'`, mb);
+      expect(dupes[0].n).toBe(1);
+    } finally {
+      await prisma.workspace.delete({ where: { id: ws } }).catch(() => {});
+      await prisma.$disconnect();
+    }
+  });
+});

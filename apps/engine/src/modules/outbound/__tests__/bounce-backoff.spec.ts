@@ -122,3 +122,52 @@ describe('PollBackoff', () => {
     expect(() => new PollBackoff({ initialMs: 5000, maxMs: 1000 })).toThrow();
   });
 });
+
+describe('poller persistBatch (single-transaction persist + watermark)', () => {
+  const rawMsg = (uid: number) => ({
+    uid,
+    messageId: `<m${uid}@example.test>`,
+    fromEmail: 'a@example.test',
+    subject: `s${uid}`,
+    bodyText: 'ok',
+    receivedAt: new Date('2026-11-11T12:00:00Z'),
+  });
+
+  it('records all new keys and the watermark in one persistBatch call', async () => {
+    const client: ImapClient = { async fetchSince() { return [rawMsg(1), rawMsg(2), rawMsg(3)]; } };
+    const store = new InMemorySeenMessageStore();
+    const calls: Array<{ keys: string[]; watermark: number }> = [];
+    const orig = store.persistBatch.bind(store);
+    store.persistBatch = async (mb: string, keys: string[], wm: number) => { calls.push({ keys, watermark: wm }); return orig(mb, keys, wm); };
+    const poller = new ImapReplyPoller(client, store);
+    const events = await poller.pollOnce(ctx);
+    expect(events).toHaveLength(3);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].keys).toHaveLength(3);
+    expect(calls[0].watermark).toBe(3);
+    // Replay: everything dedupes, no writes needed.
+    expect(await poller.pollOnce(ctx)).toHaveLength(0);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('falls back to per-message add + setLastUid when the store has no persistBatch', async () => {
+    const client: ImapClient = { async fetchSince() { return [rawMsg(1), rawMsg(2)]; } };
+    const base = new InMemorySeenMessageStore();
+    const store = Object.create(Object.getPrototypeOf(base));
+    Object.assign(store, base);
+    store.persistBatch = undefined; // simulate a store without the atomic path
+    const poller = new ImapReplyPoller(client, store);
+    expect(await poller.pollOnce(ctx)).toHaveLength(2);
+    expect(await store.lastUid(ctx.mailboxId)).toBe(2);
+    expect(await poller.pollOnce(ctx)).toHaveLength(0);
+  });
+});
+
+describe('poll enablement flag', () => {
+  it('is off by default and on only for the exact opt-in value', async () => {
+    const { isImapPollEnabled } = await import('../transport/poll-enablement');
+    expect(isImapPollEnabled({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(isImapPollEnabled({ LEADLOOM_IMAP_POLL_ENABLED: '1' } as NodeJS.ProcessEnv)).toBe(false);
+    expect(isImapPollEnabled({ LEADLOOM_IMAP_POLL_ENABLED: 'true' } as NodeJS.ProcessEnv)).toBe(true);
+  });
+});

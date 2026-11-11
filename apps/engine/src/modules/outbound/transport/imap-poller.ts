@@ -52,6 +52,13 @@ export interface SeenMessageStore {
   resetCheckpoint?(mailboxId: string, uidValidity: number): Promise<void>;
   /** Optional mutual exclusion so two pollers never run one mailbox at once. Returns null if the lock is held. */
   withLock?<T>(mailboxId: string, fn: () => Promise<T>): Promise<T | null>;
+  /**
+   * Preferred: record every dedupe marker AND advance the checkpoint in ONE
+   * transaction, so a crash can never leave markers without the watermark (or
+   * the reverse). When absent the poller falls back to per-message add plus a
+   * final setLastUid; a crash then replays the batch and dedupe keeps it idempotent.
+   */
+  persistBatch?(mailboxId: string, keys: string[], watermark: number): Promise<void>;
 }
 
 export interface ReplyPollerContext {
@@ -99,12 +106,14 @@ export class ImapReplyPoller {
       batch = await this.client.fetchSince(since);
     }
     const events: InboundReplyEvent[] = [];
+    const newKeys: string[] = [];
     let maxUid = since;
     for (const raw of batch) {
       if (raw.uid <= since) continue;
       maxUid = Math.max(maxUid, raw.uid);
       const key = replyDedupeKey(raw, uidValidity);
       if (await this.seen.has(context.mailboxId, key)) continue;
+      newKeys.push(key);
       // DSNs are machine reports, not replies: classify them before the
       // keyword baseline so quoted original text is never misread.
       const { classification, confidence } = detectBounce(raw)
@@ -121,10 +130,14 @@ export class ImapReplyPoller {
         confidence,
         receivedAt: raw.receivedAt.toISOString(),
       });
-      await this.seen.add(context.mailboxId, key);
+      if (!this.seen.persistBatch) await this.seen.add(context.mailboxId, key);
       events.push(event);
     }
-    if (maxUid > since) await this.seen.setLastUid(context.mailboxId, maxUid);
+    if (this.seen.persistBatch) {
+      if (newKeys.length > 0 || maxUid > since) await this.seen.persistBatch(context.mailboxId, newKeys, maxUid);
+    } else if (maxUid > since) {
+      await this.seen.setLastUid(context.mailboxId, maxUid);
+    }
     return events;
   }
 }
@@ -159,5 +172,9 @@ export class InMemorySeenMessageStore implements SeenMessageStore {
     if (this.locks.has(mailboxId)) return null;
     this.locks.add(mailboxId);
     try { return await fn(); } finally { this.locks.delete(mailboxId); }
+  }
+  async persistBatch(mailboxId: string, keys: string[], watermark: number): Promise<void> {
+    for (const k of keys) this.ids.add(`${mailboxId}${k}`);
+    if (watermark > (this.uids.get(mailboxId) ?? 0)) this.uids.set(mailboxId, watermark);
   }
 }

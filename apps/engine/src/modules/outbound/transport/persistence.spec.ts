@@ -83,3 +83,23 @@ describe('prisma seen message store', () => {
     await expect(store.setLastUid('mb-1', 1.5)).rejects.toThrow('uid');
   });
 });
+
+describe('PrismaSeenMessageStore.persistBatch', () => {
+  const MB = '11111111-1111-4111-8111-111111111111';
+  it('writes all markers and the watermark inside one transaction', async () => {
+    const calls: string[] = [];
+    let txCount = 0;
+    const prisma = {
+      $transaction: async (fn: any) => { txCount++; return fn({ $executeRawUnsafe: async (sql: string) => { calls.push(sql); } }); },
+    };
+    const store = new PrismaSeenMessageStore(prisma);
+    await store.persistBatch(MB, ['k1', 'k2'], 7);
+    expect(txCount).toBe(1);
+    expect(calls.filter((s) => s.includes('outreach_events'))).toHaveLength(2);
+    expect(calls.filter((s) => s.includes('mailbox_sync_state') && s.includes('GREATEST'))).toHaveLength(1);
+  });
+  it('rejects an invalid watermark', async () => {
+    const store = new PrismaSeenMessageStore({ $transaction: async () => { throw new Error('should not reach'); } });
+    await expect(store.persistBatch(MB, [], -1)).rejects.toThrow('watermark');
+  });
+});

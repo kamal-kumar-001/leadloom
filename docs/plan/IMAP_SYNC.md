@@ -13,8 +13,9 @@ Source only. Nothing here is wired to a scheduler, endpoint or live mailbox. Fix
 - A caller that resolves the mailbox credential. Tenant check lives at that caller: it must load the mailbox by `(workspace_id from the session, mailbox_id)` and the campaign by the same workspace before polling. `mailboxId` alone is not a tenant check.
 - DSN/bounce handling: DONE as deterministic detection (`bounce.ts`, RFC 3464-style fixtures, no live data). A DSN is classified `bounce` before the keyword baseline so quoted original text is never misread; failed-recipient and RFC 3463 status extraction exists for the future suppression wiring (NOT persisted yet).
 - Poll error backoff: DONE as a tested helper (`PollBackoff`: bounded exponential backoff with jitter, reset on success). Not yet wired to a scheduler (no scheduler exists).
-- Poll enablement flag and retention policy for `bodyText` beyond the cap.
-- Atomic "persist event + advance checkpoint" in one transaction: today events are recorded one by one and the checkpoint advances after the batch; a crash replays the batch and dedupe makes it idempotent.
+- Poll enablement flag: DONE as `isImapPollEnabled` (LEADLOOM_IMAP_POLL_ENABLED=true; default off). Any future scheduler or endpoint that polls a live mailbox MUST gate on it; fixtures never need it.
+- Retention policy for `bodyText`: the poller persists NO content - only dedupe markers (message_id hash) and the uid watermark touch the DB; classification and body travel only in the returned event. A future caller that persists events owns the content retention rule.
+- Atomic persist+watermark: DONE. `SeenMessageStore.persistBatch` records every dedupe marker and advances the checkpoint in ONE transaction (proven against gated real Postgres: replay idempotent, watermark never regresses). Stores without it keep the old per-message path, where a crash replays the batch and dedupe keeps it idempotent.
 
 ## Safety properties
 - Message content is untrusted data. The poller classifies with a deterministic baseline and returns events. It never acts on content.

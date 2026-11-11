@@ -49,6 +49,33 @@ export class PrismaSeenMessageStore implements SeenMessageStore {
     );
   }
 
+  /**
+   * Records every dedupe marker and advances the checkpoint in ONE transaction:
+   * a crash can never leave markers persisted without the watermark. Markers
+   * stay ON CONFLICT DO NOTHING, so a replayed batch is still idempotent.
+   */
+  async persistBatch(mailboxId: string, keys: string[], watermark: number): Promise<void> {
+    if (!Number.isInteger(watermark) || watermark < 0) throw new Error('watermark must be a non-negative integer');
+    await this.prisma.$transaction(async (tx: any) => {
+      for (const key of keys) {
+        await tx.$executeRawUnsafe(
+          `INSERT INTO outreach_events (id, mailbox_id, type, message_id, event_at)
+           VALUES (gen_random_uuid(), $1::uuid, 'reply_received', $2, now())
+           ON CONFLICT DO NOTHING`,
+          mailboxId,
+          key,
+        );
+      }
+      await tx.$executeRawUnsafe(
+        `INSERT INTO mailbox_sync_state (mailbox_id, last_inbound_uid, updated_at)
+         VALUES ($1::uuid, $2, now())
+         ON CONFLICT (mailbox_id) DO UPDATE SET last_inbound_uid = GREATEST(mailbox_sync_state.last_inbound_uid, EXCLUDED.last_inbound_uid), updated_at = now()`,
+        mailboxId,
+        watermark,
+      );
+    });
+  }
+
   async storedValidity(mailboxId: string): Promise<number | null> {
     const rows: Array<{ uid_validity: bigint | number | null }> = await this.prisma.$queryRawUnsafe(
       `SELECT uid_validity FROM mailbox_sync_state WHERE mailbox_id = $1::uuid`,

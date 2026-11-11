@@ -9,6 +9,7 @@ export * from './transport/smtp-transport';
 export * from './transport/imap-poller';
 export * from './transport/bounce';
 export * from './transport/backoff';
+export * from './transport/poll-enablement';
 export * from './transport/oauth2-token-loop';
 export { buildListUnsubscribeHeaders, buildUnsubscribeToken, classifyReply } from './transport/unsubscribe';
 export type { UnsubscribeLinkInput, ReplyClassificationResult } from './transport/unsubscribe';
