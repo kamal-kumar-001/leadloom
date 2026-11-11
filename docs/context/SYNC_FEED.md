@@ -350,3 +350,8 @@
 
 ### [2026-11-11T12:58:00Z] Web | apps/web mailboxes UI | Non-Breaking
 - Mailboxes page: removed page-wide sample badge, "Active" now "Not paused", rows say "Sending not enabled" and show the configured limit separately from sent count, provider buttons wrap full labels, LinkedIn card says "Partner-limited". UI text only.
+
+---
+
+### [2026-11-11T13:15:00Z] Engine | GET /workspace/connectors/status | Non-Breaking
+- Session-required honest connector status (smtp_imap login-verify only, gmail_oauth not built, linkedin partner-limited, x unverified). Static registry plus the mailbox-connect flag. No sending claims.

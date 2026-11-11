@@ -1,3 +1,4 @@
+import {connectorStatuses} from './modules/connectors/connector-registry';
 import 'reflect-metadata';
 import { createHmac } from 'node:crypto';
 import { PrismaClient } from '@leadloom/database';
@@ -133,6 +134,7 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.get('/workspace/summary',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.summary(s.workspaceId);});
    fastify.get('/workspace/tables',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listTables(s.workspaceId);});
    fastify.get('/workspace/mailboxes',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listMailboxes(s.workspaceId);});
+   fastify.get('/workspace/connectors/status',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return {connectors:connectorStatuses()};});
    fastify.get('/workspace/suppressions',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listSuppressions(s.workspaceId);});
    fastify.get('/workspace/experiments',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listExperiments(s.workspaceId);});
    fastify.get('/workspace/campaigns',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listCampaigns(s.workspaceId);});

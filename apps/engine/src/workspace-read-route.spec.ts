@@ -14,7 +14,7 @@ describe('workspace read routes',()=>{
   const app=await createApplication({credentials,outbound,sessionKey:key,reads});
   try{
    const s=app.getHttpAdapter().getInstance();
-   for(const u of ['summary','tables','mailboxes','campaigns','suppressions','experiments']){
+   for(const u of ['summary','tables','mailboxes','campaigns','suppressions','experiments','connectors/status']){
     expect((await s.inject({method:'GET',url:'/workspace/'+u})).statusCode).toBe(401);
    }
    const r=await s.inject({method:'GET',url:'/workspace/summary?workspaceId='+randomUUID(),headers:{authorization:'Bearer '+token()}});
