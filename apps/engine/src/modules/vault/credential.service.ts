@@ -10,14 +10,21 @@ export interface StoredCredential {
   maskedKey: string;
   payload: EncryptedPayload;
   createdAt: Date;
+  /** Persisted verification state. isValid is true only after a live test-connection succeeded. */
+  isValid: boolean;
+  lastVerifiedAt: Date | null;
 }
 
 /** Every query must include workspace scope from authenticated server context. */
 export interface CredentialRepository {
   insert(record: StoredCredential): Promise<void>;
   find(workspaceId: string, credentialId: string): Promise<StoredCredential | null>;
+  /** Latest stored credential for a provider, or null. */
+  findLatestByProvider(workspaceId: string, provider: BYOKProvider): Promise<StoredCredential | null>;
   list(workspaceId: string): Promise<StoredCredential[]>;
   delete(workspaceId: string, credentialId: string): Promise<boolean>;
+  /** Records the outcome of a live test-connection. ok=false marks the key unverified. */
+  markTestResult(workspaceId: string, credentialId: string, ok: boolean, at: Date): Promise<void>;
 }
 
 /**
@@ -38,6 +45,7 @@ export class CredentialService {
       const record: StoredCredential = {
         id, workspaceId, provider: request.provider, label: request.label ?? null,
         maskedKey: VaultService.maskKey(plaintext), createdAt: new Date(),
+        isValid: false, lastVerifiedAt: null,
         payload: this.vault.encrypt(plaintext, { workspaceId, credentialId: id, provider: request.provider }),
       };
       await this.repository.insert(record);
@@ -67,6 +75,18 @@ export class CredentialService {
     return this.repository.delete(workspaceId, id);
   }
 
+  async findLatestByProvider(workspaceId: string, provider: BYOKProvider): Promise<StoredCredential | null> {
+    this.assertScope(workspaceId);
+    const record = await this.repository.findLatestByProvider(workspaceId, provider);
+    if (record && record.workspaceId !== workspaceId) throw new Error('Credential scope mismatch');
+    return record;
+  }
+
+  async markTestResult(workspaceId: string, id: string, ok: boolean): Promise<void> {
+    this.assertScope(workspaceId);
+    await this.repository.markTestResult(workspaceId, id, ok, new Date());
+  }
+
   private assertScope(workspaceId: string): void {
     if (!workspaceId.trim()) throw new Error('Authenticated workspace required');
   }
@@ -74,9 +94,11 @@ export class CredentialService {
   private masked(record: StoredCredential): MaskedBYOKCredential {
     return MaskedBYOKCredentialSchema.parse({
       id: record.id, provider: record.provider, label: record.label, maskedKey: record.maskedKey,
-      // Saved is not proof that a provider accepted the key. No paid verification
-      // calls happen here. False means unverified until the execution boundary checks.
-      isValid: false, quotaRemaining: null, lastVerifiedAt: null, createdAt: record.createdAt.toISOString(),
+      // Persisted verification truth: a saved key is unverified until a live
+      // test-connection succeeds; only that boundary may set isValid true.
+      isValid: record.isValid, quotaRemaining: null,
+      lastVerifiedAt: record.lastVerifiedAt ? record.lastVerifiedAt.toISOString() : null,
+      createdAt: record.createdAt.toISOString(),
     });
   }
 }

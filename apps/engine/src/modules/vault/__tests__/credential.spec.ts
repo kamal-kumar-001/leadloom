@@ -8,6 +8,14 @@ class MemoryRepo implements CredentialRepository {
   async find(workspaceId: string, id: string) { const r = this.rows.get(id); return r?.workspaceId === workspaceId ? r : null; }
   async list(workspaceId: string) { return [...this.rows.values()].filter(r => r.workspaceId === workspaceId); }
   async delete(workspaceId: string, id: string) { const r = await this.find(workspaceId, id); return r ? this.rows.delete(id) : false; }
+  async findLatestByProvider(workspaceId: string, provider: string) {
+    return [...this.rows.values()].filter(r => r.workspaceId === workspaceId && r.provider === provider)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
+  }
+  async markTestResult(workspaceId: string, id: string, ok: boolean, at: Date) {
+    const r = await this.find(workspaceId, id);
+    if (r) { r.isValid = ok; r.lastVerifiedAt = at; }
+  }
 }
 const setup = () => {
   const repo = new MemoryRepo(), vault = new VaultService({ currentVersion: 1, keys: new Map([[1, randomBytes(32)]]) });
@@ -22,6 +30,31 @@ describe('Credential service repository and public-contract boundary', () => {
     const stored = repo.rows.get(response.id)!;
     expect(stored.payload.ciphertext.toString('utf8')).not.toBe(body.apiKey);
     expect(Object.keys(stored)).not.toContain('apiKey');
+  });
+  it('reflects persisted test results in masked output and scopes them by tenant', async () => {
+    const { service } = setup(), record = await service.save('tenant-a', body);
+    expect(record.isValid).toBe(false);
+    expect(record.lastVerifiedAt).toBeNull();
+    await service.markTestResult('tenant-a', record.id, true);
+    const after = (await service.list('tenant-a')).find(r => r.id === record.id)!;
+    expect(after.isValid).toBe(true);
+    expect(after.lastVerifiedAt).toBeTruthy();
+    // A failed live test marks the key unverified again; nothing is left stale.
+    await service.markTestResult('tenant-a', record.id, false);
+    const failed = (await service.list('tenant-a')).find(r => r.id === record.id)!;
+    expect(failed.isValid).toBe(false);
+    expect(failed.lastVerifiedAt).toBeTruthy();
+    expect((await service.list('tenant-b'))).toEqual([]);
+  });
+  it('finds the latest credential per provider within the tenant scope', async () => {
+    const { service } = setup();
+    const first = await service.save('tenant-a', body);
+    await new Promise(r => setTimeout(r, 5));
+    const second = await service.save('tenant-a', body);
+    const found = await service.findLatestByProvider('tenant-a', 'openai');
+    expect(found?.id).toBe(second.id);
+    expect(found?.id).not.toBe(first.id);
+    expect(await service.findLatestByProvider('tenant-b', 'openai')).toBeNull();
   });
   it('isolates list, use and deletion by tenant', async () => {
     const { service } = setup(), record = await service.save('tenant-a', body);

@@ -16,12 +16,17 @@ export class PrismaCredentialRepository implements CredentialRepository {
       label: record.label, maskedKey: record.maskedKey, createdAt: record.createdAt,
       encryptedKeyCiphertext: p.ciphertext, iv: p.iv, authTag: p.authTag,
       wrappedDek: p.wrappedDek.ciphertext, dekIv: p.wrappedDek.iv, dekAuthTag: p.wrappedDek.authTag,
-      keyVersion: p.keyVersion, algorithm: p.algorithm, isValid: false,
+      keyVersion: p.keyVersion, algorithm: p.algorithm, isValid: false, lastVerifiedAt: null,
     } });
   }
 
   async find(workspaceId: string, credentialId: string): Promise<StoredCredential | null> {
     const row = await this.client.byokCredential.findFirst({ where: { id: credentialId, workspaceId } });
+    return row ? this.fromRow(row) : null;
+  }
+
+  async findLatestByProvider(workspaceId: string, provider: BYOKProvider): Promise<StoredCredential | null> {
+    const row = await this.client.byokCredential.findFirst({ where: { workspaceId, provider }, orderBy: { createdAt: 'desc' } });
     return row ? this.fromRow(row) : null;
   }
 
@@ -33,6 +38,13 @@ export class PrismaCredentialRepository implements CredentialRepository {
   async delete(workspaceId: string, credentialId: string): Promise<boolean> {
     const result = await this.client.byokCredential.deleteMany({ where: { id: credentialId, workspaceId } });
     return result.count > 0;
+  }
+
+  async markTestResult(workspaceId: string, credentialId: string, ok: boolean, at: Date): Promise<void> {
+    await this.client.byokCredential.updateMany({
+      where: { id: credentialId, workspaceId },
+      data: { isValid: ok, lastVerifiedAt: at },
+    });
   }
 
   /** Compare-and-swap avoids overwriting a concurrent rotation/update. */
@@ -53,6 +65,7 @@ export class PrismaCredentialRepository implements CredentialRepository {
     return {
       id: row.id, workspaceId: row.workspaceId, provider: row.provider as BYOKProvider,
       label: row.label, maskedKey: row.maskedKey, createdAt: row.createdAt,
+      isValid: row.isValid, lastVerifiedAt: row.lastVerifiedAt,
       payload: {
         algorithm: VAULT_ALGORITHM, keyVersion: row.keyVersion,
         ciphertext: Buffer.from(row.encryptedKeyCiphertext), iv: Buffer.from(row.iv), authTag: Buffer.from(row.authTag),

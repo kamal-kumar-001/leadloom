@@ -6,6 +6,7 @@ import { verifySession } from './modules/auth/session';
 import { PrismaAccessGuard } from './modules/auth/access-guard';
 import type { AccessGuard } from './modules/auth/access-guard';
 import { AccountSuspendedError, SignupLimitedError } from './modules/provisioning/provisioning.service';
+import { BYOKProviderEnum } from '@leadloom/contracts';
 import { SlidingWindowLimiter } from './modules/auth/rate-limiter';
 import type { ProvisioningService } from './modules/provisioning/provisioning.service';
 import type { EntitlementService } from './modules/entitlements/entitlements.service';
@@ -43,7 +44,7 @@ Module({})(RuntimeModule);
  * can be exposed. Health explicitly reports dependency state as unconfigured.
  */
 export interface RuntimeServices {
- credentials: Pick<CredentialService,'save'|'list'|'delete'>;
+ credentials: Pick<CredentialService,'save'|'list'|'delete'|'use'|'markTestResult'|'findLatestByProvider'>;
  outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'|'listInboundReplies'>;
  sessionKey: Buffer;
  /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
@@ -67,6 +68,7 @@ export interface RuntimeServices {
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
  /** Optional: read-only waterfall connector registry reconciled with stored BYOK credentials (masked only). */
  waterfallConnectors?: { list(workspaceId: string): Promise<unknown> };
+ connectorTest?: import('./modules/waterfall/connectors/test-connection.service.js').TestConnectionService;
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
  /** Optional: when provided, plan/feature gates are enforced server-side (main gates it behind LEADLOOM_ENTITLEMENTS_ENFORCED). */
  entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'>;
@@ -245,6 +247,29 @@ export async function createApplication(services?:RuntimeServices) {
    const id=z.string().uuid().safeParse(request.params.id);
    if(!id.success)return reply.code(400).send({error:'Invalid credential ID'});
    return {deleted:await services.credentials.delete(session.workspaceId,id.data)};
+  });
+  // Live test-connection. A live test is a REAL request to the provider's API
+  // (see TestConnectionService probes): for most vendors it consumes a credit,
+  // quota, or tokens. It is never a free auth check. The route is inert unless
+  // LEADLOOM_CONNECTORS_LIVE_ENABLED=true; otherwise no egress is possible and
+  // the stored key is not even decrypted. On a completed live test the result
+  // persists as isValid/lastVerifiedAt on the credential row.
+  const TEST_COST_DISCLOSURE='A live test sends a real request to the provider and may consume quota, credits, or tokens.';
+  fastify.post('/vault/credentials/:provider/test',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   const provider=BYOKProviderEnum.safeParse(request.params.provider);
+   if(!provider.success)return reply.code(400).send({error:'Unknown provider'});
+   if(process.env.LEADLOOM_CONNECTORS_LIVE_ENABLED!=='true')
+    return reply.code(503).send({status:'DISABLED',message:'Live connector testing is disabled on this environment',costDisclosure:TEST_COST_DISCLOSURE});
+   if(!services.connectorTest)return reply.code(503).send({status:'DISABLED',message:'Connector testing unavailable',costDisclosure:TEST_COST_DISCLOSURE});
+   const cred=await services.credentials.findLatestByProvider(session.workspaceId,provider.data);
+   if(!cred)return reply.code(404).send({status:'FAILED',message:'No saved key for this provider',costDisclosure:TEST_COST_DISCLOSURE});
+   const result=await services.credentials.use(session.workspaceId,cred.id,(key:Buffer)=>
+    services.connectorTest!.testConnection({workspaceId:session.workspaceId,connectorId:provider.data,apiKey:key.toString('utf8')}));
+   if(result.status==='SUCCESS'||result.status==='FAILED')
+    await services.credentials.markTestResult(session.workspaceId,cred.id,result.status==='SUCCESS');
+   const code=result.status==='FORBIDDEN'?403:result.status==='DISABLED'?503:200;
+   return reply.code(code).send({status:result.status,message:result.message,latencyMs:result.latencyMs??null,error:result.error??null,costDisclosure:TEST_COST_DISCLOSURE});
   });
   // Jobs always enter as pending_approval: approval is enforced server-side and no caller
   // parameter can enqueue a send-reservable job. claim() only picks status='pending' and no
@@ -542,6 +567,8 @@ if(require.main===module) {
     const {createDefaultConnectorRegistry}=await import('./modules/waterfall/connectors/registry.js');
     const {reconcileConnectorStatus}=await import('./modules/waterfall/connector-status.js');
     const registry=createDefaultConnectorRegistry();
+    const {TestConnectionService}=await import('./modules/waterfall/connectors/test-connection.service.js');
+    services.connectorTest=new TestConnectionService(registry,services.entitlements as never);
     services.waterfallConnectors={list:async(workspaceId:string)=>{
      const creds=await prisma!.byokCredential.findMany({where:{workspaceId}});
      return reconcileConnectorStatus(
