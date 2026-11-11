@@ -22,6 +22,11 @@ export class ValidatorController {
     };
   }
 
+  /** Owner-only preview of exact page copy, any status; not a page load. */
+  public async getOwnerPage(experimentId: string, workspaceId: string) {
+    return this.validatorService.getOwnerPage(experimentId, workspaceId);
+  }
+
   /** Owner-only publication boundary: draft -> published and back. */
   public async setPublishStatus(experimentId: string, workspaceId: string, published: boolean): Promise<{ experimentId: string; slug: string; status: string }> {
     return this.validatorService.setPublishStatus(experimentId, workspaceId, published);

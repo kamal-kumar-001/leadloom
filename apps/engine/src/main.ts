@@ -518,6 +518,12 @@ export async function createApplication(services?:RuntimeServices) {
     try{return await services.validator!.generate(session.workspaceId,request.body);}
     catch{return reply.code(400).send({error:'Invalid validation request'});}
    });
+   fastify.get('/validator/experiments/:id/page',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply);if(!session)return;
+    const page=await services.validator!.getOwnerPage(String(request.params.id),session.workspaceId);
+    if(!page)return reply.code(404).send({error:'Experiment not found'});
+    return page;
+   });
    fastify.post('/validator/experiments/:id/publish',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
     if(!await allowed(reply,session.workspaceId,'validator'))return;

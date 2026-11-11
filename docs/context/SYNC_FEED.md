@@ -621,3 +621,10 @@
 - Fixed pre-existing otp-template spec break from v3 palette: regenerated packages/contracts/src/brand.contract.ts via scripts/gen-brand.mjs (EMAIL_BRAND now matches tokens).
 - Verified: engine suite 372 passed (EXIT:0 checked directly); API-level draft 404/publish 200/unpublish 404; real-browser UI flow generate-draft -> publish -> waitlist save -> unpublish. Backfilled prior local e2e pages to published.
 - Source-only; live still 94fa7ab, untouched.
+
+## 2026-11-12 03:12 IST — Owner preview + scorecard detail (validator)
+- Owner-only preview of exact page copy before publish: GET /validator/experiments/:id/page (session, tenant-scoped, any status, does NOT count as a page load); dashboard Preview action opens a modal with the exact headline/subheadline/CTA/survey questions, labeled "Draft - only you can see this".
+- Scorecard detail: click a hypothesis -> GET /validator/experiments/:id/scorecard panel with observed page metrics, owner-recorded outreach metrics, and explicit insufficient-data states ("Pending - not enough signal yet", "No page traffic yet", "No outreach recorded yet... not estimated").
+- Migration note: 20261128 ADD COLUMN DEFAULT 'draft' means any pre-existing production rows become DRAFT (private), never auto-published; the published backfill was local fixture data only.
+- Engine suite: 372 passed, VITEST-EXIT:0 checked directly.
+- Source-only; live still 94fa7ab, untouched.

@@ -5,10 +5,15 @@ import Link from 'next/link';
 import { Badge, Button, Card, EmptyState } from '@leadloom/ui';
 import {
   fetchWorkspaceExperiments,
+  fetchExperimentScorecard,
+  fetchOwnerPage,
   generateExperiment,
   setExperimentPublish,
+  type ExperimentScorecard,
   type WorkspaceExperimentRow,
 } from '../../../lib/engine-client';
+import { ExperimentScorecardPanel } from '../../../components/validator/experiment-scorecard';
+import { PagePreviewModal, type OwnerPagePreview } from '../../../components/validator/page-preview-modal';
 import {
   FlaskConical,
   ExternalLink,
@@ -58,6 +63,9 @@ export default function ValidatorPage() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [scorecard, setScorecard] = useState<ExperimentScorecard | null>(null);
+  const [scorecardLoading, setScorecardLoading] = useState(false);
+  const [preview, setPreview] = useState<OwnerPagePreview | null>(null);
 
   const loadExperiments = useCallback(async () => {
     setIsLoading(true);
@@ -98,6 +106,26 @@ export default function ValidatorPage() {
     setHypothesis('');
     setPreferredSlug('');
     await loadExperiments();
+  }
+
+  async function onViewScorecard(exp: WorkspaceExperimentRow) {
+    setScorecardLoading(true);
+    const res = await fetchExperimentScorecard(exp.id);
+    setScorecardLoading(false);
+    if (res.error || !res.data) {
+      setGenerateError(res.error || 'The scorecard could not be loaded.');
+      return;
+    }
+    setScorecard(res.data);
+  }
+
+  async function onPreview(exp: WorkspaceExperimentRow) {
+    const res = await fetchOwnerPage(exp.id);
+    if (res.error || !res.data) {
+      setGenerateError(res.error || 'The preview could not be loaded.');
+      return;
+    }
+    setPreview(res.data);
   }
 
   async function onTogglePublish(exp: WorkspaceExperimentRow) {
@@ -182,6 +210,9 @@ export default function ValidatorPage() {
         )}
       </Card>
 
+      {scorecardLoading && <p className="text-xs text-text-muted font-mono">Loading scorecard...</p>}
+      {scorecard && <ExperimentScorecardPanel scorecard={scorecard} onClose={() => setScorecard(null)} />}
+
       {/* Workspace experiments (real, persisted) */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -250,7 +281,9 @@ export default function ValidatorPage() {
                   {experiments.map((exp) => (
                     <tr key={exp.id} className="hover:bg-canvas-elevated/40 transition-colors">
                       <td className="py-3 px-4 text-text-primary max-w-md font-medium">
-                        {exp.hypothesis}
+                        <button type="button" onClick={() => onViewScorecard(exp)} className="text-left hover:text-brand-loom hover:underline">
+                          {exp.hypothesis}
+                        </button>
                       </td>
                       <td className="py-3 px-4">
                         {renderVerdictBadge(exp.verdict)}
@@ -274,6 +307,13 @@ export default function ValidatorPage() {
                         )}
                       </td>
                       <td className="py-3 px-4">
+                        <button
+                          type="button"
+                          onClick={() => onPreview(exp)}
+                          className="text-[11px] font-mono text-text-secondary hover:text-text-primary underline mr-2"
+                        >
+                          Preview
+                        </button>
                         {exp.pageStatus === 'published' && exp.slug ? (
                           <span className="inline-flex items-center gap-2">
                             <Link
@@ -376,6 +416,7 @@ export default function ValidatorPage() {
           </Card>
         )}
       </div>
+      {preview && <PagePreviewModal page={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

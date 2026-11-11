@@ -243,6 +243,21 @@ export class ValidatorService {
     return { slug: exp.decomposed.slug, title: sp.title, headline: sp.headline, subheadline: sp.subheadline, heroCtaText: sp.heroCtaText, surveyQuestions: sp.surveyQuestions };
   }
 
+  /** Owner-only preview of the exact page copy (any status). Never increments visitors: previews are not page loads. */
+  public async getOwnerPage(experimentId: string, workspaceId: string): Promise<(PublicSmokePage & { status: string }) | undefined> {
+    if (this.prisma) {
+      const exp = await this.prisma.validationExperiment.findFirst({ where: { id: experimentId, workspaceId } });
+      if (!exp) return undefined;
+      const page = await this.prisma.smokeTestPage.findFirst({ where: { experimentId } });
+      if (!page) return undefined;
+      return { slug: page.slug, title: page.title, headline: page.headline, subheadline: page.subheadline, heroCtaText: page.heroCtaText, surveyQuestions: page.surveyQuestions as SmokePageConfig['surveyQuestions'], status: page.status };
+    }
+    const exp = await this.getExperiment(experimentId, workspaceId);
+    if (!exp) return undefined;
+    const sp = exp.decomposed.smokePage;
+    return { slug: exp.decomposed.slug, title: sp.title, headline: sp.headline, subheadline: sp.subheadline, heroCtaText: sp.heroCtaText, surveyQuestions: sp.surveyQuestions, status: this.pageStatus.get(exp.decomposed.slug) ?? 'draft' };
+  }
+
   public async recordTraffic(slug: string): Promise<void> {
     await this.getPublicPage(slug);
   }

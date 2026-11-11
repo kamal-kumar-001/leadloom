@@ -356,6 +356,38 @@ export interface WorkspaceExperimentRow {
   pageStatus: 'draft' | 'published';
 }
 
+export interface ExperimentScorecard {
+  experimentId: string;
+  hypothesis: string;
+  verdict: string;
+  verdictScore: number | null;
+  metrics: {
+    visitors: number;
+    pageConversions: number;
+    pageConversionRate: number;
+    outreachSent: number;
+    replies: number;
+    replyRate: number;
+    positiveReplies: number;
+    positiveResonanceRate: number;
+    waitlistCount: number;
+  };
+  actionableSummary: string;
+  pageUrl: string;
+  sequenceSubject: string;
+  sequenceBody: string;
+}
+
+export async function fetchExperimentScorecard(experimentId: string): Promise<{ data: ExperimentScorecard | null; error?: string }> {
+  const res = await engineFetch<ExperimentScorecard>(`/validator/experiments/${experimentId}/scorecard`);
+  return { data: res.data, error: res.error };
+}
+
+export async function fetchOwnerPage(experimentId: string): Promise<{ data: (import('../components/validator/page-preview-modal').OwnerPagePreview) | null; error?: string }> {
+  const res = await engineFetch<import('../components/validator/page-preview-modal').OwnerPagePreview>(`/validator/experiments/${experimentId}/page`);
+  return { data: res.data, error: res.error };
+}
+
 export async function setExperimentPublish(experimentId: string, publish: boolean): Promise<{ data: { slug: string; status: string } | null; error?: string }> {
   const res = await engineFetch<{ slug: string; status: string }>(`/validator/experiments/${experimentId}/${publish ? 'publish' : 'unpublish'}`, { method: 'POST', body: '{}' });
   return { data: res.data, error: res.error };
