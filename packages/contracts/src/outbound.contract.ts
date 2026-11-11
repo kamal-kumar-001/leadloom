@@ -60,6 +60,9 @@ export const InboundReplyEventSchema = z.object({
   classification: OutreachReplyClassificationEnum,
   confidence: z.number().min(0).max(1),
   receivedAt: z.string().datetime(),
+  /** Thread headers used for attribution downstream (never trusted for identity on their own). */
+  inReplyTo: z.string().optional(),
+  references: z.array(z.string()).optional(),
 });
 export type InboundReplyEvent = z.infer<typeof InboundReplyEventSchema>;
 

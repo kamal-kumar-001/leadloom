@@ -417,3 +417,7 @@
 ## 2026-11-11 - Engine: G10 ambiguity-safe recipient attribution
 - Recipient-hash fallback no longer picks an arbitrary job when the same recipient appears in multiple campaigns reachable from the polled mailbox: the reply is recorded with attribution 'ambiguous_recipient' (migration 20261123), linked to no job, and halts nothing. Thread headers still resolve exact attribution in that situation; single-campaign multi-step stays recipient_match and halts only that campaign.
 - 11 reply-attribution tests (313 engine total pass), tsc clean.
+## 2026-11-11 - Engine: G10 poll bridge (fixture pipeline wired end-to-end)
+- InboundReplyEvent now carries inReplyTo/references so threading survives the poller boundary.
+- poll-bridge.ts: recordPollEvents() persists each classified event via recordInboundReply (attribution re-derived server-side; the poller's campaignId context is never trusted for attribution) and returns a summary (fetched/recorded/duplicates/halted/ambiguous/unattributed). pollMailboxReplies() wraps it behind the LEADLOOM_IMAP_POLL_ENABLED gate and refuses to run otherwise.
+- Fixture tests: full poll-to-persistence flow with halt, poller dedupe replay, and the enablement gate. 316 engine tests pass, tsc clean. No scheduler/endpoint mounts the poll path yet; live polling remains off.

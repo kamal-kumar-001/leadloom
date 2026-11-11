@@ -131,6 +131,8 @@ export class ImapReplyPoller {
         classification,
         confidence,
         receivedAt: raw.receivedAt.toISOString(),
+        inReplyTo: raw.inReplyTo,
+        references: raw.references,
       });
       if (!this.seen.persistBatch) await this.seen.add(context.mailboxId, key);
       events.push(event);
