@@ -39,8 +39,8 @@ export function GettingStartedChecklist({
     },
     {
       id: 'mailboxes',
-      title: 'Connect a mailbox',
-      description: 'Configure custom domain SPF/DKIM DNS records to route outbound steps with jittered delivery.',
+      title: 'Add a mailbox',
+      description: 'Add a sending mailbox to this workspace. Adding one does not check its DNS or deliverability.',
       href: '/app/mailboxes',
       actionText: 'Open mailboxes',
       isComplete: hasMailboxes,

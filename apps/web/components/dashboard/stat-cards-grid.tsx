@@ -81,7 +81,7 @@ export function StatCardsGrid({ summaryState, onRetry }: StatCardsGridProps) {
     {
       key: 'mailboxes',
       label: 'Outbound Mailboxes',
-      hint: 'Active sender pool',
+      hint: 'Mailboxes in this workspace',
       emptyHint: '0 • No mailboxes added yet',
       href: '/app/mailboxes',
       icon: <Mail className="w-4 h-4 text-signal-verified" />,

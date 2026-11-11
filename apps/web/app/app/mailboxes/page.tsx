@@ -114,10 +114,12 @@ export default function MailboxesPage() {
   const totalSendLimit = mailboxes.reduce((acc, m) => acc + (m.dailySendLimit || 0), 0);
   const totalSentToday = mailboxes.reduce((acc, m) => acc + (m.sentToday || 0), 0);
   const activeCount = mailboxes.filter((m) => !m.isPaused).length;
+  const checked = mailboxes.filter((m) => m.lastHealthCheckAt);
   const avgHealth =
-    mailboxes.length > 0
-      ? `${Math.round(mailboxes.reduce((acc, m) => acc + (m.healthScore || 0), 0) / mailboxes.length)}%`
+    checked.length > 0
+      ? `${Math.round(checked.reduce((acc, m) => acc + (m.healthScore || 0), 0) / checked.length)}%`
       : '—';
+  const pausedCount = mailboxes.length - activeCount;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 font-sans">
@@ -128,7 +130,7 @@ export default function MailboxesPage() {
             Outbound Mailbox Pool
           </h1>
           <p className="text-xs text-text-secondary mt-1">
-            Deliverability engine with jittered dispatch (45-180s) and RFC 8058 one-click unsubscribe.
+            Mailboxes, sender health and the suppression list for this workspace.
           </p>
         </div>
 
@@ -168,12 +170,12 @@ export default function MailboxesPage() {
       {/* Honest Overview Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
-          <div className="text-xs text-text-muted">Total Connected Senders</div>
+          <div className="text-xs text-text-muted">Mailboxes</div>
           <div className="text-2xl font-bold text-text-primary mt-1">
             {isLoading ? '—' : mailboxes.length}
           </div>
           <div className="text-[11px] text-text-muted mt-1">
-            {activeCount} active in sender pool
+            {activeCount} not paused
           </div>
         </Card>
 
@@ -182,7 +184,7 @@ export default function MailboxesPage() {
           <div className="text-2xl font-bold text-text-primary mt-1">
             {isLoading ? '—' : `${totalSentToday} / ${totalSendLimit}`}
           </div>
-          <div className="text-[11px] text-text-muted mt-1">Safe volume threshold</div>
+          <div className="text-[11px] text-text-muted mt-1">Sum of per-mailbox daily limits</div>
         </Card>
 
         <Card className="p-4">
@@ -190,15 +192,15 @@ export default function MailboxesPage() {
           <div className="text-2xl font-bold text-text-primary mt-1">
             {isLoading ? '—' : avgHealth}
           </div>
-          <div className="text-[11px] text-text-muted mt-1">DNS record alignment</div>
+          <div className="text-[11px] text-text-muted mt-1">{checked.length > 0 ? `${checked.length} checked mailbox${checked.length === 1 ? '' : 'es'}` : 'No health check has run yet'}</div>
         </Card>
 
         <Card className="p-4">
-          <div className="text-xs text-text-muted">Dispatch Jitter Timing</div>
-          <div className="text-2xl font-bold text-text-primary mt-1">45-180s</div>
-          <div className="text-[11px] text-brand-weave mt-1 flex items-center gap-1">
-            <Clock className="w-3 h-3" /> Anti-spam rate spreading
+          <div className="text-xs text-text-muted">Paused Mailboxes</div>
+          <div className="text-2xl font-bold text-text-primary mt-1">
+            {isLoading ? '—' : pausedCount}
           </div>
+          <div className="text-[11px] text-text-muted mt-1">Not used for sending</div>
         </Card>
       </div>
 
