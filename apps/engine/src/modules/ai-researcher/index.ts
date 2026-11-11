@@ -4,3 +4,4 @@
 export * from './website-signals.service';
 export * from './website-fetcher';
 export * from './research-leads.service';
+export * from './intent-fixture.service';

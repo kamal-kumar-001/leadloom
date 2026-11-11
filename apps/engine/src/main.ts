@@ -78,6 +78,8 @@ export interface RuntimeServices {
  websiteFetcher?: import('./modules/ai-researcher/website-fetcher.js').SafeWebsiteFetcher;
  /** Optional: persist analyses as rows in the research leads table (mounted with the research API). Values always come from the engine's own heuristic computation. */
  researchLeads?: import('./modules/ai-researcher/research-leads.service.js').ResearchLeadsService;
+ /** Optional: G5 intent signals, fixture-first increment (same flag as G4). Pasted/bundled hiring-board-shaped JSON only - zero egress, every row labeled fixture. Live ATS/board ingestion is a separately gated step. */
+ intentFixture?: import('./modules/ai-researcher/intent-fixture.service.js').IntentFixtureService;
  /** Optional: when provided, plan/feature gates are enforced server-side (main gates it behind LEADLOOM_ENTITLEMENTS_ENFORCED). */
  entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'>;
 }
@@ -483,6 +485,32 @@ export async function createApplication(services?:RuntimeServices) {
     return {items:await services.researchLeads!.listAnalyses(session.workspaceId)};
    });
   }
+  // G5 intent signals, fixture-first: analyze/save/list hiring-board-shaped
+  // JSON fixtures. Pasted JSON only - no fetch variant exists, so nothing in
+  // these routes performs egress. Computed values are engine-only.
+  if(services.intentFixture) {
+   const IntentBody=z.object({fixture:z.unknown()}).strict();
+   fastify.post('/research/intent-fixture',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply);if(!session)return;
+    const parsed=IntentBody.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:'Invalid intent fixture request'});
+    const result=services.intentFixture!.analyze(parsed.data.fixture);
+    if(!result.ok)return reply.code(422).send({status:'INVALID_FIXTURE',message:result.error});
+    return {status:'OK',input:'pasted_fixture',analysis:result.analysis};
+   });
+   fastify.post('/research/intent-fixture/save',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    const parsed=IntentBody.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:'Invalid intent fixture save request'});
+    const saved=await services.intentFixture!.saveAnalysis(session.workspaceId,parsed.data.fixture);
+    if(!saved.ok)return reply.code(422).send({status:'INVALID_FIXTURE',message:saved.error});
+    return {status:'SAVED',tableId:saved.tableId,rowId:saved.rowId};
+   });
+   fastify.get('/research/intent-signals',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply);if(!session)return;
+    return {items:await services.intentFixture!.listAnalyses(session.workspaceId)};
+   });
+  }
   if(services.validator) {
    fastify.post('/validator/experiments',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
@@ -703,6 +731,8 @@ if(require.main===module) {
     services.websiteSignals=new WebsiteSignalService();
     const {ResearchLeadsService}=await import('./modules/ai-researcher/research-leads.service.js');
     services.researchLeads=new ResearchLeadsService(prisma);
+    const {IntentFixtureService}=await import('./modules/ai-researcher/intent-fixture.service.js');
+    services.intentFixture=new IntentFixtureService(prisma);
     if(process.env.LEADLOOM_RESEARCH_FETCH_ENABLED==='true') {
      const {SafeWebsiteFetcher}=await import('./modules/ai-researcher/website-fetcher.js');
      const PRIV=process.env.NODE_ENV!=='production'&&process.env.LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS==='true';

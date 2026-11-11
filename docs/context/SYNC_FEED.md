@@ -580,3 +580,9 @@
 ### [2026-11-12 02:10 IST] docs/ENGINEERING.md: per-change ruleset (Kamal 2:06-2:07 voice direction)
 - Repo-maintained engineering checklist, grounded in failures we actually hit: shared tokens (no opacity modifiers on CSS-var colors - they drop silently), component extraction/no oversized files, UI/UX states (loading/empty/error/success, keyboard/focus, responsive, honest action feedback), raw-SQL ::uuid/::jsonb casts (PGlite masks type errors; real-PG e2e proves), tenant scoping/fail-closed routes, honest UI copy and gates, shared-host load limits, real-browser verification before "done", git/docs hygiene. Rule-admission bar: a real failure or owner decision plus a runnable/inspectable check - no aspirational rules.
 - Also: extracted SenderPinSelect out of the approval-queue inline block (first application of the components rule).
+
+### [2026-11-12 02:16 IST] G5 fixture-first intent signals (source-only, local-verified)
+- New IntentFixtureService (apps/engine/src/modules/ai-researcher/intent-fixture.service.ts): normalizes hiring-board-shaped JSON fixtures ({ company, jobs: [...] }) into intent-signal rows. Zero egress - pasted JSON only, no fetch variant. Honesty labels: Source='fixture_hiring_board_sample', per-row caveat, fixture badge in UI.
+- Routes behind LEADLOOM_RESEARCH_API_ENABLED: POST /research/intent-fixture (analyze), POST /research/intent-fixture/save (write role), GET /research/intent-signals. Persisted to per-workspace 'Intent signals (fixture)' table via the G4 tables pattern.
+- Web: new IntentFixturePanel component (components/research/) on the Research page - paste JSON or load the bundled sample, normalize, save, list saved rows. 4 new engine tests; suite 365 passed / 36 skipped. Real-browser e2e verified (g5-intent-fixture.png).
+- Live ATS/EDGAR/social ingestion remains gated on verified access rules - gap doc G5 row updated.

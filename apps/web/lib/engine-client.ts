@@ -709,6 +709,33 @@ export async function fetchResearchLeads(): Promise<{ data: { items: SavedResear
   return { data: res.data, error: res.error };
 }
 
+export interface IntentFixtureAnalysis {
+  fixture: true;
+  caveat: string;
+  company: string;
+  signalType: 'hiring';
+  jobCount: number;
+  sampleTitles: string[];
+  locations: string[];
+  latestPostingDate: string | null;
+  source: 'fixture_hiring_board_sample';
+}
+
+export async function analyzeIntentFixture(fixture: unknown): Promise<{ data: { status: string; input?: string; analysis?: IntentFixtureAnalysis; message?: string } | null; error?: string; status?: number }> {
+  const res = await engineFetch<{ status: string; input?: string; analysis?: IntentFixtureAnalysis; message?: string }>('/research/intent-fixture', { method: 'POST', body: JSON.stringify({ fixture }) });
+  return { data: res.data, error: res.error, status: res.status };
+}
+
+export async function saveIntentFixture(fixture: unknown): Promise<{ data: { status: string; tableId?: string; rowId?: string; message?: string } | null; error?: string; status?: number }> {
+  const res = await engineFetch<{ status: string; tableId?: string; rowId?: string; message?: string }>('/research/intent-fixture/save', { method: 'POST', body: JSON.stringify({ fixture }) });
+  return { data: res.data, error: res.error, status: res.status };
+}
+
+export async function fetchIntentSignals(): Promise<{ data: { items: SavedResearchRow[] } | null; error?: string }> {
+  const res = await engineFetch<{ items: SavedResearchRow[] }>('/research/intent-signals', { method: 'GET' });
+  return { data: res.data, error: res.error };
+}
+
 export interface WorkspaceTableRows {
   table: { id: string; name: string; rowCount: number };
   columns: { id: string; name: string; type: string }[];

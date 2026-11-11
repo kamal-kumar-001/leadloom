@@ -11,6 +11,7 @@ import {
   type WebsiteSignalsResult,
   type SavedResearchRow,
 } from '../../../lib/engine-client';
+import { IntentFixturePanel } from '../../../components/research/intent-fixture-panel';
 
 export default function ResearchPage() {
   const [url, setUrl] = useState('');
@@ -227,6 +228,10 @@ export default function ResearchPage() {
           </div>
         </Card>
       )}
+
+      <div className="border-t border-[var(--border)] pt-6">
+        <IntentFixturePanel />
+      </div>
     </div>
   );
 }
