@@ -307,6 +307,10 @@ model Mailbox {
   sentToday             Int                 @default(0) @map("sent_today")
   isPaused              Boolean             @default(false) @map("is_paused")
   lastHealthCheckAt     DateTime?           @map("last_health_check_at") @db.Timestamptz
+  authType              String              @default("oauth2") @map("auth_type") @db.VarChar(16)
+  connectionStatus      String              @default("unknown") @map("connection_status") @db.VarChar(16)
+  connectionCheckedAt   DateTime?           @map("connection_checked_at") @db.Timestamptz
+  connectionErrorCode   String?             @map("connection_error_code") @db.VarChar(32)
   createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz
 

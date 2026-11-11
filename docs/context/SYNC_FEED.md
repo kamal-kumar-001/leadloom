@@ -319,3 +319,9 @@
 - Verified end to end (two to three real accounts): invite, accept after sign-in, sign in again, role shown as Member, members and pending lists, revoke (revoked invitee sees nothing to accept), role change, remove (member session ends and sign-in is refused), member sees no invite controls.
 - Change: an address that already has an account can now be invited. Nothing moves until that user accepts while signed in; accept still refuses unless their own workspace is pristine (`has_workspace_data`). Engine unit + real-Postgres tests updated and pass (17/17). Copy updated; still "No email was sent".
 - Added `docs/plan/PUMPGTM_GAP.md` (sourced gap list and build plan).
+
+---
+
+### [2026-11-11T17:30:00+05:30] Continuity worker (Instinct) | mailbox connect by app password (engine) | Non-Breaking
+- New additive migration `20261118_mailbox_password_auth` (auth_type, connection_status, connection_checked_at, connection_error_code). Not applied in production.
+- Engine `modules/mailbox-connect` + routes GET `/workspace/mailbox-presets`, POST `/workspace/mailboxes/connect`, POST `/workspace/mailboxes/:id/test`, DELETE `/workspace/mailboxes/:id`; admin only, off unless `LEADLOOM_MAILBOX_CONNECT_ENABLED=true`. Login check only, no mail sent; password sealed in the vault envelope, never returned. SMTP verified against a local SMTP server; IMAP not yet verified against a real server. `listMailboxes` now returns status fields. Web UI not built yet.

@@ -47,6 +47,7 @@ export class WorkspaceReadService {
         id: true, email: true, spfStatus: true, dkimStatus: true, dmarcStatus: true,
         healthScore: true, dailySendLimit: true, sentToday: true, isPaused: true,
         lastHealthCheckAt: true, createdAt: true,
+        authType: true, connectionStatus: true, connectionCheckedAt: true, connectionErrorCode: true,
       },
       orderBy: { createdAt: 'desc' },
       take: LIMIT,

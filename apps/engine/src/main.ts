@@ -27,6 +27,7 @@ import type { ValidatorController } from './modules/validator/validator.controll
 import { WorkspaceReadService } from './modules/workspace-read/workspace-read.service';
 import type { MemberService } from './modules/invitations/members';
 import type { InvitationService } from './modules/invitations/invitation.service';
+import type { MailboxConnectService } from './modules/mailbox-connect/mailbox-connect.service';
 import { z } from 'zod';
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -59,6 +60,8 @@ export interface RuntimeServices {
  /** Optional: admin-only workspace invitations (default off; LEADLOOM_TEAM_INVITES_ENABLED). Sends no mail. */
  invitations?: Pick<InvitationService,'invite'|'list'|'revoke'|'mine'|'accept'>;
  members?: Pick<MemberService,'list'|'setRole'|'remove'>;
+ /** Optional: admin-only mailbox connect by IMAP/SMTP password (default off; LEADLOOM_MAILBOX_CONNECT_ENABLED). Sends no mail. */
+ mailboxConnect?: Pick<MailboxConnectService,'connect'|'test'|'remove'>;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
@@ -188,6 +191,34 @@ export async function createApplication(services?:RuntimeServices) {
     const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid member ID'});
     const r=await mem.remove(s.workspaceId,s.sub,id.data);
     return r.ok?{removed:true}:reply.code(changeStatus(r)).send({error:'Member not changed',code:r.reason});
+   });
+  }
+  if(services.mailboxConnect) {
+   const mc=services.mailboxConnect;
+   const adminOnlyMb=async(request:any,reply:any)=>{const s=await authorize(request,reply,true);if(!s)return null;if(!isAdmin(s)){reply.code(403).send({error:'Admin role required'});return null;}return s;};
+   const mbLimiter=new SlidingWindowLimiter(10,60_000);
+   const ConnectBody=z.object({email:z.string().max(320),password:z.string().min(1).max(512),smtpHost:z.string().max(253),smtpPort:z.number().int(),imapHost:z.string().max(253),imapPort:z.number().int()}).strict();
+   fastify.get('/workspace/mailbox-presets',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;const {MAILBOX_PRESETS}=await import('./modules/mailbox-connect/presets.js');return MAILBOX_PRESETS;});
+   fastify.post('/workspace/mailboxes/connect',async(request:any,reply:any)=>{
+    const s=await adminOnlyMb(request,reply);if(!s)return;
+    if(!mbLimiter.take(s.workspaceId))return reply.code(429).send({error:'Too many requests'});
+    const p=ConnectBody.safeParse(request.body);if(!p.success)return reply.code(400).send({error:'Invalid mailbox request',code:'invalid_request'});
+    const r=await mc.connect(s.workspaceId,p.data);
+    if(r.ok)return reply.code(201).send({mailbox:r.mailbox,result:r.result,mailSent:false});
+    const status=r.reason==='already_connected'?409:r.reason==='connection_failed'?422:400;
+    return reply.code(status).send({error:'Mailbox not connected',code:r.reason,...(r.result?{result:r.result}:{})});
+   });
+   fastify.post('/workspace/mailboxes/:id/test',async(request:any,reply:any)=>{
+    const s=await adminOnlyMb(request,reply);if(!s)return;
+    if(!mbLimiter.take(s.workspaceId))return reply.code(429).send({error:'Too many requests'});
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid mailbox ID'});
+    const r=await mc.test(s.workspaceId,id.data);
+    return r.ok?{mailbox:r.mailbox,result:r.result,mailSent:false}:reply.code(404).send({error:'Mailbox not found'});
+   });
+   fastify.delete('/workspace/mailboxes/:id',async(request:any,reply:any)=>{
+    const s=await adminOnlyMb(request,reply);if(!s)return;
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid mailbox ID'});
+    return (await mc.remove(s.workspaceId,id.data))?{removed:true}:reply.code(404).send({error:'Mailbox not found'});
    });
   }
   fastify.get('/vault/credentials',async(request:any,reply:any)=>{
@@ -426,6 +457,12 @@ if(require.main===module) {
     const {MemberService}=await import('./modules/invitations/members.js');
     const {PrismaMemberStore}=await import('./modules/invitations/prisma-member-store.js');
     services.members=new MemberService(new PrismaMemberStore(prisma));
+   }
+   if(process.env.LEADLOOM_MAILBOX_CONNECT_ENABLED==='true') {
+    const {MailboxConnectService}=await import('./modules/mailbox-connect/mailbox-connect.service.js');
+    const {PrismaMailboxConnectStore}=await import('./modules/mailbox-connect/prisma-mailbox-connect-store.js');
+    const {RealConnectionVerifier}=await import('./modules/mailbox-connect/verifier.js');
+    services.mailboxConnect=new MailboxConnectService(new PrismaMailboxConnectStore(prisma,vault),new RealConnectionVerifier(),{allowPrivateHosts:process.env.NODE_ENV!=='production'&&process.env.LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS==='true'});
    }
    if(process.env.LEADLOOM_PASSWORD_AUTH_ENABLED==='true') {
     const {createTransactionalEmail}=await import('./modules/email/transactional.js');
