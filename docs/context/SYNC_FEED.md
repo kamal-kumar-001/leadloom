@@ -435,3 +435,14 @@
 - Broken "Test Ping" button hidden unless a connector is testable (no engine route exists; test-connection stays env-gated).
 - Configure/Save-key gated to providers the vault accepts (BYOKProviderEnum); others get an honest "key storage not available yet" notice, and the modal itself refuses non-enum ids.
 - Browser-verified; web tsc clean.
+### [2026-11-11T15:55:00Z] Team Alpha | contracts/waterfall.contract.ts | Non-Breaking
+- Extended `BYOKProviderEnum` with pdl, zerobounce, neverbounce, serper, ollama; every engine-registered connector can now store an encrypted key (storage only, no provider call implied).
+- Connector card states are now honest: stored-unverified vs verified. (05d8184)
+
+---
+
+### [2026-11-11T16:20:00Z] Team Alpha | engine /vault/credentials/:provider/test | Non-Breaking
+- New session+write-role route for live test-connection. Inert unless LEADLOOM_CONNECTORS_LIVE_ENABLED=true; returns 503 DISABLED with cost disclosure otherwise, without decrypting the key.
+- Credential isValid/lastVerifiedAt are now persisted truth surfaced via the masked list. (9b501f8)
+
+---

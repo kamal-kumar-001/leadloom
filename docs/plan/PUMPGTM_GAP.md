@@ -33,7 +33,7 @@ Status words follow `MISSING_WORK.md`: Live, Wired, Parked, Sample, Missing.
 
 | # | Capability | LeadLoom today | Gap |
 |---|---|---|---|
-| G1 | Workspace, sign-in, team invites | Live: password auth, OTP. Invites built in engine behind a flag, off in production | Flag off; no way to enable and no invitee-notification path; roles/remove not exercised |
+| G1 | Workspace, sign-in, team invites | Live: password auth, OTP. Invites verified end-to-end locally (two real accounts, browser): create invite (honest "no email sent" copy), invitee sees pending invitation with role/expiry/inviter, accept moves account into the inviter's workspace and ends the session for re-auth, member role blocked from inviting (UI hides, API 403), role change works, revoke works and hides the invite, expired invites are filtered and direct accept rejected, removal suspends non-destructively (UI says "suspended"), owner self-removal refused | Flag off in production; no invitee-notification path (no email); a suspended member has no self-serve rejoin path — product decision for Kamal. Production enablement is a separate approved release step |
 | G2 | Mailbox connect (Gmail/M365/IMAP) | Parked library only (SMTP/IMAP, OAuth2 loop). No connect route, no UI | Connect routes, encrypted credential storage, test, UI with setup steps |
 | G3 | Send engine and sequences | Parked. Queue enqueues, no worker consumes. Sending off | Worker, pacing, reply detection, suppression, approval gate |
 | G4 | Buyer discovery from a website | Missing | Website-to-ICP step, intent sources, relevance reason per lead |
