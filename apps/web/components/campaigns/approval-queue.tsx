@@ -46,7 +46,13 @@ function SenderPinSelect({
   const pool = item.availableMailboxIds ?? item.senderMailboxIds ?? [];
   if (pool.length === 0)
     return <span className="text-text-secondary">no sender mailboxes assigned to this campaign</span>;
+  const emailOf = (id: string) => mailboxes.find((m) => m.id === id)?.email ?? `${id.slice(0, 8)}...`;
+  // The reviewer must SEE the actual sender identities they are signing off,
+  // not a mailbox count: pinned shows the one mailbox, rotation lists the pool.
+  const poolEmails = pool.map(emailOf);
+  const shown = poolEmails.slice(0, 3).join(', ') + (poolEmails.length > 3 ? ` +${poolEmails.length - 3} more` : '');
   return (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
     <select
       data-job-id={item.id}
       value={item.senderMailboxId ?? ''}
@@ -59,10 +65,16 @@ function SenderPinSelect({
       </option>
       {pool.map((id) => (
         <option key={id} value={id}>
-          Pin to {mailboxes.find((m) => m.id === id)?.email ?? `${id.slice(0, 8)}...`}
+          Pin to {emailOf(id)}
         </option>
       ))}
     </select>
+    <span className="text-text-secondary font-sans normal-case">
+      {item.senderMailboxId
+        ? `will send from ${emailOf(item.senderMailboxId)} (pinned - signed into approval)`
+        : `will send from one of: ${shown}`}
+    </span>
+    </span>
   );
 }
 

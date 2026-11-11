@@ -15,6 +15,13 @@ const connection = (d: any): SqlConnection => ({
 });
 const STEPS = JSON.stringify([{ stepNumber: 1, subject: 'Quick question about {{company}}', bodyTemplate: 'Hi {{name}} from {{company}}' }]);
 const status = async (id: string) => (await pg.query<{ status: string }>('SELECT status FROM outbound_jobs WHERE id=$1', [id])).rows[0].status;
+/** Assign one sender mailbox to the campaign pool (approval fails closed without one - G9). */
+const assignMailbox = async () => {
+  const mailboxId = randomUUID();
+  await pg.query("INSERT INTO mailboxes (id,workspace_id,email,smtp_host,smtp_port,imap_host,imap_port,updated_at) VALUES ($1,$2,$3,'smtp.example.invalid',587,'imap.example.invalid',993,$4)", [mailboxId, workspaceId, `sender-${mailboxId.slice(0, 6)}@example.invalid`, now]);
+  await pg.query('INSERT INTO campaign_mailboxes (campaign_id,mailbox_id,workspace_id) VALUES ($1,$2,$3)', [campaignId, mailboxId, workspaceId]);
+  return mailboxId;
+};
 
 beforeEach(async () => {
   pg = new PGlite({ extensions: { vector } });
@@ -49,6 +56,7 @@ describe('G9 resolved-content wiring', () => {
   });
 
   it('editing a linked recipient row invalidates a held approval (live fields, not a frozen copy)', async () => {
+    await assignMailbox();
     const recipients = new CampaignRecipientsRepository(connection(pg));
     await recipients.addRecipients(workspaceId, campaignId, [{ email: 'ada@example.invalid', firstName: 'Ada', companyName: 'Acme Corp' }]);
     const [row] = await recipients.listRecipients(workspaceId, campaignId);
@@ -75,6 +83,7 @@ describe('G9 resolved-content wiring', () => {
   });
 
   it('a recipient row losing a needed value leaves the job held with a named resolution error', async () => {
+    await assignMailbox();
     const recipients = new CampaignRecipientsRepository(connection(pg));
     await recipients.addRecipients(workspaceId, campaignId, [{ email: 'ada@example.invalid', firstName: 'Ada', companyName: 'Acme Corp' }]);
     const [row] = await recipients.listRecipients(workspaceId, campaignId);
@@ -88,5 +97,30 @@ describe('G9 resolved-content wiring', () => {
     const res = await repo.approve(workspaceId, { jobIds: [id] });
     expect(res.approvedCount).toBe(0); // cannot approve an unresolvable message
     expect(await status(id)).toBe('pending_approval');
+  });
+
+
+  it('approve fails closed when the campaign has no sender mailboxes (G9: incomplete context, not an approval to send)', async () => {
+    const recipients = new CampaignRecipientsRepository(connection(pg));
+    await recipients.addRecipients(workspaceId, campaignId, [{ email: 'ada@example.invalid', firstName: 'Ada', companyName: 'Acme Corp' }]);
+    const [row] = await recipients.listRecipients(workspaceId, campaignId);
+    const id = await repo.enqueue({
+      workspaceId, campaignId, recipientEmail: 'ada@example.invalid', idempotencyKey: randomUUID(), stepNumber: 1, scheduledAt: now, recipientId: row.id,
+    });
+    const res = await repo.approve(workspaceId, { jobIds: [id] });
+    expect(res.approvedCount).toBe(0);
+    expect(await status(id)).toBe('pending_approval');
+    const [item] = await repo.listPendingApprovals(workspaceId);
+    expect(item.resolutionErrors?.join(' ')).toContain('No sender mailbox');
+    // Assigning a mailbox completes the context. The sender context changed
+    // since queueing, so the first approval only refreshes the snapshot and a
+    // second deliberate approval signs it off (the standard stale flow).
+    await assignMailbox();
+    const res2 = await repo.approve(workspaceId, { jobIds: [id] });
+    expect(res2.approvedCount).toBe(0);
+    expect(res2.staleCount).toBe(1);
+    const res3 = await repo.approve(workspaceId, { jobIds: [id] });
+    expect(res3.approvedCount).toBe(1);
+    expect(await status(id)).toBe('approved');
   });
 });

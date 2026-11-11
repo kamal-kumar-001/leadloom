@@ -88,6 +88,10 @@ export class AtomicDispatchRepository implements DispatchRepository {
         'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, campaignId]);
       mailboxIds = mailboxRows.map((m) => m.mailbox_id);
     }
+    // Fails closed: a held message with no sender context is explicitly
+    // incomplete context (G9), never an approval to send. The item stays held
+    // and the reviewer sees this as a resolution error that blocks Approve.
+    if (mailboxIds.length === 0) return { ok: false, errors: ['No sender mailbox is assigned to this campaign; assign one before this message can be approved'] };
     const fields = await this.recipientFieldsFor(db, workspaceId, job);
     const res = buildResolvedApprovalSnapshot({
       campaignId, stepNumber: job.step_number, recipientEmail: job.recipient_email,
@@ -319,19 +323,18 @@ export class AtomicDispatchRepository implements DispatchRepository {
       // first approval only refreshes the snapshot; a second deliberate approval signs off.
       let resolutionErrors: string[] | undefined;
       try {
-        if (!r.approval_content_hash || !stored) {
+        // Resolution is checked for EVERY held item - including ones with no
+        // stored snapshot yet - so incomplete context (e.g. no sender mailbox)
+        // is surfaced as a named error that blocks Approve, not just a stale flag.
+        const cur = await this.currentApproval(this.database, workspaceId, r.campaign_id, {
+          recipient_email: r.recipient_email, recipient_id: r.recipient_id, recipient_fields: r.recipient_fields,
+          step_number: r.step_number, steps, sender_mailbox_id: r.sender_mailbox_id,
+        });
+        if (!cur.ok) {
           stale = true;
+          resolutionErrors = cur.errors;
         } else {
-          const cur = await this.currentApproval(this.database, workspaceId, r.campaign_id, {
-            recipient_email: r.recipient_email, recipient_id: r.recipient_id, recipient_fields: r.recipient_fields,
-            step_number: r.step_number, steps, sender_mailbox_id: r.sender_mailbox_id,
-          });
-          if (!cur.ok) {
-            stale = true;
-            resolutionErrors = cur.errors;
-          } else {
-            stale = cur.hash !== r.approval_content_hash;
-          }
+          stale = !r.approval_content_hash || !stored || cur.hash !== r.approval_content_hash;
         }
       } catch {
         stale = true;
