@@ -586,3 +586,8 @@
 - Routes behind LEADLOOM_RESEARCH_API_ENABLED: POST /research/intent-fixture (analyze), POST /research/intent-fixture/save (write role), GET /research/intent-signals. Persisted to per-workspace 'Intent signals (fixture)' table via the G4 tables pattern.
 - Web: new IntentFixturePanel component (components/research/) on the Research page - paste JSON or load the bundled sample, normalize, save, list saved rows. 4 new engine tests; suite 365 passed / 36 skipped. Real-browser e2e verified (g5-intent-fixture.png).
 - Live ATS/EDGAR/social ingestion remains gated on verified access rules - gap doc G5 row updated.
+
+### [2026-11-12 02:18 IST] G5 access-prerequisite verification (official sources, read-only)
+- Verified against official docs (no accounts/keys/activation): SEC EDGAR (free, 10 req/s, declared User-Agent required, JSON APIs on data.sec.gov; Form D = exempt-offering notice, NOT universal funding coverage), Greenhouse Job Board API (GET endpoints need no auth; location is an object {name}; board_token required; no official rate limit stated), Lever Postings API (public REST API per Lever's official GitHub repo; detail docs behind sign-in).
+- PROVIDER_ACCESS_MATRIX.md gained an "Independent verification" section separating verified claims from Team-B-reported ones. Live ingestion stays gated on owner approval; egress flags remain off.
+- Fixture schema aligned with the verified Greenhouse shape: location accepts a string or { name }.

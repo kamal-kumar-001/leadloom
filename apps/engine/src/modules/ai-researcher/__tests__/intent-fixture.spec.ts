@@ -34,7 +34,7 @@ const FIXTURE = {
   jobs: [
     { title: 'Growth Marketing Lead', location: 'Remote - US', absolute_url: 'https://boards.example.invalid/acme/1', updated_at: '2026-11-01T09:00:00Z' },
     { title: 'Outbound Sales Manager', location: 'New York, NY', absolute_url: 'https://boards.example.invalid/acme/2', updated_at: '2026-11-05T10:30:00Z' },
-    { title: 'Backend Engineer', updated_at: 'not-a-date' },
+    { title: 'Backend Engineer', location: { name: 'Berlin, DE' }, updated_at: 'not-a-date' },
   ],
 };
 
@@ -50,7 +50,7 @@ describe('IntentFixtureService', () => {
     expect(a.company).toBe('Acme Robotics');
     expect(a.jobCount).toBe(3);
     expect(a.sampleTitles).toHaveLength(3);
-    expect(a.locations).toEqual(['Remote - US', 'New York, NY']);
+    expect(a.locations).toEqual(['Remote - US', 'New York, NY', 'Berlin, DE']); // object-form location normalized
     expect(a.latestPostingDate).toBe('2026-11-05T10:30:00.000Z'); // unparseable date ignored
     expect(a.caveat).toMatch(/not a live feed/i);
   });

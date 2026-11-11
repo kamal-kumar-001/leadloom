@@ -9,6 +9,16 @@ Review performed:
 
 ---
 
+Independent verification, 2026-11-12 ~02:17 IST (Instinct, read-only; official sources only; no accounts, keys, purchases or activation):
+
+- SEC EDGAR - VERIFIED against https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data : free public access; current max request rate 10 requests/second; a declared User-Agent header is required (SEC sample format: company name + contact email); botnets/automated crawling outside the acceptable policy are not allowed; JSON REST APIs exist on data.sec.gov. Team B's rate-limit and User-Agent claims check out. Fit caveat stands and is sharpened: EDGAR covers companies required to file with the SEC; filings are corrected and sometimes removed post-acceptance; a Form D is a notice of an exempt securities offering, so Team B's "represents ALL legally mandated US private equity/venture funding rounds" overstates coverage - treat EDGAR as one funding-signal source with documented meaning, not a universal funding feed.
+- Greenhouse Job Board API - VERIFIED against https://developers.greenhouse.io/job-board.html : GET endpoints need no authentication ("Job Board data is publicly available, so authentication is not required for any GET endpoints"); list shape is { jobs: [{ title, location: { name }, absolute_url, updated_at, ... }], meta } - note location is an OBJECT with a name field, not a string; access requires knowing the company's public board_token. No rate limit is stated on the official page - Team B's "no rate quotas beyond standard IP flood controls" is NOT verified by an official statement; re-check before any live use and default to conservative polling with caching.
+- Lever Postings API - EXISTENCE AND PUBLIC PURPOSE VERIFIED via Lever's official repository https://github.com/lever/postings-api : a public REST API for published job postings "designed to help you create a job site"; published postings are also viewable at jobs.lever.co/{site}. Detailed docs on hire.lever.co sit behind a sign-in; endpoint-level details and rate limits NOT verified from an official page - re-verify before any live use.
+
+Nothing above activates ingestion. Live use of any source stays gated on the owner's approval after this verification (main's 2026-11-12 gate), and egress flags remain off.
+
+---
+
 Provider-Access Matrix & Intent-Signals Feasibility Report
 
 Scope & Governance: Research-only review conducted in accordance with Leadloom project directives. No files have been modified, no deployment or provisioning scripts have been executed, and no accounts or API keys have been generated.

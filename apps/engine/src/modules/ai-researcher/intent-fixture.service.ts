@@ -27,7 +27,8 @@ export const HiringBoardFixtureSchema = z
         z
           .object({
             title: z.string().min(1).max(200),
-            location: z.string().max(200).nullish(),
+            // Real Greenhouse boards return location as { name }; accept a plain string too.
+            location: z.union([z.string().max(200), z.object({ name: z.string().max(200) }).strict()]).nullish(),
             absolute_url: z.string().url().max(2048).nullish(),
             updated_at: z.string().max(64).nullish(),
           })
@@ -54,7 +55,7 @@ export interface IntentFixtureAnalysis {
 /** Normalize a validated fixture into the stored analysis. No inference beyond counting and listing what the fixture contains. */
 export function analyzeHiringBoardFixture(fixture: HiringBoardFixture): IntentFixtureAnalysis {
   const titles = fixture.jobs.map((j) => j.title);
-  const locations = [...new Set(fixture.jobs.map((j) => (j.location ?? '').trim()).filter(Boolean))];
+  const locations = [...new Set(fixture.jobs.map((j) => (typeof j.location === 'string' ? j.location : (j.location?.name ?? '')).trim()).filter(Boolean))];
   const dates = fixture.jobs
     .map((j) => j.updated_at)
     .filter((d): d is string => Boolean(d))
