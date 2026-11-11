@@ -1,0 +1,77 @@
+# READ-ONLY image inspection. Created under the existing build approval's
+# "I'll check the images" scope (main, 2026-11-11 22:41): pulls the EXISTING
+# digests, scans contents, prints counts/verdicts only.
+# Hard rules:
+#   - permissions are packages:read + contents:read only; there is no push
+#     step and no packages:write, so this workflow cannot publish.
+#   - Images are never started (docker create + export only, no CMD runs).
+#   - Run logs are PUBLIC (public repo): print only counts and PASS/FAIL
+#     verdicts, never file contents, env values, or matched strings.
+name: image-inspect
+on:
+  workflow_dispatch:
+    inputs:
+      engine_digest:
+        description: 'Engine image index digest'
+        required: true
+        default: 'sha256:0bb659f51b84e975972473de917e00673df6513500f463daeeb8428470fd3d27'
+      web_digest:
+        description: 'Web image index digest'
+        required: true
+        default: 'sha256:a55baf0840e90d53640aa8a65c60666e75f9f0b05ac0cf4e2c6bc3b4b9a49238'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Inspect engine image (read-only, verdicts only)
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/leadloom-engine@${{ inputs.engine_digest }}
+          EXPECTED: apps/engine/dist/main.js
+        run: |
+          set -e
+          docker pull "$IMAGE" >/dev/null
+          cid=$(docker create "$IMAGE")
+          mkdir -p /tmp/fs && docker export "$cid" | tar -x -C /tmp/fs
+          docker rm "$cid" >/dev/null
+          cd /tmp/fs
+          env_files=$(find . -name '.env' -o -name '.env.*' ! -name '.env.example' | wc -l)
+          priv_keys=$(grep -rEl -- 'BEGIN [A-Z ]*PRIVATE KEY' . 2>/dev/null | wc -l)
+          gh_tokens=$(grep -rEoh -- '(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|gho_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,})' . 2>/dev/null | wc -l)
+          aws_keys=$(grep -rEoh -- 'AKIA[0-9A-Z]{16}' . 2>/dev/null | wc -l)
+          pw_hits=$(grep -rEinoh -- '(password|passwd|secret)[\"\x27]?\s*[:=]\s*[\"'"'"'][^\"'"'"'\s]{8,}' --exclude-dir=node_modules . 2>/dev/null | grep -ivc 'your_|synthetic|placeholder|example|change|test|fixture' || true)
+          expected=$(test -f "$EXPECTED" && echo PRESENT || echo MISSING)
+          env_names=$(docker image inspect "$IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sort | tr '\n' ' ')
+          env_flagged=$(docker image inspect "$IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -Eic '(password|secret|token|key)=[^=]{8,}' || true)
+          total_files=$(find . -type f | wc -l)
+          echo "VERDICT engine: env_files=$env_files private_keys=$priv_keys github_tokens=$gh_tokens aws_keys=$aws_keys password_like_nonplaceholder=$pw_hits expected_file=$expected env_names=[$env_names] env_credential_shaped=$env_flagged total_files=$total_files"
+          [ "$env_files" = 0 ] && [ "$priv_keys" = 0 ] && [ "$gh_tokens" = 0 ] && [ "$aws_keys" = 0 ] && [ "$pw_hits" = 0 ] && [ "$env_flagged" = 0 ] && [ "$expected" = PRESENT ]
+      - name: Inspect web image (read-only, verdicts only)
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/leadloom-web@${{ inputs.web_digest }}
+          EXPECTED: apps/web/server.js
+        run: |
+          set -e
+          docker pull "$IMAGE" >/dev/null
+          cid=$(docker create "$IMAGE")
+          rm -rf /tmp/fs && mkdir -p /tmp/fs && docker export "$cid" | tar -x -C /tmp/fs
+          docker rm "$cid" >/dev/null
+          cd /tmp/fs
+          env_files=$(find . -name '.env' -o -name '.env.*' ! -name '.env.example' | wc -l)
+          priv_keys=$(grep -rEl -- 'BEGIN [A-Z ]*PRIVATE KEY' . 2>/dev/null | wc -l)
+          gh_tokens=$(grep -rEoh -- '(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|gho_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,})' . 2>/dev/null | wc -l)
+          aws_keys=$(grep -rEoh -- 'AKIA[0-9A-Z]{16}' . 2>/dev/null | wc -l)
+          pw_hits=$(grep -rEinoh -- '(password|passwd|secret)[\"\x27]?\s*[:=]\s*[\"'"'"'][^\"'"'"'\s]{8,}' --exclude-dir=node_modules . 2>/dev/null | grep -ivc 'your_|synthetic|placeholder|example|change|test|fixture' || true)
+          expected=$(test -f "$EXPECTED" && echo PRESENT || echo MISSING)
+          env_names=$(docker image inspect "$IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sort | tr '\n' ' ')
+          env_flagged=$(docker image inspect "$IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -Eic '(password|secret|token|key)=[^=]{8,}' || true)
+          total_files=$(find . -type f | wc -l)
+          echo "VERDICT web: env_files=$env_files private_keys=$priv_keys github_tokens=$gh_tokens aws_keys=$aws_keys password_like_nonplaceholder=$pw_hits expected_file=$expected env_names=[$env_names] env_credential_shaped=$env_flagged total_files=$total_files"
+          [ "$env_files" = 0 ] && [ "$priv_keys" = 0 ] && [ "$gh_tokens" = 0 ] && [ "$aws_keys" = 0 ] && [ "$pw_hits" = 0 ] && [ "$env_flagged" = 0 ] && [ "$expected" = PRESENT ]
