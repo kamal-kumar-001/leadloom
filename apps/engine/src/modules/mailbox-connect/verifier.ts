@@ -52,7 +52,7 @@ export class RealConnectionVerifier implements ConnectionVerifier {
         const ip = await this.pin(ep.imapHost); if (!ip) throw Object.assign(new Error('host'), { code: 'ENOTFOUND' });
         const { ImapFlow } = await import('imapflow');
         const base = buildImapOptions({ host: ip, port: ep.imapPort, user: ep.email, authType: 'password', password: ep.password }) as any;
-        const c = new ImapFlow({ ...base, servername: ep.imapHost, doSTARTTLS: strict && ep.imapPort === 143 ? true : undefined, tls: { servername: ep.imapHost, rejectUnauthorized: true, minVersion: 'TLSv1.2' }, connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000, disableAutoIdle: true } as any);
+        const c = new ImapFlow({ ...base, secure: ep.imapPort === 993, servername: ep.imapHost, doSTARTTLS: strict && ep.imapPort === 143 ? true : undefined, tls: { servername: ep.imapHost, rejectUnauthorized: true, minVersion: 'TLSv1.2' }, connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000, disableAutoIdle: true } as any);
         c.on('error', () => undefined);
         try { await withDeadline(c.connect()); await withDeadline(c.logout()); } finally { c.close(); }
       } catch (e) { imap = classify(e); }

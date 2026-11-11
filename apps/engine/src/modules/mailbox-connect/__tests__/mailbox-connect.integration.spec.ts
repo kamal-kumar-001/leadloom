@@ -8,7 +8,7 @@ import { MailboxConnectService } from '../mailbox-connect.service';
 import { PrismaMailboxConnectStore } from '../prisma-mailbox-connect-store';
 import { RealConnectionVerifier } from '../verifier';
 
-/** Gated: LEADLOOM_INTEGRATION=1, LEADLOOM_TEST_DATABASE_URL (migrated, throwaway) and LEADLOOM_SMTP_SERVER_MODULE (path to the smtp-server package). Local SMTP only: no real mail host is contacted. */
+/** Gated: LEADLOOM_INTEGRATION=1, LEADLOOM_TEST_DATABASE_URL (migrated, throwaway) and LEADLOOM_SMTP_SERVER_MODULE (path to a package.json whose node_modules has smtp-server and hoodiecrow-imap). Local SMTP only: no real mail host is contacted. */
 const URL = process.env.LEADLOOM_TEST_DATABASE_URL; const SMTP = process.env.LEADLOOM_SMTP_SERVER_MODULE;
 const RUN = process.env.LEADLOOM_INTEGRATION === '1' && Boolean(URL) && Boolean(SMTP);
 const PASS = 'app-pass-' + randomUUID().slice(0, 8);
@@ -33,6 +33,18 @@ describe.runIf(RUN)('mailbox connect on real Postgres + a local SMTP server (gat
     expect(ok).toEqual({ smtp: 'ok', imap: 'skipped' });
     const bad = await v.verify({ email: 'me@example.test', password: 'wrong', smtpHost: '127.0.0.1', smtpPort: port, imapHost: null, imapPort: null });
     expect(bad.smtp).toBe('auth_failed');
+  });
+
+  it('real IMAP login check against a local hoodiecrow IMAP server (plain, local only): right and wrong password', async () => {
+    const hc = createRequire(SMTP!)('hoodiecrow-imap'); const imap = hc({ users: { imapuser: { password: 'imappass' } } });
+    await new Promise<void>((r) => imap.listen(2143, '127.0.0.1', () => r()));
+    try {
+      const v = new RealConnectionVerifier({ allowPrivateHosts: true });
+      const ep = { email: 'imapuser', password: 'imappass', smtpHost: '127.0.0.1', smtpPort: 1, imapHost: '127.0.0.1', imapPort: 2143 };
+      expect((await v.verify(ep)).imap).toBe('ok');
+      expect((await v.verify({ ...ep, password: 'wrong' })).imap).toBe('auth_failed');
+      expect((await v.verify({ ...ep, imapPort: 2144 })).imap).toBe('unreachable');
+    } finally { imap.close?.(); }
   });
 
   it('seals the password (no plaintext in the row), round-trips through the vault, refuses cross-workspace, and stores nothing on failure', async () => {
