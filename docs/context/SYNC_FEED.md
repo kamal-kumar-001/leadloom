@@ -423,3 +423,6 @@
 - Fixture tests: full poll-to-persistence flow with halt, poller dedupe replay, and the enablement gate. 316 engine tests pass, tsc clean. No scheduler/endpoint mounts the poll path yet; live polling remains off.
 ## 2026-11-11 - Engine: G10 read-only reply reporting
 - GET /outbound/replies (session-scoped, optional campaignId filter) lists persisted inbound_replies newest-first with classification, confidence and attribution basis; listInboundReplies is tenant-scoped (empty for other workspaces). Test covered. 317 engine tests pass.
+## 2026-11-11 - Web: G10 recorded replies panel (read-only)
+- Campaigns page gains a Recorded Replies section: newest-first list of persisted replies with sender, subject, classification, attribution basis (matched to message / matched to recipient / ambiguous - nothing halted / unattributed) and received time. Read-only; empty state states reply sync is disabled in this deployment.
+- Browser-verified locally with seeded replies covering all attribution states; web tsc clean.

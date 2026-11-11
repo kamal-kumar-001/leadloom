@@ -5,6 +5,7 @@ import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
 import { fetchWorkspaceCampaigns, type WorkspaceCampaignRow } from '../../../lib/engine-client';
 import { notify } from '@/lib/notify';
 import { ApprovalQueue } from '../../../components/campaigns/approval-queue';
+import { RepliesPanel } from '../../../components/campaigns/replies-panel';
 import {
   Send,
   Plus,
@@ -133,6 +134,9 @@ export default function CampaignsPage() {
 
       {/* 1. G9: Approval-Before-Send Queue */}
       <ApprovalQueue onStatusChange={loadCampaigns} />
+
+      {/* 1b. G10: recorded replies (read-only) */}
+      <RepliesPanel />
 
       {/* 2. Real Workspace Campaigns List */}
       <div className="space-y-4">

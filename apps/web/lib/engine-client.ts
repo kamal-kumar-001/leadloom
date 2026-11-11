@@ -584,6 +584,26 @@ export async function fetchApprovalQueue(campaignId?: string): Promise<{ data: A
   return { data: null, error: result.error || 'Failed to fetch approval queue' };
 }
 
+export interface InboundReplyRow {
+  id: string;
+  campaignId: string | null;
+  mailboxId: string | null;
+  messageId: string;
+  fromEmail: string;
+  subject: string | null;
+  classification: 'interested' | 'objection' | 'out_of_office' | 'unsubscribe' | 'neutral' | 'bounce';
+  confidence: number;
+  attribution: 'thread_header' | 'recipient_match' | 'ambiguous_recipient' | 'unattributed';
+  receivedAt: string;
+}
+
+export async function fetchInboundReplies(campaignId?: string): Promise<{ data: { items: InboundReplyRow[] } | null; error?: string }> {
+  const query = campaignId ? `?campaignId=${encodeURIComponent(campaignId)}` : '';
+  const result = await engineFetch<{ items: InboundReplyRow[] }>(`/outbound/replies${query}`, { method: 'GET' });
+  if (result.data) return { data: result.data };
+  return { data: null, error: result.error || 'Failed to fetch replies' };
+}
+
 export async function approveOutboundJobs(input: {
   jobIds?: string[];
   all?: boolean;
