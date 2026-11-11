@@ -28,7 +28,7 @@ describe.runIf(RUN)('mailbox connect on real Postgres + a local SMTP server (gat
   const ws = async () => { const o = await new ProvisioningService(new PrismaProvisioningStore(prisma)).provision(`mb-${randomUUID().slice(0, 6)}@example.invalid`, 'T'); workspaces.push(o.workspaceId); return o.workspaceId; };
 
   it('real SMTP login check: right password ok, wrong password auth_failed, nothing sent', async () => {
-    const v = new RealConnectionVerifier();
+    const v = new RealConnectionVerifier({ allowPrivateHosts: true });
     const ok = await v.verify({ email: 'me@example.test', password: PASS, smtpHost: '127.0.0.1', smtpPort: port, imapHost: null, imapPort: null });
     expect(ok).toEqual({ smtp: 'ok', imap: 'skipped' });
     const bad = await v.verify({ email: 'me@example.test', password: 'wrong', smtpHost: '127.0.0.1', smtpPort: port, imapHost: null, imapPort: null });
@@ -36,7 +36,7 @@ describe.runIf(RUN)('mailbox connect on real Postgres + a local SMTP server (gat
   });
 
   it('seals the password (no plaintext in the row), round-trips through the vault, refuses cross-workspace, and stores nothing on failure', async () => {
-    const real = new RealConnectionVerifier();
+    const real = new RealConnectionVerifier({ allowPrivateHosts: true });
     const hybrid = { verify: async (e: any) => ({ ...(await real.verify({ ...e, imapHost: null, imapPort: null })), imap: 'ok' as const }) }; // IMAP not exercised here
     const v = vault(); const svc = new MailboxConnectService(new PrismaMailboxConnectStore(prisma, v), hybrid, { allowPrivateHosts: true });
     const w = await ws(), w2 = await ws();

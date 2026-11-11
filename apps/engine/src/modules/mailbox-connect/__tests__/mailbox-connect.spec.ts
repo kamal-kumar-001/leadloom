@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MailboxConnectService, type MailboxConnectStore } from '../mailbox-connect.service';
-import { checkMailHost, isPrivateAddress } from '../host-policy';
+import { checkMailHost, isPrivateAddress, resolvePublic } from '../host-policy';
 import { classify } from '../verifier';
 
 const pub = ({ _pw, ...r }: any) => r; // like the real store: the secret is never selected
@@ -48,6 +48,9 @@ describe('mailbox connect', () => {
 
 describe('host policy (no internal network probing)', () => {
   it('flags private ranges', () => { for (const a of ['127.0.0.1', '10.1.2.3', '172.19.0.4', '192.168.1.1', '169.254.169.254', '::1', 'fd00::1', '::ffff:10.0.0.1']) expect(isPrivateAddress(a), a).toBe(true); expect(isPrivateAddress('8.8.8.8')).toBe(false); });
+  it('refuses special IPv6/IPv4 forms and allows public ones', () => { for (const a of ['::ffff:7f00:1', '::ffff:a00:1', '64:ff9b::a00:1', '2002:7f00:1::1', 'fe80::1', 'fec0::1', 'ff02::1', '2001:db8::1', '2001::1', '::', '0:0:0:0:0:ffff:127.0.0.1', '198.18.0.1', '192.0.2.5', 'notanip']) expect(isPrivateAddress(a), a).toBe(true); for (const a of ['2606:4700:4700::1111', '2a00:1450:4001::1', '142.250.1.1']) expect(isPrivateAddress(a), a).toBe(false); });
+  it('pins the resolved public address and refuses mixed answers', async () => { expect(await resolvePublic('mail.example.com', async () => ['8.8.8.8', '2606:4700:4700::1111'])).toBe('8.8.8.8'); expect(await resolvePublic('mail.example.com', async () => ['8.8.8.8', '10.0.0.1'])).toBeNull(); expect(await resolvePublic('1.2.3.4')).toBeNull(); });
+  it('strict verifier never opens a socket to a private or literal host', async () => { const { RealConnectionVerifier } = await import('../verifier'); const r = await new RealConnectionVerifier().verify({ email: 'a@b.co', password: 'x', smtpHost: '127.0.0.1', smtpPort: 587, imapHost: 'localhost', imapPort: 993 }); expect(r).toEqual({ smtp: 'unreachable', imap: 'unreachable' }); });
   it('refuses IP literals, private resolutions and odd ports in production mode', async () => {
     const pub = async () => ['142.250.1.1']; const priv = async () => ['172.19.0.3'];
     expect(await checkMailHost('127.0.0.1', 587, [587], false, pub)).toEqual({ ok: false, code: 'invalid_host' });

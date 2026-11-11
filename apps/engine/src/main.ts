@@ -461,8 +461,9 @@ if(require.main===module) {
    if(process.env.LEADLOOM_MAILBOX_CONNECT_ENABLED==='true') {
     const {MailboxConnectService}=await import('./modules/mailbox-connect/mailbox-connect.service.js');
     const {PrismaMailboxConnectStore}=await import('./modules/mailbox-connect/prisma-mailbox-connect-store.js');
+    const PRIV=process.env.NODE_ENV!=='production'&&process.env.LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS==='true';
     const {RealConnectionVerifier}=await import('./modules/mailbox-connect/verifier.js');
-    services.mailboxConnect=new MailboxConnectService(new PrismaMailboxConnectStore(prisma,vault),new RealConnectionVerifier(),{allowPrivateHosts:process.env.NODE_ENV!=='production'&&process.env.LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS==='true'});
+    services.mailboxConnect=new MailboxConnectService(new PrismaMailboxConnectStore(prisma,vault),new RealConnectionVerifier({allowPrivateHosts:PRIV}),{allowPrivateHosts:PRIV});
    }
    if(process.env.LEADLOOM_PASSWORD_AUTH_ENABLED==='true') {
     const {createTransactionalEmail}=await import('./modules/email/transactional.js');
