@@ -484,3 +484,10 @@
 - VISIBILITY INCIDENT + correction: both packages published PUBLIC (repo-connected inheritance on first publish from a public repo, contrary to the assumed private default). Publicly readable about 17 minutes; contents are builds of this public repo's code, no secrets in build context (.dockerignore verified). Set both to Private via the owner's GitHub browser session; anonymous pull now 403 (verified externally). Repo token gets masked 404 on private packages, consistent with gate 2 (host needs read:packages login - still unapproved).
 - RELEASE_PLAN.md updated with measured facts and the visibility lesson; workflow draft comment corrected.
 - No contract or API change in this entry.
+
+---
+### [2026-11-11T17:12:00Z] Team Alpha | docs/plan | Visibility incident: exact window, content inspection, publish pause
+- Exact windows recorded: engine public 16:52:26Z-17:09:41Z, web 16:53:44Z-17:09:59Z; run + package URLs preserved in RELEASE_PLAN.md.
+- Build-input inspection at SHA 3df93fa: no secret files/dumps in repo, .dockerignore covers .git/.env/data dirs, no ARG/ENV secrets in Dockerfiles, GITHUB_TOKEN only in the login step. Sole credential-shaped string: synthetic localhost placeholder in engine Dockerfile. LIMIT: not a bit-exact layer enumeration (no read:packages token; minting ruled out). Bit-exact check needs a vault read:packages token or an approved read-only inspect run.
+- Publishing paused pending a preventive control (owner decision: workflow verify step / verify-and-flip checklist / repo-private-at-completion). Existing packages must be re-verified Private before any future push.
+- No contract or API change in this entry.
