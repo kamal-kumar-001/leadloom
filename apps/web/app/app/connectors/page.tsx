@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { ConnectorCard, ConnectorMeta } from '../../../components/connectors/connector-card';
+import { OutreachChannelStatus } from '../../../components/connectors/outreach-channel-status';
 import { ByokVaultModal } from '../../../components/connectors/byok-vault-modal';
 import { fetchVaultCredentials } from '../../../lib/engine-client';
 import { MaskedBYOKCredential, BYOKProvider } from '@leadloom/contracts';
@@ -209,6 +210,8 @@ export default function ConnectorsPage() {
           </div>
         </div>
       </div>
+
+      <OutreachChannelStatus />
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">

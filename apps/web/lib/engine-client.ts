@@ -530,3 +530,20 @@ export async function deleteMailbox(id: string): Promise<{
   }
 }
 
+
+export interface ConnectorStatusItem {
+  id: string;
+  name: string;
+  state: 'login_verify_only' | 'not_built' | 'partner_limited' | 'unverified';
+  sendingEnabled: false;
+  enabled: boolean;
+  note: string;
+  reference?: string;
+}
+
+/** Live engine status for outreach channels. Never falls back to sample data. */
+export async function fetchConnectorStatus(): Promise<{ connectors: ConnectorStatusItem[]; error?: string }> {
+  const result = await engineFetch<{ connectors: ConnectorStatusItem[] }>('/workspace/connectors/status', { method: 'GET' });
+  if (result.data) return { connectors: result.data.connectors };
+  return { connectors: [], error: result.error || 'Engine status unavailable' };
+}

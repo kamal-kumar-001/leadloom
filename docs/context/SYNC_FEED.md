@@ -355,3 +355,8 @@
 
 ### [2026-11-11T13:15:00Z] Engine | GET /workspace/connectors/status | Non-Breaking
 - Session-required honest connector status (smtp_imap login-verify only, gmail_oauth not built, linkedin partner-limited, x unverified). Static registry plus the mailbox-connect flag. No sending claims.
+
+---
+
+### [2026-11-11T13:25:00Z] Web | /app/connectors outreach channel status | Non-Breaking
+- Connectors page shows live engine status for outreach channels (GET /workspace/connectors/status). No sample fallback; shows an error line if the engine is unreachable. The BYOK cards below remain sample data.
