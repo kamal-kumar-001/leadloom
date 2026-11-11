@@ -238,16 +238,18 @@ export async function createApplication(services?:RuntimeServices) {
    if(!id.success)return reply.code(400).send({error:'Invalid credential ID'});
    return {deleted:await services.credentials.delete(session.workspaceId,id.data)};
   });
-  const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime(),requiresApproval:z.boolean().optional()}).strict();
+  // Jobs always enter as pending_approval: approval is enforced server-side and no caller
+  // parameter can enqueue a send-reservable job. claim() only picks status='pending' and no
+  // code path moves approved->pending while dispatch is disabled (G9 hardening).
+  const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime()}).strict();
   fastify.post('/outbound/jobs',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
    const parsed=Enqueue.safeParse(request.body);
    if(!parsed.success)return reply.code(400).send({error:'Invalid job request'});
    try {
-    const status=parsed.data.requiresApproval===false?'pending':'pending_approval';
-    const id=await services.outbound.enqueue({...parsed.data,workspaceId:session.workspaceId,scheduledAt:new Date(parsed.data.scheduledAt),status});
-    return reply.code(202).send({id,status,sendingEnabled:false});
+    const id=await services.outbound.enqueue({...parsed.data,workspaceId:session.workspaceId,scheduledAt:new Date(parsed.data.scheduledAt)});
+    return reply.code(202).send({id,status:'pending_approval',sendingEnabled:false});
    } catch {return reply.code(400).send({error:'Job could not be queued'});}
   });
   // G9: Approval-before-send queue routes. Human review required before any send; sending stays disabled.

@@ -9,11 +9,16 @@ import { AtomicDispatchRepository, type SqlConnection, type TransactionalDatabas
 let pg:PGlite, repo:AtomicDispatchRepository;
 let now:Date, workspaceId:string, campaignId:string, mailboxId:string;
 const connection=(db:any):SqlConnection=>({query:async <T extends Record<string,unknown>>(sql:string,params:unknown[]=[])=> (await db.query(sql,params)).rows as T[]});
-const enqueue=(key='lead-1',email='synthetic@example.invalid',date=now)=>repo.enqueue({workspaceId,campaignId,recipientEmail:email,idempotencyKey:key,stepNumber:1,scheduledAt:date});
+const enqueue=async(key='lead-1',email='synthetic@example.invalid',date=now)=>{
+  const id=await repo.enqueue({workspaceId,campaignId,recipientEmail:email,idempotencyKey:key,stepNumber:1,scheduledAt:date});
+  // TEST-ONLY: stand in for the future gated release approved->pending; no repository code path does this while dispatch is disabled.
+  await pg.query(`UPDATE outbound_jobs SET status='pending' WHERE id=$1`,[id]);
+  return id;
+};
 const claim=()=>repo.claim({workspaceId,campaignId,mailboxId,now,nextDispatchAt:new Date(now.getTime()+45000)});
 beforeEach(async()=>{
   pg=new PGlite({extensions:{vector}});
-  for(const migration of ['20261110_init_v2','20261110_integrity']) await pg.exec(readFileSync(fileURLToPath(new URL(`../../../../../../packages/database/prisma/migrations/${migration}/migration.sql`,import.meta.url)),'utf8'));
+  for(const migration of ['20261110_init_v2','20261110_integrity','20261120_outbound_approval_status','20261121_outbound_approval_hardening']) await pg.exec(readFileSync(fileURLToPath(new URL(`../../../../../../packages/database/prisma/migrations/${migration}/migration.sql`,import.meta.url)),'utf8'));
   const database:TransactionalDatabase={...connection(pg),transaction:operation=>pg.transaction(tx=>operation(connection(tx)))};
   now=new Date('2026-11-10T08:00:00Z'); workspaceId=randomUUID(); campaignId=randomUUID(); mailboxId=randomUUID();
   repo=new AtomicDispatchRepository(database,()=>now);

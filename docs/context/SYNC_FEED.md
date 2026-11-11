@@ -394,3 +394,7 @@
 - DB migration 20261120_outbound_approval_status expands check constraint to allow 'pending_approval' and 'rejected'.
 - Sending stays disabled everywhere (sendingEnabled: false).
 
+
+### [2026-11-11T14:17:00Z] Team Alpha | engine outbound approval hardening | Breaking (internal API)
+- POST /outbound/jobs no longer accepts `requiresApproval`; every job enters `pending_approval` (no caller bypass). approve() now returns `{approvedCount, staleCount}` and flips to held `approved` (never claimable), verified against a server-recomputed snapshot hash (content+recipient+mailbox context); stale approvals stay pending_approval and need a deliberate second approval.
+- New additive migration `20261121_outbound_approval_hardening` (CHECK superset adds `approved`; approval_content_hash/approval_snapshot/approved_at columns).

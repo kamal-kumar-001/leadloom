@@ -128,7 +128,24 @@ describe('outbound approval routes (G9)', () => {
       expect(jobPost.statusCode).toBe(202);
       expect(jobPost.json().status).toBe('pending_approval');
       expect(jobPost.json().sendingEnabled).toBe(false);
-      expect(outbound.enqueue.mock.calls[0][0].status).toBe('pending_approval');
+      // No caller-selectable status reaches the repository: approval is server-enforced.
+      expect(outbound.enqueue.mock.calls[0][0]).not.toHaveProperty('status');
+
+      // A caller trying to bypass approval is rejected by the strict schema.
+      const bypass = await app.inject({
+        method: 'POST',
+        url: '/outbound/jobs',
+        headers: { authorization: 'Bearer ' + token() },
+        payload: {
+          campaignId: randomUUID(),
+          recipientEmail: 'lead@example.invalid',
+          idempotencyKey: 'idem-2',
+          stepNumber: 1,
+          scheduledAt: new Date().toISOString(),
+          requiresApproval: false,
+        },
+      });
+      expect(bypass.statusCode).toBe(400);
     } finally {
       await app.close();
     }

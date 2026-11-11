@@ -15,7 +15,7 @@ const connection = (db: any): SqlConnection => ({
 
 beforeEach(async () => {
   pg = new PGlite({ extensions: { vector } });
-  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261120_outbound_approval_status']) {
+  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261120_outbound_approval_status', '20261121_outbound_approval_hardening']) {
     await pg.exec(
       readFileSync(
         fileURLToPath(new URL(`../../../../../../packages/database/prisma/migrations/${migration}/migration.sql`, import.meta.url)),
@@ -73,7 +73,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'key-1',
       stepNumber: 1,
       scheduledAt: now,
-      status: 'pending_approval',
     });
 
     const jobRow = await pg.query<{ status: string }>('SELECT status FROM outbound_jobs WHERE id=$1', [id]);
@@ -98,7 +97,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'key-1',
       stepNumber: 1,
       scheduledAt: now,
-      status: 'pending_approval',
     });
     await repo.enqueue({
       workspaceId,
@@ -107,7 +105,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'key-2',
       stepNumber: 2,
       scheduledAt: now,
-      status: 'pending_approval',
     });
 
     const approvals = await repo.listPendingApprovals(workspaceId);
@@ -127,7 +124,7 @@ describe('G9 Approval-before-send queue behavior', () => {
     expect(stats.rejectedCount).toBe(0);
   });
 
-  it('approving a job makes it claimable for dispatch', async () => {
+  it('approving a job holds it as approved and NEVER makes it claimable', async () => {
     const id = await repo.enqueue({
       workspaceId,
       campaignId,
@@ -135,7 +132,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'key-app',
       stepNumber: 1,
       scheduledAt: now,
-      status: 'pending_approval',
     });
 
     // Before approval: claim returns null
@@ -149,15 +145,21 @@ describe('G9 Approval-before-send queue behavior', () => {
       })
     ).toBeNull();
 
-    // Human approves the message
-    const { approvedCount } = await repo.approve(workspaceId, { jobIds: [id] });
+    // Human approves the message: it becomes 'approved', a HELD state
+    const { approvedCount, staleCount } = await repo.approve(workspaceId, { jobIds: [id] });
     expect(approvedCount).toBe(1);
+    expect(staleCount).toBe(0);
+
+    const row = await pg.query<{ status: string; approved_at: Date | null }>('SELECT status, approved_at FROM outbound_jobs WHERE id=$1', [id]);
+    expect(row.rows[0].status).toBe('approved');
+    expect(row.rows[0].approved_at).not.toBeNull();
 
     const stats = await repo.getApprovalStats(workspaceId);
     expect(stats.pendingCount).toBe(0);
     expect(stats.approvedCount).toBe(1);
 
-    // After approval: claim reserves the job
+    // Approval NEVER makes a job claimable: claim only picks 'pending' and no
+    // code path moves approved->pending while dispatch is disabled.
     const reservation = await repo.claim({
       workspaceId,
       campaignId,
@@ -165,7 +167,59 @@ describe('G9 Approval-before-send queue behavior', () => {
       now,
       nextDispatchAt: new Date(now.getTime() + 45000),
     });
-    expect(reservation?.id).toBe(id);
+    expect(reservation).toBeNull();
+  });
+
+  it('refuses a stale approval after content edit and requires deliberate re-approval', async () => {
+    const id = await repo.enqueue({
+      workspaceId,
+      campaignId,
+      recipientEmail: 'stale-lead@example.invalid',
+      idempotencyKey: 'key-stale',
+      stepNumber: 1,
+      scheduledAt: now,
+    });
+
+    // Content edited after queueing (concurrent edit/approve race)
+    const edited = JSON.stringify([{ stepNumber: 1, subject: 'EDITED subject', bodyTemplate: 'EDITED body' }]);
+    await pg.query('UPDATE campaigns SET steps=$3 WHERE id=$1 AND workspace_id=$2', [campaignId, workspaceId, edited]);
+
+    const first = await repo.approve(workspaceId, { jobIds: [id] });
+    expect(first.approvedCount).toBe(0);
+    expect(first.staleCount).toBe(1);
+    let row = await pg.query<{ status: string }>('SELECT status FROM outbound_jobs WHERE id=$1', [id]);
+    expect(row.rows[0].status).toBe('pending_approval');
+
+    // Snapshot was refreshed to the edited content; a second deliberate click approves it
+    const second = await repo.approve(workspaceId, { jobIds: [id] });
+    expect(second.approvedCount).toBe(1);
+    expect(second.staleCount).toBe(0);
+    row = await pg.query<{ status: string }>('SELECT status FROM outbound_jobs WHERE id=$1', [id]);
+    expect(row.rows[0].status).toBe('approved');
+  });
+
+  it('invalidateStaleApprovals reverts approved jobs whose content changed', async () => {
+    const id = await repo.enqueue({
+      workspaceId,
+      campaignId,
+      recipientEmail: 'invalidate-lead@example.invalid',
+      idempotencyKey: 'key-inv',
+      stepNumber: 1,
+      scheduledAt: now,
+    });
+    expect((await repo.approve(workspaceId, { jobIds: [id] })).approvedCount).toBe(1);
+
+    const edited = JSON.stringify([{ stepNumber: 1, subject: 'CHANGED', bodyTemplate: 'CHANGED body' }]);
+    await pg.query('UPDATE campaigns SET steps=$3 WHERE id=$1 AND workspace_id=$2', [campaignId, workspaceId, edited]);
+
+    const { invalidatedCount } = await repo.invalidateStaleApprovals(workspaceId, campaignId);
+    expect(invalidatedCount).toBe(1);
+    const row = await pg.query<{ status: string; approved_at: Date | null }>('SELECT status, approved_at FROM outbound_jobs WHERE id=$1', [id]);
+    expect(row.rows[0].status).toBe('pending_approval');
+    expect(row.rows[0].approved_at).toBeNull();
+
+    // Nothing stale left: a second pass invalidates nothing
+    expect((await repo.invalidateStaleApprovals(workspaceId, campaignId)).invalidatedCount).toBe(0);
   });
 
   it('rejecting a job transitions status to rejected and prevents send forever', async () => {
@@ -176,7 +230,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'key-rej',
       stepNumber: 1,
       scheduledAt: now,
-      status: 'pending_approval',
     });
 
     const { rejectedCount } = await repo.reject(workspaceId, { jobIds: [id] });
@@ -209,7 +262,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'batch-1',
       stepNumber: 1,
       scheduledAt: now,
-      status: 'pending_approval',
     });
     await repo.enqueue({
       workspaceId,
@@ -218,7 +270,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'batch-2',
       stepNumber: 1,
       scheduledAt: now,
-      status: 'pending_approval',
     });
 
     const { approvedCount } = await repo.approve(workspaceId, { all: true, campaignId });
@@ -236,7 +287,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'key-stop',
       stepNumber: 1,
       scheduledAt: now,
-      status: 'pending_approval',
     });
 
     await repo.suppress(workspaceId, 'stop-sequence@example.invalid');
@@ -257,7 +307,6 @@ describe('G9 Approval-before-send queue behavior', () => {
       idempotencyKey: 'key-tenant',
       stepNumber: 1,
       scheduledAt: now,
-      status: 'pending_approval',
     });
 
     // Foreign workspace cannot see, approve or reject

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { OutboundApprovalItem, ApprovalQueueStats } from '@leadloom/contracts';
+import { approvalContentHash, buildApprovalSnapshot } from './approval-snapshot';
 import type { DispatchRepository, DispatchSnapshot, SendReservation } from './dispatch.service';
 
 export interface SqlConnection {
@@ -89,6 +90,12 @@ export class AtomicDispatchRepository implements DispatchRepository {
     if (rows.length!==1) throw new Error('Reservation completion requires reconciliation');
   }
 
+  /**
+   * Jobs ALWAYS enter as 'pending_approval' (G9 hardening): there is no caller
+   * selectable status, so no API path can enqueue a send-reservable job. The
+   * approval snapshot + content hash are computed server-side here; approve()
+   * recomputes against current campaign content and refuses a stale approval.
+   */
   async enqueue(input: {
     workspaceId: string;
     campaignId: string;
@@ -96,19 +103,27 @@ export class AtomicDispatchRepository implements DispatchRepository {
     idempotencyKey: string;
     stepNumber: number;
     scheduledAt: Date;
-    status?: string;
   }): Promise<string> {
     const email = z.string().email().parse(input.recipientEmail.trim().toLowerCase());
     z.string().min(1).max(255).parse(input.idempotencyKey);
     z.number().int().positive().parse(input.stepNumber);
     z.date().parse(input.scheduledAt);
-    const status = input.status ?? 'pending';
     const hash = recipientHash(email), id = randomUUID();
+    const campaignRows = await this.database.query<{ steps: unknown }>(
+      'SELECT steps FROM campaigns WHERE workspace_id=$1::uuid AND id=$2::uuid', [input.workspaceId, input.campaignId]);
+    if (!campaignRows[0]) throw new Error('Idempotency conflict or unknown campaign');
+    const mailboxRows = await this.database.query<{ mailbox_id: string }>(
+      'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [input.workspaceId, input.campaignId]);
+    const snapshot = buildApprovalSnapshot({
+      campaignId: input.campaignId, stepNumber: input.stepNumber, recipientEmail: email,
+      campaignSteps: campaignRows[0].steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
+    });
+    const contentHash = approvalContentHash(snapshot);
     const rows = await this.database.query<{ id: string }>(`INSERT INTO outbound_jobs
-      (id,workspace_id,campaign_id,recipient_email,recipient_hash,idempotency_key,step_number,scheduled_at,status,updated_at)
-      SELECT $1::uuid,c.workspace_id,c.id,$4,$5,$6,$7,$8::timestamptz,$9,$10::timestamptz FROM campaigns c WHERE c.workspace_id=$2::uuid AND c.id=$3::uuid
+      (id,workspace_id,campaign_id,recipient_email,recipient_hash,idempotency_key,step_number,scheduled_at,status,approval_content_hash,approval_snapshot,updated_at)
+      SELECT $1::uuid,c.workspace_id,c.id,$4,$5,$6,$7,$8::timestamptz,'pending_approval',$9,$10::jsonb,$11::timestamptz FROM campaigns c WHERE c.workspace_id=$2::uuid AND c.id=$3::uuid
       ON CONFLICT (workspace_id,idempotency_key) DO NOTHING RETURNING id`,
-      [id, input.workspaceId, input.campaignId, email, hash, input.idempotencyKey, input.stepNumber, input.scheduledAt, status, this.clock()]);
+      [id, input.workspaceId, input.campaignId, email, hash, input.idempotencyKey, input.stepNumber, input.scheduledAt, contentHash, JSON.stringify(snapshot), this.clock()]);
     if (rows[0]) return rows[0].id;
     const [existing] = await this.database.query<{ id: string; campaign_id: string; recipient_hash: string; step_number: number; scheduled_at: Date }>(
       'SELECT id,campaign_id,recipient_hash,step_number,scheduled_at FROM outbound_jobs WHERE workspace_id=$1::uuid AND idempotency_key=$2', [input.workspaceId, input.idempotencyKey]);
@@ -185,30 +200,89 @@ export class AtomicDispatchRepository implements DispatchRepository {
   }
 
   /**
-   * G9: Explicit human approval transitions queued messages from 'pending_approval' to 'pending',
-   * making them schedulable. Dispatch remains disabled system-wide.
+   * G9 hardened: explicit human approval transitions 'pending_approval' to
+   * 'approved' - a HELD state that claim() never picks up, so approval alone
+   * can never make a job send-reservable. Before flipping, the approval hash
+   * is recomputed from CURRENT campaign content + recipient + mailbox context:
+   * a mismatch (content edited after queueing, or a concurrent edit/approve
+   * race) leaves the job in 'pending_approval', refreshes the stored snapshot
+   * to the current content, and counts it as stale so the reviewer must
+   * deliberately approve the changed content. 'approved' -> send-reservable
+   * 'pending' does not exist in code while dispatch is disabled; adding it is
+   * a separate gated release decision.
    */
-  async approve(workspaceId: string, input: { jobIds?: string[]; all?: boolean; campaignId?: string }): Promise<{ approvedCount: number }> {
-    if (input.all) {
-      const rows = await this.database.query<{ id: string }>(
-        `UPDATE outbound_jobs SET status='pending', updated_at=$3::timestamptz
-         WHERE workspace_id=$1::uuid AND status='pending_approval'
-           AND ($2::uuid IS NULL OR campaign_id=$2::uuid)
-         RETURNING id`,
-        [workspaceId, input.campaignId ?? null, this.clock()]
-      );
-      return { approvedCount: rows.length };
-    }
+  async approve(workspaceId: string, input: { jobIds?: string[]; all?: boolean; campaignId?: string }): Promise<{ approvedCount: number; staleCount: number }> {
     const jobIds = input.jobIds ?? [];
-    if (!jobIds.length) return { approvedCount: 0 };
+    if (!input.all && !jobIds.length) return { approvedCount: 0, staleCount: 0 };
     for (const id of jobIds) z.string().uuid().parse(id);
-    const rows = await this.database.query<{ id: string }>(
-      `UPDATE outbound_jobs SET status='pending', updated_at=$3::timestamptz
-       WHERE workspace_id=$1::uuid AND id = ANY($2::uuid[]) AND status='pending_approval'
-       RETURNING id`,
-      [workspaceId, jobIds, this.clock()]
-    );
-    return { approvedCount: rows.length };
+    const candidates = await this.database.query<{
+      id: string; campaign_id: string; recipient_email: string; step_number: number; steps: unknown;
+    }>(
+      `SELECT j.id, j.campaign_id, j.recipient_email, j.step_number, c.steps
+       FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
+       WHERE j.workspace_id = $1::uuid AND j.status = 'pending_approval'
+         AND ($2::uuid IS NULL OR j.campaign_id = $2::uuid)
+         AND ($3::bool OR j.id = ANY($4::uuid[]))`,
+      [workspaceId, input.campaignId ?? null, input.all === true, jobIds]);
+    let approvedCount = 0, staleCount = 0;
+    for (const job of candidates) {
+      const mailboxRows = await this.database.query<{ mailbox_id: string }>(
+        'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, job.campaign_id]);
+      const current = buildApprovalSnapshot({
+        campaignId: job.campaign_id, stepNumber: job.step_number, recipientEmail: job.recipient_email,
+        campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
+      });
+      const currentHash = approvalContentHash(current);
+      const stored = await this.database.query<{ approval_content_hash: string | null }>(
+        'SELECT approval_content_hash FROM outbound_jobs WHERE workspace_id=$1::uuid AND id=$2::uuid', [workspaceId, job.id]);
+      if (stored[0]?.approval_content_hash === currentHash) {
+        await this.database.query(
+          `UPDATE outbound_jobs SET status='approved', approved_at=$3::timestamptz, updated_at=$3::timestamptz
+           WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='pending_approval'`,
+          [workspaceId, job.id, this.clock()]);
+        approvedCount++;
+      } else {
+        // Content changed since queueing: refresh the snapshot and require a deliberate re-approval.
+        await this.database.query(
+          `UPDATE outbound_jobs SET approval_content_hash=$3, approval_snapshot=$4::jsonb, updated_at=$5::timestamptz
+           WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='pending_approval'`,
+          [workspaceId, job.id, currentHash, JSON.stringify(current), this.clock()]);
+        staleCount++;
+      }
+    }
+    return { approvedCount, staleCount };
+  }
+
+  /**
+   * Invalidation hook for any future campaign-edit path: reverts 'approved'
+   * jobs whose recomputed hash no longer matches back to 'pending_approval'.
+   * There is currently no campaign-edit endpoint; that path MUST call this.
+   */
+  async invalidateStaleApprovals(workspaceId: string, campaignId: string): Promise<{ invalidatedCount: number }> {
+    const jobs = await this.database.query<{
+      id: string; campaign_id: string; recipient_email: string; step_number: number; steps: unknown; approval_content_hash: string | null;
+    }>(
+      `SELECT j.id, j.campaign_id, j.recipient_email, j.step_number, c.steps, j.approval_content_hash
+       FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
+       WHERE j.workspace_id = $1::uuid AND j.campaign_id = $2::uuid AND j.status = 'approved'`,
+      [workspaceId, campaignId]);
+    let invalidatedCount = 0;
+    for (const job of jobs) {
+      const mailboxRows = await this.database.query<{ mailbox_id: string }>(
+        'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, job.campaign_id]);
+      const currentHash = approvalContentHash(buildApprovalSnapshot({
+        campaignId: job.campaign_id, stepNumber: job.step_number, recipientEmail: job.recipient_email,
+        campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
+      }));
+      if (job.approval_content_hash !== currentHash) {
+        await this.database.query(
+          `UPDATE outbound_jobs SET status='pending_approval', approved_at=NULL, updated_at=$3::timestamptz
+           WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='approved'`,
+          [workspaceId, job.id, this.clock()]);
+        invalidatedCount++;
+      }
+    }
+    return { invalidatedCount };
   }
 
   /**
