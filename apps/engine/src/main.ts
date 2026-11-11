@@ -65,6 +65,8 @@ export interface RuntimeServices {
  mailboxConnect?: Pick<MailboxConnectService,'connect'|'test'|'remove'>;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
  waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
+ /** Optional: read-only waterfall connector registry reconciled with stored BYOK credentials (masked only). */
+ waterfallConnectors?: { list(workspaceId: string): Promise<unknown> };
  validator?: Pick<ValidatorController,'generate'|'getScorecard'|'submitLead'>;
  /** Optional: when provided, plan/feature gates are enforced server-side (main gates it behind LEADLOOM_ENTITLEMENTS_ENFORCED). */
  entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'>;
@@ -135,6 +137,12 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.get('/workspace/tables',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listTables(s.workspaceId);});
    fastify.get('/workspace/mailboxes',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listMailboxes(s.workspaceId);});
    fastify.get('/workspace/connectors/status',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return {connectors:connectorStatuses()};});
+   if(services.waterfallConnectors) {
+    fastify.get('/waterfall/connectors',async(request:any,reply:any)=>{
+     const session=await authorize(request,reply);if(!session)return;
+     return {connectors:await services.waterfallConnectors!.list(session.workspaceId),sendingEnabled:false};
+    });
+   }
    fastify.get('/workspace/suppressions',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listSuppressions(s.workspaceId);});
    fastify.get('/workspace/experiments',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listExperiments(s.workspaceId);});
    fastify.get('/workspace/campaigns',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listCampaigns(s.workspaceId);});
@@ -528,6 +536,20 @@ if(require.main===module) {
    // Opt-in product APIs, default OFF in every environment. Each requires an
    // explicit env flag; providers still need per-workspace BYOK keys at call
    // time, so mounting never implies provider access.
+   // G6 registry endpoint: read-only reconcile of the connector registry with
+   // masked BYOK credential status. No provider calls, no secrets leave the DB.
+   {
+    const {createDefaultConnectorRegistry}=await import('./modules/waterfall/connectors/registry.js');
+    const {reconcileConnectorStatus}=await import('./modules/waterfall/connector-status.js');
+    const registry=createDefaultConnectorRegistry();
+    services.waterfallConnectors={list:async(workspaceId:string)=>{
+     const creds=await prisma!.byokCredential.findMany({where:{workspaceId}});
+     return reconcileConnectorStatus(
+      registry.list().map((c:any)=>({id:c.id,name:c.name,capabilities:c.capabilities})),
+      creds.map((c:any)=>({provider:c.provider,maskedKey:c.maskedKey,label:c.label,isValid:c.isValid,lastVerifiedAt:c.lastVerifiedAt,updatedAt:c.updatedAt})),
+     );
+    }};
+   }
    if(process.env.LEADLOOM_WATERFALL_API_ENABLED==='true') {
     const {WaterfallController}=await import('./modules/waterfall/waterfall.controller.js');
     const {WaterfallService}=await import('./modules/waterfall/waterfall.service.js');

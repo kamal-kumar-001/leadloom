@@ -426,3 +426,6 @@
 ## 2026-11-11 - Web: G10 recorded replies panel (read-only)
 - Campaigns page gains a Recorded Replies section: newest-first list of persisted replies with sender, subject, classification, attribution basis (matched to message / matched to recipient / ambiguous - nothing halted / unattributed) and received time. Read-only; empty state states reply sync is disabled in this deployment.
 - Browser-verified locally with seeded replies covering all attribution states; web tsc clean.
+## 2026-11-11 - Engine: G6 waterfall connector registry endpoint
+- GET /waterfall/connectors (session-scoped, read-only): the 10 registered enrichment connectors with capabilities, reconciled against the workspace's stored BYOK credentials - configured flag, masked key, label, verified (only after a real test-connection), timestamps. No provider calls; masked data only; unknown providers ignored; newest credential row wins.
+- Verified live through the web session proxy (10 connectors, none configured, sendingEnabled:false); 4 reconcile unit tests; 321 engine tests pass, tsc clean.
