@@ -15,122 +15,27 @@ import {
 import { ConnectorCard, ConnectorMeta } from '../../../components/connectors/connector-card';
 import { OutreachChannelStatus } from '../../../components/connectors/outreach-channel-status';
 import { ByokVaultModal } from '../../../components/connectors/byok-vault-modal';
-import { fetchVaultCredentials } from '../../../lib/engine-client';
+import { fetchVaultCredentials, fetchWaterfallConnectors } from '../../../lib/engine-client';
 import { MaskedBYOKCredential, BYOKProvider } from '@leadloom/contracts';
+import { notify } from '@/lib/notify';
 
-const ALL_CONNECTORS: ConnectorMeta[] = [
-  {
-    id: 'apollo',
-    name: 'Apollo Enrichment',
-    category: 'Enrichment',
-    description: 'B2B contact directory and primary waterfall tier for verified work emails.',
-    unitCostUSD: 0.001,
-    hitRateEstimate: 0.58,
-    icon: '⚡',
-    docsUrl: 'https://knowledge.apollo.io/hc/en-us/articles/4415734564877-API-Overview',
-  },
-  {
-    id: 'hunter',
-    name: 'Hunter Verification',
-    category: 'Verification',
-    description: 'Domain email verification and secondary waterfall fallback tier.',
-    unitCostUSD: 0.003,
-    hitRateEstimate: 0.28,
-    icon: '🎯',
-    docsUrl: 'https://hunter.io/api-documentation/v2',
-  },
-  {
-    id: 'dropcontact',
-    name: 'Dropcontact Waterfall',
-    category: 'Enrichment',
-    description: 'European corporate email resolution, phone numbers, and company legal info.',
-    unitCostUSD: 0.012,
-    hitRateEstimate: 0.32,
-    icon: '🇫🇷',
-    docsUrl: 'https://developer.dropcontact.com/',
-  },
-  {
-    id: 'prospeo',
-    name: 'Prospeo B2B',
-    category: 'Enrichment',
-    description: 'Mobile phone finder and secondary corporate email waterfall resolver.',
-    unitCostUSD: 0.008,
-    hitRateEstimate: 0.42,
-    icon: '🔍',
-    docsUrl: 'https://prospeo.io/api',
-  },
-  {
-    id: 'anymail_finder',
-    name: 'People Data Labs',
-    category: 'Enrichment',
-    description: 'B2B profile identity resolution, tech stack data, and company headcount intel.',
-    unitCostUSD: 0.015,
-    hitRateEstimate: 0.45,
-    icon: '🌐',
-    docsUrl: 'https://docs.peopledatalabs.com/',
-  },
-  {
-    id: 'deepseek',
-    name: 'ZeroBounce Verification',
-    category: 'Verification',
-    description: 'Deliverability and catch-all validation; protects mailbox sender reputation.',
-    unitCostUSD: 0.002,
-    hitRateEstimate: 0.99,
-    icon: '🛡️',
-    docsUrl: 'https://www.zerobounce.net/docs/',
-  },
-  {
-    id: 'groq',
-    name: 'NeverBounce Single-Check',
-    category: 'Verification',
-    description: 'Real-time 20-point email hygiene and spam-trap suppression inspection.',
-    unitCostUSD: 0.003,
-    hitRateEstimate: 0.98,
-    icon: '📬',
-    docsUrl: 'https://developers.neverbounce.com/',
-  },
-  {
-    id: 'perplexity',
-    name: 'Serper Search Signals',
-    category: 'Search Signals',
-    description: 'Google search signals, hiring announcements, and press release trigger monitoring.',
-    unitCostUSD: 0.001,
-    hitRateEstimate: 0.85,
-    icon: '🔎',
-    docsUrl: 'https://serper.dev/documentation',
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI GPT-4o',
-    category: 'AI Intelligence',
-    description: 'Account intelligence synthesis, custom icebreakers, and intent score classification.',
-    unitCostUSD: 0.005,
-    hitRateEstimate: 0.96,
-    icon: '🤖',
-    docsUrl: 'https://platform.openai.com/docs/api-reference',
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic Claude 3.5',
-    category: 'AI Intelligence',
-    description: 'High-altitude company research, deep intent reasoning, and multi-step copy drafts.',
-    unitCostUSD: 0.006,
-    hitRateEstimate: 0.98,
-    icon: '🧠',
-    docsUrl: 'https://docs.anthropic.com/en/api/getting-started',
-  },
-  {
-    id: ('ollama' as unknown as BYOKProvider),
-    name: 'Ollama Local Model',
-    category: 'Local AI',
-    description: 'LLM inference running on your own machine, so prompts stay local.',
-    unitCostUSD: 0.0,
-    hitRateEstimate: 0.91,
-    icon: '🦙',
-    docsUrl: 'https://ollama.com',
-    isLocal: true,
-  },
-];
+// Display-only metadata per engine registry connector id. No costs or hit rates:
+// those were invented and are gone for good; real pricing lives with the provider.
+const DISPLAY: Record<string, { category: ConnectorMeta['category']; description: string; icon: string; docsUrl: string; isLocal?: boolean }> = {
+  apollo: { category: 'Enrichment', description: 'B2B contact directory for verified work emails.', icon: '\u26a1', docsUrl: 'https://knowledge.apollo.io/hc/en-us/articles/4415734564877-API-Overview' },
+  hunter: { category: 'Verification', description: 'Domain email verification and finder.', icon: '\ud83c\udfaf', docsUrl: 'https://hunter.io/api-documentation/v2' },
+  dropcontact: { category: 'Enrichment', description: 'Corporate email resolution, phone numbers, and company legal info.', icon: '\ud83c\udf0d', docsUrl: 'https://developer.dropcontact.com/' },
+  pdl: { category: 'Enrichment', description: 'B2B profile identity resolution and company data.', icon: '\ud83d\udcdb', docsUrl: 'https://docs.peopledatalabs.com/' },
+  zerobounce: { category: 'Verification', description: 'Deliverability and catch-all validation.', icon: '\ud83d\udee1\ufe0f', docsUrl: 'https://www.zerobounce.net/docs/' },
+  neverbounce: { category: 'Verification', description: 'Real-time email hygiene checks.', icon: '\ud83d\udcec', docsUrl: 'https://developers.neverbounce.com/' },
+  serper: { category: 'Search Signals', description: 'Google search signals for trigger monitoring.', icon: '\ud83d\udd0e', docsUrl: 'https://serper.dev/documentation' },
+  openai: { category: 'AI Intelligence', description: 'Account intelligence synthesis and copy drafting.', icon: '\ud83e\udd16', docsUrl: 'https://platform.openai.com/docs/api-reference' },
+  anthropic: { category: 'AI Intelligence', description: 'Company research and intent reasoning.', icon: '\ud83e\udde0', docsUrl: 'https://docs.anthropic.com/en/api/getting-started' },
+  ollama: { category: 'Local AI', description: 'LLM inference on your own machine; prompts stay local.', icon: '\ud83e\udd99', docsUrl: 'https://ollama.com', isLocal: true },
+};
+
+// Providers the vault save path accepts today (BYOKProviderEnum in contracts).
+const VAULT_PROVIDERS = new Set(['apollo', 'hunter', 'anymail_finder', 'dropcontact', 'prospeo', 'openai', 'anthropic', 'deepseek', 'groq', 'perplexity']);
 
 export default function ConnectorsPage() {
   const [credentials, setCredentials] = useState<Record<string, MaskedBYOKCredential>>({});
@@ -139,20 +44,38 @@ export default function ConnectorsPage() {
   const [activeModalConnector, setActiveModalConnector] = useState<ConnectorMeta | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     let mounted = true;
     async function load() {
       try {
-        const { credentials: list } = await fetchVaultCredentials();
-        if (mounted) {
-          const mapped: Record<string, MaskedBYOKCredential> = {};
-          for (const c of list) {
-            mapped[c.provider] = c;
-          }
-          setCredentials(mapped);
+        const [registryRes, credsRes] = await Promise.all([fetchWaterfallConnectors(), fetchVaultCredentials()]);
+        if (!mounted) return;
+        if (registryRes.error || !registryRes.data) {
+          setLoadError(registryRes.error || 'Connector registry unavailable');
+        } else {
+          const metas: ConnectorMeta[] = registryRes.data.connectors.map((row) => {
+            const d = DISPLAY[row.id] ?? { category: 'Enrichment' as const, description: '', icon: '\ud83d\udd0c', docsUrl: '' };
+            return {
+              id: row.id,
+              name: row.name,
+              category: d.category,
+              description: d.description,
+              icon: d.icon,
+              docsUrl: d.docsUrl,
+              isLocal: d.isLocal,
+              keyStorageAvailable: VAULT_PROVIDERS.has(row.id),
+            };
+          });
+          setConnectors(metas);
         }
+        const mapped: Record<string, MaskedBYOKCredential> = {};
+        for (const c of credsRes.credentials ?? []) mapped[c.provider] = c;
+        setCredentials(mapped);
       } catch {
-        // Fallback gracefully
+        if (mounted) setLoadError('Connector registry unavailable');
       } finally {
         if (mounted) setIsLoading(false);
       }
@@ -172,7 +95,7 @@ export default function ConnectorsPage() {
 
   const categories = ['All', 'Enrichment', 'Verification', 'AI Intelligence', 'Search Signals', 'Local AI'];
 
-  const filteredConnectors = ALL_CONNECTORS.filter((c) => {
+  const filteredConnectors = connectors.filter((c) => {
     const matchesCategory = activeCategory === 'All' || c.category === activeCategory;
     const matchesSearch =
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -202,7 +125,7 @@ export default function ConnectorsPage() {
             <span className="w-2 h-2 rounded-full bg-signal-verified animate-pulse" />
             <span className="text-text-muted">Keys saved:</span>
             <span className="font-mono font-semibold text-text-primary">
-              {connectedCount} / {ALL_CONNECTORS.length}
+              {connectedCount} / {connectors.length}
             </span>
           </div>
         </div>
@@ -212,8 +135,8 @@ export default function ConnectorsPage() {
 
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-sm font-semibold text-text-primary">Enrichment key vault</h2>
-        <Badge variant="matrix" className="text-xs font-mono">Sample catalog: costs and hit rates are illustrative</Badge>
-        <span className="text-[11px] text-text-muted">Keys you save are stored encrypted. No enrichment provider is called yet.</span>
+        <span className="text-[11px] text-text-muted">Connector list comes from the engine registry. Keys you save are stored encrypted. No enrichment provider is called yet.</span>
+        {loadError && <Badge variant="matrix" className="text-xs font-mono">{loadError}</Badge>}
       </div>
 
       {/* Filter and Search Bar */}
@@ -249,13 +172,20 @@ export default function ConnectorsPage() {
       </div>
 
       {/* Connector Grid */}
+      {isLoading && <p className="text-xs text-text-muted font-mono">Loading connector registry...</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredConnectors.map((connector) => (
           <ConnectorCard
             key={connector.id}
             meta={connector}
             credential={credentials[connector.id]}
-            onConfigure={(meta) => setActiveModalConnector(meta)}
+            onConfigure={(meta) => {
+              if (meta.keyStorageAvailable === false) {
+                notify.info(`Key storage is not available for ${meta.name} yet (provider id not accepted by the vault).`);
+                return;
+              }
+              setActiveModalConnector(meta);
+            }}
           />
         ))}
       </div>

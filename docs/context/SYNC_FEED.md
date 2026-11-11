@@ -429,3 +429,9 @@
 ## 2026-11-11 - Engine: G6 waterfall connector registry endpoint
 - GET /waterfall/connectors (session-scoped, read-only): the 10 registered enrichment connectors with capabilities, reconciled against the workspace's stored BYOK credentials - configured flag, masked key, label, verified (only after a real test-connection), timestamps. No provider calls; masked data only; unknown providers ignored; newest credential row wins.
 - Verified live through the web session proxy (10 connectors, none configured, sendingEnabled:false); 4 reconcile unit tests; 321 engine tests pass, tsc clean.
+## 2026-11-11 - Web: G6 connectors page reads the engine registry
+- Connectors page now lists the 10 engine-registered connectors (correct id/name pairs - the old catalog mismatched ids to names, e.g. deepseek labeled "ZeroBounce") with live configured state from the vault.
+- Invented unit costs and hit-rate percentages removed from the catalog and the card UI (shown only if grounded values ever exist); the "Sample catalog" badge is gone.
+- Broken "Test Ping" button hidden unless a connector is testable (no engine route exists; test-connection stays env-gated).
+- Configure/Save-key gated to providers the vault accepts (BYOKProviderEnum); others get an honest "key storage not available yet" notice, and the modal itself refuses non-enum ids.
+- Browser-verified; web tsc clean.

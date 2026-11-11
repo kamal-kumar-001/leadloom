@@ -245,7 +245,7 @@ export async function deleteVaultCredential(
 }
 
 export async function testConnectorPing(
-  provider: BYOKProvider,
+  provider: string,
   _config?: Record<string, unknown>
 ): Promise<{ success: boolean; latencyMs: number; message: string }> {
   const start = Date.now();
@@ -582,6 +582,24 @@ export async function fetchApprovalQueue(campaignId?: string): Promise<{ data: A
   const result = await engineFetch<ApprovalQueueResponse>(`/outbound/approvals${query}`, { method: 'GET' });
   if (result.data) return { data: result.data };
   return { data: null, error: result.error || 'Failed to fetch approval queue' };
+}
+
+export interface WaterfallConnectorRow {
+  id: string;
+  name: string;
+  capabilities: string[];
+  configured: boolean;
+  maskedKey: string | null;
+  label: string | null;
+  verified: boolean;
+  lastVerifiedAt: string | null;
+  updatedAt: string | null;
+}
+
+export async function fetchWaterfallConnectors(): Promise<{ data: { connectors: WaterfallConnectorRow[] } | null; error?: string }> {
+  const result = await engineFetch<{ connectors: WaterfallConnectorRow[] }>('/waterfall/connectors', { method: 'GET' });
+  if (result.data) return { data: result.data };
+  return { data: null, error: result.error || 'Failed to fetch connectors' };
 }
 
 export interface InboundReplyRow {

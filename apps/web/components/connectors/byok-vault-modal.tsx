@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { ConnectorMeta } from './connector-card';
 import { saveVaultCredential } from '../../lib/engine-client';
-import { MaskedBYOKCredential } from '@leadloom/contracts';
+import { MaskedBYOKCredential, BYOKProviderEnum } from '@leadloom/contracts';
 import { notify } from '../../lib/notify';
 
 interface ByokVaultModalProps {
@@ -66,8 +66,14 @@ export function ByokVaultModal({
         ? JSON.stringify({ baseUrl: ollamaUrl, model: ollamaModel })
         : apiKey.trim();
 
+      const provider = BYOKProviderEnum.safeParse(connector.id);
+      if (!provider.success) {
+        notify.error(`Key storage is not available for ${connector.name} yet.`);
+        setSaving(false);
+        return;
+      }
       const { credential, isMock } = await saveVaultCredential({
-        provider: connector.id,
+        provider: provider.data,
         apiKey: payloadKey,
         label: label.trim() || undefined,
       });

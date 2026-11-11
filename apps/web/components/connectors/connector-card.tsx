@@ -16,15 +16,20 @@ import { testConnectorPing } from '../../lib/engine-client';
 import { notify } from '../../lib/notify';
 
 export interface ConnectorMeta {
-  id: BYOKProvider;
+  id: string;
   name: string;
   category: 'Enrichment' | 'Verification' | 'AI Intelligence' | 'Search Signals' | 'Local AI';
   description: string;
-  unitCostUSD: number;
-  hitRateEstimate: number;
+  /** Invented catalog numbers were removed; real pricing must come from the provider, not this UI. */
+  unitCostUSD?: number;
+  hitRateEstimate?: number;
   icon: string;
   docsUrl: string;
   isLocal?: boolean;
+  /** True only when the engine exposes a real test-connection route for this connector. */
+  testable?: boolean;
+  /** True when the vault can store a key for this provider id (BYOKProviderEnum). */
+  keyStorageAvailable?: boolean;
 }
 
 interface ConnectorCardProps {
@@ -124,25 +129,31 @@ export function ConnectorCard({
           </div>
         ) : null}
 
-        {/* Cost & Hit Rate Stats */}
-        <div className="grid grid-cols-2 gap-2 py-2 border-t border-border-subtle text-xs mb-4">
-          <div>
-            <span className="text-text-muted block text-[10px] uppercase font-mono">Unit Cost (illustrative)</span>
-            <span className="font-mono font-medium text-text-primary">
-              {meta.unitCostUSD === 0 ? '$0.00 / call' : `$${meta.unitCostUSD.toFixed(3)} / call`}
-            </span>
+        {/* Cost & hit rate shown only when grounded values exist; invented catalog numbers are never displayed. */}
+        {(meta.unitCostUSD !== undefined || meta.hitRateEstimate !== undefined) && (
+          <div className="grid grid-cols-2 gap-2 py-2 border-t border-border-subtle text-xs mb-4">
+            {meta.unitCostUSD !== undefined && (
+              <div>
+                <span className="text-text-muted block text-[10px] uppercase font-mono">Unit Cost</span>
+                <span className="font-mono font-medium text-text-primary">
+                  {meta.unitCostUSD === 0 ? '$0.00 / call' : `$${meta.unitCostUSD.toFixed(3)} / call`}
+                </span>
+              </div>
+            )}
+            {meta.hitRateEstimate !== undefined && (
+              <div>
+                <span className="text-text-muted block text-[10px] uppercase font-mono">Hit Rate</span>
+                <span className="font-mono font-medium text-text-primary">
+                  {Math.round(meta.hitRateEstimate * 100)}%
+                </span>
+              </div>
+            )}
           </div>
-          <div>
-            <span className="text-text-muted block text-[10px] uppercase font-mono">Hit Rate (illustrative)</span>
-            <span className="font-mono font-medium text-text-primary">
-              {Math.round(meta.hitRateEstimate * 100)}%
-            </span>
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 pt-2 border-t border-border-subtle">
-        {isConnected ? (
+        {isConnected && meta.testable ? (
           <>
             <Button
               variant="outline"
