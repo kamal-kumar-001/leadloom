@@ -3,3 +3,4 @@
 // until a BYOK LLM path with per-claim provenance exists.
 export * from './website-signals.service';
 export * from './website-fetcher';
+export * from './research-leads.service';

@@ -74,6 +74,8 @@ export interface RuntimeServices {
  websiteSignals?: import('./modules/ai-researcher/website-signals.service.js').WebsiteSignalService;
  /** Optional: URL fetch boundary for research (default off; LEADLOOM_RESEARCH_FETCH_ENABLED). Without it, only pasted page text is analyzed and no egress exists. */
  websiteFetcher?: import('./modules/ai-researcher/website-fetcher.js').SafeWebsiteFetcher;
+ /** Optional: persist analyses as rows in the research leads table (mounted with the research API). Values always come from the engine's own heuristic computation. */
+ researchLeads?: import('./modules/ai-researcher/research-leads.service.js').ResearchLeadsService;
  /** Optional: when provided, plan/feature gates are enforced server-side (main gates it behind LEADLOOM_ENTITLEMENTS_ENFORCED). */
  entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'>;
 }
@@ -405,6 +407,20 @@ export async function createApplication(services?:RuntimeServices) {
     return {status:'OK',input:'pasted_text',signals,icpHints,relevanceReasons:deriveRelevanceReasons(signals,icpHints)};
    });
   }
+  if(services.researchLeads) {
+   const SaveBody=z.object({domain:z.string().min(1).max(255).regex(/^[a-z0-9.-]+\.[a-z]{2,}$/i,'Invalid domain'),pageText:z.string().min(1).max(200_000)}).strict();
+   fastify.post('/research/website-signals/save',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    const parsed=SaveBody.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:'Invalid research save request'});
+    const saved=await services.researchLeads!.saveAnalysis(session.workspaceId,parsed.data.domain,parsed.data.pageText,'pasted_text');
+    return {status:'SAVED',...saved};
+   });
+   fastify.get('/research/leads',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply);if(!session)return;
+    return {items:await services.researchLeads!.listAnalyses(session.workspaceId)};
+   });
+  }
   if(services.validator) {
    fastify.post('/validator/experiments',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
@@ -623,6 +639,8 @@ if(require.main===module) {
    if(process.env.LEADLOOM_RESEARCH_API_ENABLED==='true') {
     const {WebsiteSignalService}=await import('./modules/ai-researcher/website-signals.service.js');
     services.websiteSignals=new WebsiteSignalService();
+    const {ResearchLeadsService}=await import('./modules/ai-researcher/research-leads.service.js');
+    services.researchLeads=new ResearchLeadsService(prisma);
     if(process.env.LEADLOOM_RESEARCH_FETCH_ENABLED==='true') {
      const {SafeWebsiteFetcher}=await import('./modules/ai-researcher/website-fetcher.js');
      const PRIV=process.env.NODE_ENV!=='production'&&process.env.LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS==='true';

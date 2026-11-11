@@ -677,3 +677,18 @@ export async function analyzeWebsiteSignals(input: { domain: string; pageText: s
   const res = await engineFetch<WebsiteSignalsResult>('/research/website-signals', { method: 'POST', body: JSON.stringify(input) });
   return { data: res.data, error: res.error, status: res.status };
 }
+
+export async function saveWebsiteAnalysis(input: { domain: string; pageText: string }): Promise<{ data: { status: string; tableId: string; rowId: string } | null; error?: string; status?: number }> {
+  const res = await engineFetch<{ status: string; tableId: string; rowId: string }>('/research/website-signals/save', { method: 'POST', body: JSON.stringify(input) });
+  return { data: res.data, error: res.error, status: res.status };
+}
+
+export interface SavedResearchRow {
+  rowId: string;
+  values: Record<string, unknown>;
+}
+
+export async function fetchResearchLeads(): Promise<{ data: { items: SavedResearchRow[] } | null; error?: string }> {
+  const res = await engineFetch<{ items: SavedResearchRow[] }>('/research/leads', { method: 'GET' });
+  return { data: res.data, error: res.error };
+}

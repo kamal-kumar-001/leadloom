@@ -3,10 +3,36 @@ import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { createApplication } from '../../../main';
 import { WebsiteSignalService, deriveIcpHints, deriveRelevanceReasons } from '../website-signals.service';
 import { SafeWebsiteFetcher } from '../website-fetcher';
+import { ResearchLeadsService } from '../research-leads.service';
+
+function fakeLeadsDb() {
+  const tables: any[] = []; const columns: any[] = []; const rows: any[] = []; const cells: any[] = [];
+  return {
+    table: {
+      findFirst: async ({ where }: any) => tables.find((t) => t.workspaceId === where.workspaceId && t.name === where.name) ?? null,
+      create: async ({ data }: any) => { const t = { id: randomUUID(), rowCount: 0, ...data }; tables.push(t); return t; },
+      update: async ({ where, data }: any) => { const t = tables.find((x) => x.id === where.id); if (data.rowCount?.increment) t.rowCount += data.rowCount.increment; return t; },
+    },
+    column: {
+      create: async ({ data }: any) => { const c = { id: randomUUID(), ...data }; columns.push(c); return c; },
+      findMany: async ({ where }: any) => columns.filter((c) => c.tableId === where.tableId),
+    },
+    row: {
+      count: async ({ where }: any) => rows.filter((r) => r.tableId === where.tableId).length,
+      create: async ({ data }: any) => { const r = { id: randomUUID(), ...data }; rows.push(r); return r; },
+      findMany: async ({ where, take }: any) => rows.filter((r) => r.tableId === where.tableId).slice(0, take ?? 50),
+    },
+    cell: {
+      create: async ({ data }: any) => { const c = { id: randomUUID(), ...data }; cells.push(c); return c; },
+      findMany: async ({ where }: any) => cells.filter((c) => c.tableId === where.tableId && where.rowId.in.includes(c.rowId)),
+    },
+  };
+}
 
 const key = randomBytes(32);
+const workspaceId = randomUUID();
 const token = (role = 'admin') => {
-  const payload = Buffer.from(JSON.stringify({ sub: randomUUID(), workspaceId: randomUUID(), role, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ sub: randomUUID(), workspaceId, role, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
   return payload + '.' + createHmac('sha256', key).update(payload).digest('base64url');
 };
 const stubCore = () => ({
@@ -71,6 +97,25 @@ describe('research route integration', () => {
       expect(body.relevanceReasons.some((r: string) => r.includes('Hiring/careers language'))).toBe(true);
       const health = await server.inject({ method: 'GET', url: '/health' });
       expect(health.json().routes.research).toBe('mounted:session-required:fetch-enabled');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('save/list requires write role for saves and reads back engine-computed values', async () => {
+    const app = await createApplication({ ...stubCore(), websiteSignals: new WebsiteSignalService(), researchLeads: new ResearchLeadsService(fakeLeadsDb()) } as never);
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      const save = (role?: string) => server.inject({ method: 'POST', url: '/research/website-signals/save', ...(role ? { headers: { authorization: 'Bearer ' + token(role) } } : {}), payload: { domain: 'acme.test', pageText: PAGE } });
+      expect((await save()).statusCode).toBe(401);
+      expect((await save('read_only')).statusCode).toBe(403);
+      const ok = await save('admin');
+      expect(ok.statusCode).toBe(200);
+      expect(ok.json().status).toBe('SAVED');
+      const list = await server.inject({ method: 'GET', url: '/research/leads', headers: { authorization: 'Bearer ' + token('read_only') } });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().items).toHaveLength(1);
+      expect(list.json().items[0].values['Source']).toBe('heuristic_keywords');
     } finally {
       await app.close();
     }

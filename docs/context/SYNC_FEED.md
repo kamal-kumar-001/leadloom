@@ -515,3 +515,9 @@
 - URL fetching is a separate opt-in (LEADLOOM_RESEARCH_FETCH_ENABLED) via SafeWebsiteFetcher (http/https only, private hosts blocked, same-host redirects only, 512KB cap); without it the route returns an honest disabled state and zero egress exists. Health reports research mount state.
 - New web Research page (/app/research): fetch-URL input + paste-text path, renders signals/reasons with 'keyword match' labeling. Verified in a real browser as e2e-g9: pasted-text analysis renders correctly; fetch URL shows the honest disabled message (screenshots g4-research-pasted.png, g4-research-fetch-disabled.png).
 - 330 engine tests pass (7 new: service honesty + route integration incl. default-off 404, auth, pasted-text, fetch-disabled, injected-fetcher, thin-page). No contract or API change beyond the new route.
+
+---
+### [2026-11-11 23:16 IST] Team A - G4 website-to-lead-list verified end-to-end locally
+- POST /research/website-signals/save (session + write role) re-computes the heuristic analysis server-side from the submitted text - the client never supplies computed signals - and writes a row to the per-workspace 'Website research leads' table (11 fixed columns incl. Source='heuristic_keywords' and Input). GET /research/leads lists saved rows (read role).
+- Research page: 'Save to lead table' after analysis, plus a Saved analyses list. Verified in a real browser as e2e-g9: analyze -> save -> 'Saved to lead table' badge; Tables page shows the persisted 'Website research leads' table with 1 row (screenshots g4-research-saved.png, g4-tables-row.png; the demo grid below is the pre-existing labeled sample canvas).
+- Engine tests: 334 pass (3 new: service save/list honesty, route role enforcement). No contract or API change beyond the two new routes.

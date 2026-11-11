@@ -2,8 +2,15 @@
 
 import React, { useState } from 'react';
 import { Badge, Button, Card } from '@leadloom/ui';
-import { Globe, Search, AlertTriangle } from 'lucide-react';
-import { analyzeWebsiteSignals, type WebsiteSignalsResult } from '../../../lib/engine-client';
+import { Globe, Search, AlertTriangle, Save, Check } from 'lucide-react';
+import Link from 'next/link';
+import {
+  analyzeWebsiteSignals,
+  saveWebsiteAnalysis,
+  fetchResearchLeads,
+  type WebsiteSignalsResult,
+  type SavedResearchRow,
+} from '../../../lib/engine-client';
 
 export default function ResearchPage() {
   const [url, setUrl] = useState('');
@@ -12,11 +19,35 @@ export default function ResearchPage() {
   const [result, setResult] = useState<WebsiteSignalsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [savedRows, setSavedRows] = useState<SavedResearchRow[]>([]);
+  const [lastPageText, setLastPageText] = useState('');
+
+  React.useEffect(() => {
+    fetchResearchLeads().then((res) => {
+      if (res.data?.items) setSavedRows(res.data.items);
+    });
+  }, []);
+
+  async function save(domain: string, pageText: string) {
+    setBusy(true);
+    const res = await saveWebsiteAnalysis({ domain, pageText });
+    setBusy(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    setSaved(res.data?.rowId ?? null);
+    const list = await fetchResearchLeads();
+    if (list.data?.items) setSavedRows(list.data.items);
+  }
 
   async function analyze(mode: 'url' | 'text') {
     setBusy(true);
     setError(null);
     setResult(null);
+    setSaved(null);
+    if (mode === 'text') setLastPageText(pageText);
     const input = mode === 'url' ? { url: url.trim() } : { domain: domain.trim(), pageText };
     const res = await analyzeWebsiteSignals(input as { url: string });
     setBusy(false);
@@ -152,6 +183,47 @@ export default function ResearchPage() {
               No AI summary and no confidence score exist at this stage - these are keyword
               observations only.
             </p>
+          </div>
+
+          <div className="border-t border-[var(--border)] pt-3 flex items-center gap-3">
+            {saved ? (
+              <Badge variant="verified" className="text-[10px] font-mono">
+                <Check className="h-3 w-3 mr-1" /> Saved to lead table
+              </Badge>
+            ) : (
+              <Button disabled={busy} onClick={() => save(result.signals.companyDomain, lastPageText)}>
+                <Save className="h-4 w-4 mr-1" /> Save to lead table
+              </Button>
+            )}
+            <span className="text-xs text-[var(--text-secondary)]">
+              Saves the engine-computed analysis above as a row in the{' '}
+              <Link href="/app/tables" className="underline">
+                Website research leads
+              </Link>{' '}
+              table, labeled {result.signals.source}.
+            </span>
+          </div>
+        </Card>
+      )}
+
+      {savedRows.length > 0 && (
+        <Card className="p-4 space-y-2">
+          <h2 className="font-semibold text-sm">Saved analyses ({savedRows.length})</h2>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Rows in the Website research leads table. Source: keyword heuristics.
+          </p>
+          <div className="space-y-2">
+            {savedRows.map((r) => (
+              <div key={r.rowId} className="flex items-center justify-between border border-[var(--border)] rounded-md px-3 py-2 text-sm">
+                <span className="font-mono">{String(r.values['Domain'] ?? '')}</span>
+                <span className="text-[var(--text-secondary)] text-xs truncate max-w-[60%]">
+                  {String(r.values['Tech keywords'] ?? '') || 'no tech keywords'}
+                </span>
+                <span className="text-[var(--text-secondary)] text-xs">
+                  {String(r.values['Researched at'] ?? '').slice(0, 19).replace('T', ' ')}
+                </span>
+              </div>
+            ))}
           </div>
         </Card>
       )}
