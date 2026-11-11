@@ -144,7 +144,7 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
             </Button>
           </form>
         ) : (
-          <div className="mt-10 p-6 rounded-xl border border-signal-verified/30 bg-signal-verified/10 max-w-md mx-auto animate-fade-in">
+          <div className="mt-10 p-6 rounded-xl border border-signal-verified bg-canvas-elevated max-w-md mx-auto animate-fade-in">
             <div className="flex items-center justify-center gap-2 text-signal-verified font-bold text-base">
               <CheckCircle2 className="w-5 h-5" />
               <span>Your response has been saved</span>

@@ -604,3 +604,12 @@
 - Designer v3 patch integrated with integration-review corrections: purple/butter shared tokens (both themes, backgrounds preserved), modular marketing sections, BrandMark now a two-stop palette gradient (packages/ui), phosphor-icons dependency removed (lockfile clean, npm pruned).
 - Review fixes applied before commit (main's integration review): Integrations mega-menu + FAQ now name the ACTUAL BYOK storage enum (Apollo, Hunter, AnyMail Finder, Dropcontact, Prospeo, OpenAI, Anthropic, DeepSeek, Groq, Perplexity - verified against BYOKProviderEnum at 94fa7ab); 'research tables' -> 'saved tables' (FAQ + layout meta); 'Find Leads' -> 'Create workspace' (action-accurate; still only prefills /signup); '10 providers' claims all tied to key storage; idea validator labeled coming soon everywhere (its engine persistence landed on main today but live runs 94fa7ab with the flag unverified). idea-validator-showcase.tsx is unreachable (no imports), left as-is.
 - Visual pass in a real browser: landing desktop + mobile 390px, dashboard dark + light - palette correct, layouts intact, both app themes preserved. (v3-landing.png, v3-landing-mobile.png, v3-dash-dark.png, v3-dash-light.png)
+
+## 2026-11-12 02:50 IST — Validator dashboard real flow + public-route hardening
+- /app/validator: removed mock "Interactive Smoke-Test Workbench" (mock scorecard + radar); deleted orphaned mock-era components (new-experiment-modal.tsx, validation-radar-card.tsx — both unreachable).
+- Real generate form (hypothesis + optional slug → POST /validator/experiments) and real experiment list (verdict/score/page-loads/waitlist counts + /v/[slug] link) via extended GET /workspace/experiments (adds slug/visitors/waitlistCount from smoke_test_pages; hypothesis still truncated, no sequence/ICP leakage).
+- hypothesis-decomposer rewritten to neutral copy: no invented performance figures, no fabricated artifacts; spec test "never invents performance guarantees".
+- Public routes hardened: slug regex on /validator/pages routes; in-memory per-IP per-slug limiter (20 page loads, 5 lead submits / 10 min; documented non-distributed).
+- /v/[slug] saved-confirmation styling fix: dropped Tailwind opacity modifiers on CSS-var signal colors (silent drop) → plain tokens.
+- Verified in real browser on local stack (engine :4100 + web :3000, local dev DB): generate→public page→survey+waitlist save→dashboard metrics. Engine suite green.
+- Source-only; live still runs 94fa7ab (invites off). Not deployed.

@@ -527,13 +527,31 @@ export async function createApplication(services?:RuntimeServices) {
    // without an account. Strict schema validation only. State persists in
    // Postgres (validation_experiments/validation_leads) when the service is
    // constructed with Prisma; the in-memory fallback is for unit tests only.
+   const SLUG_RE=/^[a-z0-9][a-z0-9-]{0,127}$/i;
+   // First-line abuse control at the engine (the web proxy has its own per-IP
+   // limiter; direct engine callers must not bypass it). In-memory, per
+   // engine instance: 20 page loads + 5 lead submissions per IP per slug per
+   // 10 minutes. Not a distributed limit - documented, not hidden.
+   const pubHits=new Map<string,number[]>();
+   const pubLimit=(key:string,max:number):boolean=>{
+    const now=Date.now(),W=600_000;
+    const arr=(pubHits.get(key)??[]).filter(t=>now-t<W);
+    if(arr.length>=max){pubHits.set(key,arr);return false;}
+    arr.push(now);pubHits.set(key,arr);return true;
+   };
    fastify.get('/validator/pages/:slug',async(request:any,reply:any)=>{
-    const page=await services.validator!.getPublicPage(String(request.params.slug));
+    const slug=String(request.params.slug);
+    if(!SLUG_RE.test(slug))return reply.code(404).send({error:'Smoke test page not found'});
+    if(!pubLimit(`pg:${request.ip}:${slug}`,20))return reply.code(429).send({error:'Too many requests'});
+    const page=await services.validator!.getPublicPage(slug);
     if(!page)return reply.code(404).send({error:'Smoke test page not found'});
     return page;
    });
    fastify.post('/validator/pages/:slug/leads',async(request:any,reply:any)=>{
-    try{return await services.validator!.submitLead(String(request.params.slug),request.body);}
+    const slug=String(request.params.slug);
+    if(!SLUG_RE.test(slug))return reply.code(404).send({error:'Smoke test page not found'});
+    if(!pubLimit(`ld:${request.ip}:${slug}`,5))return reply.code(429).send({error:'Too many submissions. Please try again in 10 minutes.'});
+    try{return await services.validator!.submitLead(slug,request.body);}
     catch(err){const notFound=(err as Error).message?.includes('not found');return reply.code(notFound?404:400).send({error:notFound?'Smoke test page not found':'Invalid lead submission'});}
    });
   }

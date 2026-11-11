@@ -350,6 +350,14 @@ export interface WorkspaceExperimentRow {
   verdict: string;
   verdictScore: number | null;
   createdAt: string;
+  slug: string | null;
+  visitors: number;
+  waitlistCount: number;
+}
+
+export async function generateExperiment(input: { rawHypothesis: string; preferredSlug?: string }): Promise<{ data: { experimentId: string; pageUrl: string } | null; error?: string; status?: number }> {
+  const res = await engineFetch<{ experimentId: string; pageUrl: string }>('/validator/experiments', { method: 'POST', body: JSON.stringify(input) });
+  return { data: res.data, error: res.error, status: res.status };
 }
 export const fetchWorkspaceSuppressions = () => workspaceRead<WorkspaceSuppressionRow[]>('/workspace/suppressions');
 export const fetchWorkspaceExperiments = () => workspaceRead<WorkspaceExperimentRow[]>('/workspace/experiments');

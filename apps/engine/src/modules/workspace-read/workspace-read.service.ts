@@ -110,7 +110,10 @@ export class WorkspaceReadService {
   async listExperiments(workspaceId: string) {
     const rows = await this.db.validationExperiment.findMany({
       where: { workspaceId },
-      select: { id: true, hypothesis: true, verdict: true, verdictScore: true, createdAt: true },
+      select: {
+        id: true, hypothesis: true, verdict: true, verdictScore: true, createdAt: true,
+        smokeTestPages: { select: { slug: true, visitors: true, _count: { select: { waitlistLeads: true } } }, take: 1 },
+      },
       orderBy: { createdAt: 'desc' },
       take: LIMIT,
     });
@@ -120,6 +123,9 @@ export class WorkspaceReadService {
       verdict: r.verdict,
       verdictScore: r.verdictScore,
       createdAt: r.createdAt,
+      slug: r.smokeTestPages?.[0]?.slug ?? null,
+      visitors: r.smokeTestPages?.[0]?.visitors ?? 0,
+      waitlistCount: r.smokeTestPages?.[0]?._count?.waitlistLeads ?? 0,
     }));
   }
 }

@@ -65,9 +65,9 @@ export class HypothesisDecomposerService {
         ],
         sampleKeywords: ['Kubernetes', 'EKS', 'GKE', 'FinOps', 'Terraform', 'Cloud Costs'],
       };
-      title = 'Autonomous Kubernetes Cloud Cost Intelligence';
-      headline = 'Cut 40% Off Your Series A Kubernetes Spend — Without Touching YAML';
-      subheadline = 'Continuous cluster right-sizing and spot allocation that preserves 99.99% uptime. Designed specifically for engineering teams that cannot afford a dedicated FinOps lead.';
+      title = 'Kubernetes Cost Intelligence - Early Access';
+      headline = 'Kubernetes cost visibility for lean engineering teams';
+      subheadline = 'We are exploring whether continuous cluster right-sizing and spot allocation matter to teams without a dedicated FinOps lead. Join the early-access list and help shape what gets built.';
       surveyQuestion1 = 'What was your biggest surprise in last month’s cloud infrastructure bill?';
       surveyOptions2 = ['1-3 engineers', '4-10 engineers', '10+ engineers'];
     } else if (isSalesOrRevOps) {
@@ -81,9 +81,9 @@ export class HypothesisDecomposerService {
         ],
         sampleKeywords: ['Outbound', 'Cold Email', 'Enrichment', 'Deliverability', 'RevOps'],
       };
-      title = 'Signal-to-Pipeline Revenue Engine';
-      headline = 'Wholesale Data Enrichment & Automated Deliverability for Modern Outbound';
-      subheadline = 'Stop paying 1,000% SaaS markups on Apollo and Hunter credits. Run native waterfalls with zero data tax.';
+      title = 'Provider-Direct Data Enrichment - Early Access';
+      headline = 'Data enrichment with providers you pay directly';
+      subheadline = 'We are testing whether running enrichment with your own provider keys beats buying bundled credits. Join the early-access list and tell us how your team buys data today.';
       surveyQuestion1 = 'What is your current monthly budget for B2B lead enrichment tools?';
       surveyOptions2 = ['<$500/mo', '$500-$2,000/mo', '>$2,000/mo'];
     } else if (isAiOrMl) {
@@ -97,9 +97,9 @@ export class HypothesisDecomposerService {
         ],
         sampleKeywords: ['LLM', 'RAG', 'Agentic Workflows', 'Vector DB', 'OpenAI'],
       };
-      title = 'Production LLM Reliability & Orchestration';
-      headline = 'Zero-Latency Structured Outputs for Agentic Workflows';
-      subheadline = 'Automated fallbacks across Gemini, Groq, and DeepSeek with deterministic JSON schemas and sub-100ms routing.';
+      title = 'LLM Reliability Tooling - Early Access';
+      headline = 'Structured outputs and fallbacks for production LLM workflows';
+      subheadline = 'We are exploring reliability tooling for agentic workflows. Join the early-access list and share your biggest production bottleneck.';
       surveyQuestion1 = 'What is your primary bottleneck with LLM agents in production?';
       surveyOptions2 = ['Hallucinations', 'Token Latency', 'API Rate Limits'];
     } else {
@@ -114,9 +114,9 @@ export class HypothesisDecomposerService {
         ],
         sampleKeywords: ['Automation', 'SaaS', 'Workflow', 'Productivity'],
       };
-      title = `${rawHypothesis.slice(0, 50)} | Early Access`;
-      headline = `Validate & Scale: ${rawHypothesis}`;
-      subheadline = 'A dedicated modern workflow platform built to solve your highest-friction operational bottleneck in minutes.';
+      title = `${rawHypothesis.slice(0, 50)} - Early Access`;
+      headline = rawHypothesis;
+      subheadline = 'We are validating whether this problem is worth solving. Join the early-access list and tell us how your team handles it today.';
       surveyQuestion1 = 'What is the most frustrating manual task your team deals with weekly?';
       surveyOptions2 = ['1-5 hours/week', '5-15 hours/week', '15+ hours/week'];
     }
@@ -143,12 +143,11 @@ export class HypothesisDecomposerService {
     };
 
     // Peer-to-peer non-salesy founder validation sequence
-    const sequenceSubject = `Quick question regarding {{company}}'s ${icp.sampleKeywords[0] ?? 'infrastructure'}`;
+    const sequenceSubject = `Quick question about ${rawHypothesis.slice(0, 60)}`;
     const sequenceBody = `Hey {{first_name}},\n\n` +
-      `Noticed you are scaling the team at {{company}}. We are currently conducting deep problem-discovery research with tech leaders tackling ${rawHypothesis.toLowerCase()}.\n\n` +
-      `We put together a bare-bones prototype and interactive architecture spec: https://leadloom.com/v/${slug}\n\n` +
-      `We are not selling anything—just looking for brutal, candid feedback: is this a top-3 headache for your team right now, or is it completely off the mark?\n\n` +
-      `Best,\nFounder, LeadLoom Research`;
+      `We're researching ${rawHypothesis.toLowerCase()} for teams like {{company}}'s and put up a short early-access page describing the idea: /v/${slug}\n\n` +
+      `Nothing for sale here - is this a real headache for your team, or off the mark? A one-line reply either way genuinely helps.\n\n` +
+      `Thanks,\n{{sender_name}}`;
 
     return {
       slug,

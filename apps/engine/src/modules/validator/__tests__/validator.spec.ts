@@ -76,6 +76,22 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     expect(lowInterestScorecard.actionableSummary).toContain('Low customer interest');
   });
 
+  it('never invents performance guarantees or figures in generated public copy', () => {
+    const decomposer = new HypothesisDecomposerService();
+    const banned = /\d+%|99\.9|zero-latency|sub-\d+ms|guaranteed|1,000%|\$\d+k\/mo/i;
+    for (const h of [
+      'Automated Kubernetes cost-cutter for Series A startups',
+      'Outbound sales tooling for B2B teams',
+      'AI agent orchestration platform',
+      'Meal planning for busy parents',
+    ]) {
+      const d = decomposer.decompose({ rawHypothesis: h });
+      expect(banned.test(d.smokePage.headline)).toBe(false);
+      expect(banned.test(d.smokePage.subheadline)).toBe(false);
+      expect(d.sequenceBody).not.toMatch(/prototype|architecture spec|leadloom\.com/);
+    }
+  });
+
   it('should handle full workflow in ValidatorService from hypothesis to waitlist submission', async () => {
     const service = new ValidatorService();
 
