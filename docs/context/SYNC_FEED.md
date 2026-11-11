@@ -560,3 +560,8 @@
 ### [2026-11-12 01:10 IST] Team B deliverable: provider-access matrix (research-only assignment)
 - Team B (Antigravity, leadloom project) produced docs/plan/PROVIDER_ACCESS_MATRIX.md: per-provider access path, free tier, B2B-outreach terms and billing setup for the 10 registered waterfall connectors + contract-only prospeo, plus G5 intent sources (Greenhouse/Lever ATS feeds, Indeed, SEC EDGAR, Crunchbase, X, LinkedIn). Its split: buildable-now-without-purchases = Ollama, SEC EDGAR, public ATS feeds, Hunter (50 free/mo), ZeroBounce (100 free/mo), Serper (free credits - count UNVERIFIED); needs-paid/approval = OpenAI, Anthropic, PDL, NeverBounce, Prospeo, X API, Crunchbase, LinkedIn.
 - Instinct review before integration: codebase inventory verified against the repo; Hunter free tier verified live on hunter.io/pricing; every citation name mapped to its official URL inline; remaining vendor claims marked not-independently-verified. No plans/code approved in Antigravity; no accounts or keys created. origin/main contained only Instinct commits at collection.
+
+---
+### [2026-11-12 01:15 IST] G3: recipient import UI + real-PG fix
+- Campaigns page gains a per-campaign "Recipients" panel: paste CSV (email, first name, company), import via the tenant-scoped route, list with stored-count badge and refresh. Wires the recipient store that strict per-recipient resolution reads.
+- Real-browser e2e caught a bug pg-mem masked: raw SQL in campaign-recipients.repository compared uuid/jsonb columns to text params (42883/42804 on real Postgres). Added ::uuid/::jsonb casts; import + upsert + list now verified live (2 imports, 1 invalid line skipped, upsert updates company without duplicating). Engine suite 355 passed/36 skipped. Sending OFF; live 94fa7ab.

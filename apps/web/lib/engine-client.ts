@@ -705,3 +705,29 @@ export async function fetchWorkspaceTableRows(tableId: string): Promise<{ data: 
   const res = await engineFetch<WorkspaceTableRows>(`/workspace/tables/${tableId}/rows`, { method: 'GET' });
   return { data: res.data, error: res.error };
 }
+
+export interface CampaignRecipientRow {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  companyName?: string | null;
+  title?: string | null;
+}
+
+export interface RecipientImportInput {
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  companyName?: string | null;
+  title?: string | null;
+}
+
+export const importCampaignRecipients = (campaignId: string, recipients: RecipientImportInput[]) =>
+  engineFetch<{ upserted: number }>(`/campaigns/${campaignId}/recipients`, {
+    method: 'POST',
+    body: JSON.stringify({ recipients }),
+  });
+
+export const fetchCampaignRecipients = (campaignId: string) =>
+  engineFetch<{ recipients: CampaignRecipientRow[] }>(`/campaigns/${campaignId}/recipients`, { method: 'GET' });

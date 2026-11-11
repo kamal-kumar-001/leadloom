@@ -31,7 +31,7 @@ export class CampaignRecipientsRepository {
       const now = this.clock();
       const rows = await this.database.query<{ id: string }>(
         `INSERT INTO campaign_recipients (id, workspace_id, campaign_id, email, first_name, last_name, company_name, title, custom_fields, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         VALUES ($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9::jsonb,$10)
          ON CONFLICT ("campaign_id","email")
          DO UPDATE SET first_name=EXCLUDED.first_name, last_name=EXCLUDED.last_name, company_name=EXCLUDED.company_name,
                        title=EXCLUDED.title, custom_fields=EXCLUDED.custom_fields, updated_at=EXCLUDED.updated_at
@@ -53,7 +53,7 @@ export class CampaignRecipientsRepository {
   /** Tenant-scoped read; returns [] for another workspace's campaign (no existence leak). */
   async listRecipients(workspaceId: string, campaignId: string): Promise<CampaignRecipientRow[]> {
     const rows = await this.database.query<Record<string, unknown>>(
-      'SELECT id, campaign_id, workspace_id, email, first_name, last_name, company_name, title, custom_fields FROM campaign_recipients WHERE workspace_id=$1 AND campaign_id=$2 ORDER BY created_at ASC',
+      'SELECT id, campaign_id, workspace_id, email, first_name, last_name, company_name, title, custom_fields FROM campaign_recipients WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid ORDER BY created_at ASC',
       [workspaceId, campaignId],
     );
     return rows.map((r) => ({

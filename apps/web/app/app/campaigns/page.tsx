@@ -5,6 +5,7 @@ import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
 import { fetchWorkspaceCampaigns, type WorkspaceCampaignRow } from '../../../lib/engine-client';
 import { notify } from '@/lib/notify';
 import { ApprovalQueue } from '../../../components/campaigns/approval-queue';
+import { CampaignRecipients } from '../../../components/campaigns/campaign-recipients';
 import { RepliesPanel } from '../../../components/campaigns/replies-panel';
 import {
   Send,
@@ -64,6 +65,7 @@ export default function CampaignsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [recipientsOpenFor, setRecipientsOpenFor] = useState<string | null>(null);
 
   const loadCampaigns = useCallback(async () => {
     setIsLoading(true);
@@ -208,11 +210,21 @@ export default function CampaignsPage() {
                   </div>
                 </div>
                 <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-end">
-                  <Button size="sm" variant="outline" className="text-xs gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs gap-1.5"
+                    onClick={() => setRecipientsOpenFor(recipientsOpenFor === camp.id ? null : camp.id)}
+                  >
                     <FolderOpen className="w-3.5 h-3.5" />
-                    <span>View Campaign</span>
+                    <span>{recipientsOpenFor === camp.id ? 'Hide Recipients' : 'Recipients'}</span>
                   </Button>
                 </div>
+                {recipientsOpenFor === camp.id && (
+                  <div className="mt-3">
+                    <CampaignRecipients campaignId={camp.id} campaignName={camp.name} />
+                  </div>
+                )}
               </Card>
             ))}
           </div>
