@@ -7,20 +7,19 @@ Live today: `94fa7ab` (deployed 12:40 IST 2026-11-11). Migrations 20261116 and 2
 2. Database: one additive migration, `20261118_mailbox_password_auth` (4 new columns with defaults on `mailboxes`). No existing data changes. Rollback: older code still works.
 3. Host settings (needs the host owner): `LEADLOOM_TEAM_INVITES_ENABLED=true` and `LEADLOOM_MAILBOX_CONNECT_ENABLED=true` in `.env`. Both default off. Invites send no email; the inviter tells the person to sign in or sign up.
 
-## Why the last build took about an hour (evidence-based)
-- `docker/web.Dockerfile` runs `COPY . .` before `npm ci`, so any source change throws away the dependency layer and reinstalls every package, then builds. The engine Dockerfile should be checked for the same pattern.
-- The host shares Docker and one disk with BakeryPOS and FeeFree (disk 88% used, Docker.raw 226 GB at the time). Heavy disk I/O there slows every site.
-- For comparison, the web app alone builds in about 36 s on a 2 CPU / 2 GB sandbox once dependencies are installed.
+## What is known about the last stall
+- The 11:36 build stalled about an hour in the image layer EXPORT step (host report in the Antigravity chat), then finished by itself and update.sh completed. Cause was Docker VM / shared-disk I/O. Other sites (pos, feefree) saw timeouts while the OLD stack was still running, so keeping the old stack up does NOT protect the other apps during the build.
+- `COPY . .` before `npm ci` in both Dockerfiles means a code change reinstalls dependencies. That is wasted work and a possible contributor, NOT an established root cause of the export stall.
+- Unknown and not yet checked (read-only host questions): host CPU architecture, Docker runtime (Desktop VM vs engine), free disk now, image sizes.
 
-## Low-load approach (proposed)
-1. Before: check free disk and load (`df -h`, `uptime`). Do not start if disk is above 90% or another build is running. Do not prune, delete volumes or restart Docker.
-2. Build one image at a time, not both in parallel: `COMPOSE_PARALLEL_LIMIT=1 docker compose --profile application build engine`, then `web` (update.sh already builds before touching the running stack, so the old site stays up during the build).
-3. Source fix to cut the cost (not done yet, needs a real Docker test before use): copy only `package.json` files and the lockfile, run `npm ci`, then copy sources, so the dependency layer is cached between releases. This changes build files only, not app behavior.
-4. Watch it: a timeout of about 20 minutes; if exceeded, stop the build (the running stack is untouched) and report instead of retrying.
-5. Run `update.sh` as is. It builds, runs `prisma migrate deploy` and `migrate status` with the new image BEFORE replacing containers, and stops without replacing anything if migration fails. Note: its last step runs `docker image prune -f` (dangling images only); that is existing behavior, flag if unwanted.
-6. After: verify `/login` 200, `/` 200, engine `/health`, pos.dmpilot.org and feefree.dmpilot.org 200, `prisma migrate status` clean, and that only 20261118 was newly applied.
+## Candidate routes (none verified safe yet)
+1. Build on the host as before. Same stall risk. Serial build lowers concurrency only; update.sh may build again. Any disk cutoff or time limit is a guess, and stopping a build may not stop the underlying export I/O. Residual outage risk: other apps may time out again for up to about an hour.
+2. Build images elsewhere and load them on the host. Needs: matching architecture (unknown), a place to hold the images (a registry or file transfer: no authority or account for that exists, and I have no Docker here to test), and a change to compose/update.sh to use prebuilt images. Not available now; would need Kamal's decision on any registry/account.
+3. Smaller exports: layering fix (`package.json` first, `npm ci`, then sources) only helps if the export, not the install, is the slow part. Untestable without Docker; do it only as part of a supervised release.
+Recommendation until a route is verified: do not release yet. Ask the host agent for the read-only facts above (arch, Docker runtime, disk, image sizes), then pick the route.
 
-## Decisions needed (one ask, only when the UI is verified locally)
-A. Approve running the release on the lab PC with the steps above.
-B. Approve flipping the two flags to true (invites, mailbox connect) at the same time, or keep both off.
-Not needed and not covered: any provider purchase, any live email, any Gmail/X/LinkedIn connection.
+## Release (once a route is chosen)
+`update.sh` order is build, then `prisma migrate deploy` + `migrate status` with the new image, then replace containers; if migration fails nothing is replaced. Last step runs `docker image prune -f` (existing behavior, dangling images only; not a new cleanup). After: `/login` 200, `/` 200, engine `/health`, pos and feefree 200, only 20261118 newly applied.
+
+## The one decision for Kamal (after UI, security and IMAP evidence exist)
+A single yes/no on the whole release: new code, migration 20261118, and both feature flags on, with the chosen build route and its honest residual risk stated. Not covered: provider purchases, live email, any Gmail/X/LinkedIn connection.
