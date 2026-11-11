@@ -90,37 +90,50 @@ export function CampaignRecipients({ campaignId, campaignName }: { campaignId: s
         </Button>
       </div>
 
-      <p className="text-[11px] text-text-muted font-mono">
-        One per line: email, first name, company. Template variables like {'{{name}}'} / {'{{company}}'} resolve from
-        these values; a recipient missing a value a template needs stays held at review.
-      </p>
-
-      <textarea
-        value={importText}
-        onChange={(e) => setImportText(e.target.value)}
-        placeholder={'ada@acme.example, Ada, Acme Corp\nbob@globex.example, Bob, Globex'}
-        rows={3}
-        className="w-full rounded-md bg-canvas-elevated/40 border border-border-subtle p-2.5 text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-loom"
-      />
-      <div className="flex justify-end">
-        <Button size="sm" variant="primary" onClick={handleImport} disabled={isImporting || !importText.trim()} className="text-xs gap-1.5">
-          <Upload className="w-3 h-3" />
-          <span>{isImporting ? 'Importing...' : 'Import recipients'}</span>
-        </Button>
-      </div>
-
-      {recipients.length > 0 && (
-        <div className="max-h-48 overflow-y-auto rounded-md border border-border-subtle divide-y divide-border-subtle">
-          {recipients.map((r) => (
-            <div key={r.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
-              <span className="font-mono text-text-primary truncate">{r.email}</span>
-              <span className="text-text-muted truncate ml-3">
-                {[r.firstName, r.companyName].filter(Boolean).join(' - ') || 'no name/company on file'}
-              </span>
-            </div>
-          ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-3">
+          <p className="text-[11px] text-text-muted font-mono">
+            One per line: email, first name, company. Template variables like {'{{name}}'} / {'{{company}}'} resolve
+            from these values; a recipient missing a value a template needs stays held at review.
+          </p>
+          <textarea
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder={'ada@acme.example, Ada, Acme Corp\nbob@globex.example, Bob, Globex'}
+            rows={4}
+            className="w-full bg-canvas border border-border-subtle rounded-lg p-3 text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-loom"
+          />
+          <div className="flex justify-end">
+            <Button size="sm" variant="primary" onClick={handleImport} disabled={isImporting || !importText.trim()} className="text-xs gap-1.5">
+              <Upload className="w-3 h-3" />
+              <span>{isImporting ? 'Importing...' : 'Import recipients'}</span>
+            </Button>
+          </div>
         </div>
-      )}
+
+        <div>
+          {recipients.length > 0 ? (
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle">
+              <div className="grid grid-cols-[1fr_auto_auto] gap-4 px-3 py-1.5 text-[10px] uppercase tracking-wide text-text-muted font-mono">
+                <span>Email</span>
+                <span>First name</span>
+                <span>Company</span>
+              </div>
+              {recipients.map((r) => (
+                <div key={r.id} className="grid grid-cols-[1fr_auto_auto] gap-4 px-3 py-1.5 text-xs">
+                  <span className="font-mono text-text-primary break-all">{r.email}</span>
+                  <span className="text-text-secondary">{r.firstName || '-'}</span>
+                  <span className="text-text-secondary">{r.companyName || '-'}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-full min-h-24 rounded-lg border border-dashed border-border-subtle flex items-center justify-center">
+              <span className="text-xs text-text-muted">{isLoading ? 'Loading...' : 'No recipients stored for this campaign yet'}</span>
+            </div>
+          )}
+        </div>
+      </div>
     </Card>
   );
 }

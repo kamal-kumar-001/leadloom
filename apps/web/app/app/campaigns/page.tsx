@@ -212,7 +212,7 @@ export default function CampaignsPage() {
                 <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-end">
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant={recipientsOpenFor === camp.id ? 'primary' : 'outline'}
                     className="text-xs gap-1.5"
                     onClick={() => setRecipientsOpenFor(recipientsOpenFor === camp.id ? null : camp.id)}
                   >
@@ -220,14 +220,16 @@ export default function CampaignsPage() {
                     <span>{recipientsOpenFor === camp.id ? 'Hide Recipients' : 'Recipients'}</span>
                   </Button>
                 </div>
-                {recipientsOpenFor === camp.id && (
-                  <div className="mt-3">
-                    <CampaignRecipients campaignId={camp.id} campaignName={camp.name} />
-                  </div>
-                )}
               </Card>
             ))}
           </div>
+        )}
+
+        {recipientsOpenFor && campaigns.some((c) => c.id === recipientsOpenFor) && (
+          <CampaignRecipients
+            campaignId={recipientsOpenFor}
+            campaignName={campaigns.find((c) => c.id === recipientsOpenFor)!.name}
+          />
         )}
       </div>
 

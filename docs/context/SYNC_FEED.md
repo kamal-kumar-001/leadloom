@@ -565,3 +565,7 @@
 ### [2026-11-12 01:15 IST] G3: recipient import UI + real-PG fix
 - Campaigns page gains a per-campaign "Recipients" panel: paste CSV (email, first name, company), import via the tenant-scoped route, list with stored-count badge and refresh. Wires the recipient store that strict per-recipient resolution reads.
 - Real-browser e2e caught a bug pg-mem masked: raw SQL in campaign-recipients.repository compared uuid/jsonb columns to text params (42883/42804 on real Postgres). Added ::uuid/::jsonb casts; import + upsert + list now verified live (2 imports, 1 invalid line skipped, upsert updates company without duplicating). Engine suite 355 passed/36 skipped. Sending OFF; live 94fa7ab.
+
+---
+### [2026-11-12 01:20 IST] G3 recipients UI: full-width readable layout
+- Recipients panel moved out of the narrow campaign card into a full-width section under the campaign grid: import form left, stored recipients right in an EMAIL / FIRST NAME / COMPANY table with no truncation. Textarea fixed to theme tokens (bg-canvas; the previous bg-canvas-elevated/40 with opacity modifier on a CSS-var color silently dropped and rendered white). Re-verified in a real browser: list readable end-to-end, import still works (4 stored after adding ellen@initech.example).
