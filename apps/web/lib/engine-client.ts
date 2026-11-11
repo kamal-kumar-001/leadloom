@@ -585,13 +585,13 @@ export async function approveOutboundJobs(input: {
   jobIds?: string[];
   all?: boolean;
   campaignId?: string;
-}): Promise<{ approvedCount: number; sendingEnabled: false; error?: string }> {
-  const result = await engineFetch<{ approvedCount: number; sendingEnabled: false }>('/outbound/approvals/approve', {
+}): Promise<{ approvedCount: number; staleCount: number; sendingEnabled: false; error?: string }> {
+  const result = await engineFetch<{ approvedCount: number; staleCount: number; sendingEnabled: false }>('/outbound/approvals/approve', {
     method: 'POST',
     body: JSON.stringify(input),
   });
   if (result.data) return result.data;
-  return { approvedCount: 0, sendingEnabled: false, error: result.error || 'Approval failed' };
+  return { approvedCount: 0, staleCount: 0, sendingEnabled: false, error: result.error || 'Approval failed' };
 }
 
 export async function rejectOutboundJobs(input: {

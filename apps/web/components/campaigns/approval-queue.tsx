@@ -68,8 +68,12 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
       const res = await approveOutboundJobs({ jobIds: [jobId] });
       if (res.error) {
         notify.error(res.error);
+      } else if ((res.approvedCount ?? 0) === 0 && (res.staleCount ?? 0) > 0) {
+        notify.info('Content changed since this message was queued - review the updated text, then approve again');
+        await loadQueue();
+        onStatusChange?.();
       } else {
-        notify.success('Message approved for scheduling (sending disabled)');
+        notify.success('Message approved and held (sending stays disabled)');
         await loadQueue();
         onStatusChange?.();
       }
@@ -105,7 +109,10 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
       if (res.error) {
         notify.error(res.error);
       } else {
-        notify.success(`Approved ${res.approvedCount} messages (sending disabled)`);
+        notify.success(
+          `Approved and held ${res.approvedCount ?? 0} messages (sending stays disabled)` +
+            ((res.staleCount ?? 0) > 0 ? `; ${res.staleCount} changed since queueing and still need review` : ''),
+        );
         await loadQueue();
         onStatusChange?.();
       }
@@ -205,7 +212,7 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
             Outreach dispatch is disabled system-wide
           </p>
           <p className="text-text-muted">
-            Approving messages validates recipient targeting and template wording. Verified messages transition to schedulable state, but no external mail server calls are dispatched.
+            Approving signs off the exact recipient, wording and sender context shown here and holds the message as approved. Approved messages do not become schedulable and no external mail server calls are made. If the campaign content changes after approval, the approval is withdrawn and the message returns here for review.
           </p>
         </div>
       </div>
@@ -222,7 +229,7 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
 
         <Card className="p-3 flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[11px] font-mono text-text-muted">APPROVED TODAY</span>
+            <span className="text-[11px] font-mono text-text-muted">APPROVED (HELD)</span>
             <p className="text-lg font-bold text-text-primary font-mono">{stats.approvedCount}</p>
           </div>
           <CheckCircle2 className="w-4 h-4 text-signal-verified" />

@@ -398,3 +398,8 @@
 ### [2026-11-11T14:17:00Z] Team Alpha | engine outbound approval hardening | Breaking (internal API)
 - POST /outbound/jobs no longer accepts `requiresApproval`; every job enters `pending_approval` (no caller bypass). approve() now returns `{approvedCount, staleCount}` and flips to held `approved` (never claimable), verified against a server-recomputed snapshot hash (content+recipient+mailbox context); stale approvals stay pending_approval and need a deliberate second approval.
 - New additive migration `20261121_outbound_approval_hardening` (CHECK superset adds `approved`; approval_content_hash/approval_snapshot/approved_at columns).
+## 2026-11-11 - Web: approval queue UI honesty pass
+- approval-queue.tsx: banner no longer claims approved messages become "schedulable"; it states approval signs off recipient+content+sender context, holds the message as approved, nothing sends, and content change withdraws approval back to review.
+- Toasts: single/bulk approve report "approved and held (sending stays disabled)"; stale responses (approvedCount 0, staleCount > 0) tell the reviewer the content changed since queueing and a second deliberate approval is needed.
+- Metric relabeled APPROVED (HELD). engine-client approve response typed with staleCount.
+- Verified end-to-end in a real browser against local engine: first approve of a snapshot-less job surfaces the stale message; second deliberate approve holds the job (DB status 'approved', hash stamped), queue metric updates, no dispatch.
