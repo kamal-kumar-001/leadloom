@@ -569,3 +569,9 @@
 ---
 ### [2026-11-12 01:20 IST] G3 recipients UI: full-width readable layout
 - Recipients panel moved out of the narrow campaign card into a full-width section under the campaign grid: import form left, stored recipients right in an EMAIL / FIRST NAME / COMPANY table with no truncation. Textarea fixed to theme tokens (bg-canvas; the previous bg-canvas-elevated/40 with opacity modifier on a CSS-var color silently dropped and rendered white). Re-verified in a real browser: list readable end-to-end, import still works (4 stored after adding ellen@initech.example).
+
+---
+### [2026-11-12 01:55 IST] G3: per-job sender identity selection
+- outbound_jobs gains sender_mailbox_id (migration 20261126, applied local-only): NULL = pool rotation (unchanged), set = pinned to one mailbox from the campaign's assigned pool. Enqueue accepts senderMailboxId (400 when not in pool). The pin narrows the approval snapshot's signed sender context to that mailbox; setSenderMailbox recomputes snapshot+hash so the reviewer still deliberately approves after pinning. claim() only reserves a pinned job for its mailbox. A pinned mailbox leaving the pool fails closed (stale + "no longer assigned" resolution error, approve blocked).
+- Approval queue UI: per-item Sender selector (Rotate across N / Pin to <mailbox email>) fed by the campaign's CURRENT pool (new availableMailboxIds field; signed context stays in the snapshot and drives stale). Pin on an unresolvable message correctly 400s with the resolution errors.
+- Verified: 6 new repository tests (pin/clear/reject/claim-pin/pool-removal; engine suite 361 passed/36 skipped) + real-browser e2e on the local stack: enqueue for a recipient with fields, pin to fixture.sender1, toast + persisted selection, approve signs the pinned content ("approved and held"). Fixture mailboxes fixture.sender1/2@leadloom-dev.invalid inserted into the local dev DB only. Sending OFF; live 94fa7ab.

@@ -17,6 +17,7 @@ const MIGRATIONS = [
   '20261123_inbound_replies_ambiguity',
   '20261124_campaign_recipients',
   '20261125_job_recipient_resolution',
+  '20261126_job_sender_pin',
 ];
 
 let pg: PGlite, repo: AtomicDispatchRepository;

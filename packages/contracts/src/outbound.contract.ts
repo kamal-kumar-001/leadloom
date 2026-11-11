@@ -88,6 +88,10 @@ export const OutboundApprovalItemSchema = z.object({
   bodyTemplate: z.string().optional(),
   /** Sender context under review: sorted mailbox ids the campaign may send from. */
   senderMailboxIds: z.array(z.string()).optional(),
+  /** Pinned sender mailbox for this job (null/undefined = pool rotation across senderMailboxIds). The pin is signed into the approval hash. */
+  senderMailboxId: z.string().uuid().nullable().optional(),
+  /** Campaign's CURRENT assigned mailbox pool (choices for pinning a sender). May differ from the signed senderMailboxIds when the pool changed since queueing; approving re-signs current context. */
+  availableMailboxIds: z.array(z.string()).optional(),
   /** True when the stored approval snapshot matches current campaign content; false means the content changed since queueing and approval will refresh the snapshot and require a second deliberate approval. */
   stale: z.boolean().optional(),
   /** Set when the message can no longer be resolved for this recipient (unknown variable or missing value); the job stays held until the template or recipient is fixed. */

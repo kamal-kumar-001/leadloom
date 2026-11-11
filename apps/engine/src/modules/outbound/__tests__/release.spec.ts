@@ -17,7 +17,7 @@ const status = async (id: string) => (await pg.query<{ status: string }>('SELECT
 
 beforeEach(async () => {
   pg = new PGlite({ extensions: { vector } });
-  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261120_outbound_approval_status', '20261121_outbound_approval_hardening', '20261124_campaign_recipients', '20261125_job_recipient_resolution'])
+  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261120_outbound_approval_status', '20261121_outbound_approval_hardening', '20261124_campaign_recipients', '20261125_job_recipient_resolution', '20261126_job_sender_pin'])
     await pg.exec(readFileSync(fileURLToPath(new URL(`../../../../../../packages/database/prisma/migrations/${migration}/migration.sql`, import.meta.url)), 'utf8'));
   db = { ...connection(pg), transaction: (operation) => pg.transaction((tx) => operation(connection(tx))) };
   now = new Date('2026-11-10T08:00:00Z');

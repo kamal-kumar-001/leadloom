@@ -7,8 +7,11 @@ import {
   fetchApprovalQueue,
   approveOutboundJobs,
   rejectOutboundJobs,
+  setApprovalSenderMailbox,
+  fetchWorkspaceMailboxes,
   type OutboundApprovalRow,
   type ApprovalQueueStats,
+  type WorkspaceMailboxRow,
 } from '../../lib/engine-client';
 import {
   ShieldCheck,
@@ -39,6 +42,8 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState<'reject' | null>(null);
+  const [mailboxes, setMailboxes] = useState<WorkspaceMailboxRow[]>([]);
+  const [senderLoadingId, setSenderLoadingId] = useState<string | null>(null);
 
   const loadQueue = useCallback(async () => {
     setIsLoading(true);
@@ -61,6 +66,25 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
   useEffect(() => {
     loadQueue();
   }, [loadQueue]);
+
+  useEffect(() => {
+    // Mailbox identities for the per-message sender selector (pool membership comes from each item).
+    fetchWorkspaceMailboxes().then((res) => {
+      if (res.data) setMailboxes(res.data);
+    });
+  }, []);
+
+  const handleSenderChange = async (jobId: string, mailboxId: string | null) => {
+    setSenderLoadingId(jobId);
+    const res = await setApprovalSenderMailbox(jobId, mailboxId);
+    setSenderLoadingId(null);
+    if (res.error || !res.updated) {
+      notify.error(res.error || 'Sender could not be updated');
+      return;
+    }
+    notify.success(mailboxId ? 'Sender pinned - review and approve to sign off the pinned sender' : 'Sender back to pool rotation - review and approve to sign off');
+    await loadQueue();
+  };
 
   const handleApproveOne = async (jobId: string) => {
     setActionLoadingId(jobId);
@@ -297,13 +321,31 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
                       &ldquo;{item.bodySnippet}&rdquo;
                     </div>
                   ) : null}
-                  <div className="text-text-muted font-mono text-[11px]">
-                    Sender scope:{' '}
-                    <span className="text-text-secondary">
-                      {item.senderMailboxIds && item.senderMailboxIds.length > 0
-                        ? `${item.senderMailboxIds.length} assigned mailbox${item.senderMailboxIds.length === 1 ? '' : 'es'}`
-                        : 'no sender mailboxes assigned to this campaign'}
-                    </span>
+                  <div className="text-text-muted font-mono text-[11px] flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span>Sender:</span>
+                    {(() => {
+                      const pool = item.availableMailboxIds ?? item.senderMailboxIds ?? [];
+                      if (pool.length === 0)
+                        return <span className="text-text-secondary">no sender mailboxes assigned to this campaign</span>;
+                      return (
+                        <select
+                          data-job-id={item.id}
+                          value={item.senderMailboxId ?? ''}
+                          disabled={senderLoadingId === item.id}
+                          onChange={(e) => handleSenderChange(item.id, e.target.value || null)}
+                          className="bg-canvas border border-border-subtle rounded-md px-2 py-1 text-[11px] font-mono text-text-primary focus:outline-none focus:border-brand-loom disabled:opacity-50"
+                        >
+                          <option value="">
+                            Rotate across {pool.length} assigned mailbox{pool.length === 1 ? '' : 'es'}
+                          </option>
+                          {pool.map((id) => (
+                            <option key={id} value={id}>
+                              Pin to {mailboxes.find((m) => m.id === id)?.email ?? `${id.slice(0, 8)}...`}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
                   {item.stale && (
                     <div className="text-[11px] font-mono text-signal-pending">

@@ -559,6 +559,10 @@ export interface OutboundApprovalRow {
   bodySnippet?: string;
   bodyTemplate?: string;
   senderMailboxIds?: string[];
+  /** Pinned sender mailbox for this job (null/undefined = pool rotation across senderMailboxIds). Signed into the approval hash. */
+  senderMailboxId?: string | null;
+  /** Campaign's current assigned pool - the choices the sender pin selector offers. */
+  availableMailboxIds?: string[];
   stale?: boolean;
   /** Set when the message can no longer be resolved for this recipient; the job stays held until the template or recipient is fixed. */
   resolutionErrors?: string[];
@@ -649,6 +653,16 @@ export async function rejectOutboundJobs(input: {
   });
   if (result.data) return result.data;
   return { rejectedCount: 0, error: result.error || 'Rejection failed' };
+}
+
+/** Pins a held message to one mailbox from the campaign's pool (mailboxId null clears back to rotation). Recomputes the signed sender context; the message still needs deliberate approval afterward. */
+export async function setApprovalSenderMailbox(jobId: string, mailboxId: string | null): Promise<{ updated: boolean; error?: string }> {
+  const result = await engineFetch<{ updated: boolean }>(`/outbound/approvals/${jobId}/sender`, {
+    method: 'POST',
+    body: JSON.stringify({ mailboxId }),
+  });
+  if (result.data) return result.data;
+  return { updated: false, error: result.error || 'Sender could not be updated' };
 }
 
 

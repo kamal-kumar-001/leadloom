@@ -46,7 +46,7 @@ Module({})(RuntimeModule);
  */
 export interface RuntimeServices {
  credentials: Pick<CredentialService,'save'|'list'|'delete'|'use'|'markTestResult'|'findLatestByProvider'>;
- outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'|'listInboundReplies'|'releaseApproved'>;
+ outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'|'listInboundReplies'|'releaseApproved'|'setSenderMailbox'>;
  recipients?: import('./modules/outbound/campaign-recipients.repository').CampaignRecipientsRepository;
  sessionKey: Buffer;
  /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
@@ -292,7 +292,7 @@ export async function createApplication(services?:RuntimeServices) {
   const EnqueueRecipient=z.object({firstName:z.string().max(120).nullish(),lastName:z.string().max(120).nullish(),companyName:z.string().max(200).nullish(),title:z.string().max(200).nullish(),customFields:z.record(z.string(),z.unknown()).optional()}).strict();
   // recipientId links the job to a campaign_recipients row (live fields); recipient fixes inline fields at enqueue.
   // A template with variables resolves strictly: without recipient data the enqueue fails closed (nothing enters the queue).
-  const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime(),recipientId:z.string().uuid().optional(),recipient:EnqueueRecipient.optional()}).strict();
+  const Enqueue=z.object({campaignId:z.string().uuid(),recipientEmail:z.string().email(),idempotencyKey:z.string().min(1).max(255),stepNumber:z.number().int().positive(),scheduledAt:z.iso.datetime(),recipientId:z.string().uuid().optional(),recipient:EnqueueRecipient.optional(),senderMailboxId:z.string().uuid().optional()}).strict();
   // Campaign recipients: the entry path into the recipient store that per-recipient resolution reads.
   const RecipientInput=z.object({email:z.string().email().max(320),firstName:z.string().max(120).nullish(),lastName:z.string().max(120).nullish(),companyName:z.string().max(200).nullish(),title:z.string().max(200).nullish(),customFields:z.record(z.string(),z.unknown()).optional()}).strict();
   const RecipientsBody=z.object({recipients:z.array(RecipientInput).min(1).max(500)}).strict();
@@ -328,6 +328,7 @@ export async function createApplication(services?:RuntimeServices) {
     // Resolution failures are actionable by the caller (fix the template or recipient); other errors stay generic.
     const msg=err instanceof Error ? err.message : '';
     if(msg.startsWith('Message does not resolve')) return reply.code(400).send({error:'Job could not be queued',detail:msg});
+    if(msg.startsWith('Sender mailbox')) return reply.code(400).send({error:'Job could not be queued',detail:msg});
     return reply.code(400).send({error:'Job could not be queued'});
    }
   });
@@ -367,6 +368,16 @@ export async function createApplication(services?:RuntimeServices) {
    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid job ID'});
    const result=await services.outbound.approve(session.workspaceId,{jobIds:[id.data]});
    return {...result,sendingEnabled:false};
+  });
+  // Per-job sender pin: narrow a held message to one mailbox from the campaign's pool (or clear back to rotation).
+  // Recomputes the approval snapshot/hash so the reviewer deliberately approves the pinned sender context.
+  fastify.post('/outbound/approvals/:id/sender',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid job ID'});
+   const b=z.object({mailboxId:z.string().uuid().nullable()}).strict().safeParse(request.body);
+   if(!b.success)return reply.code(400).send({error:'Invalid sender request'});
+   const r=await services.outbound.setSenderMailbox(session.workspaceId,id.data,b.data.mailboxId);
+   return r.ok?{updated:true,sendingEnabled:false}:reply.code(400).send({error:r.error});
   });
   fastify.post('/outbound/approvals/:id/reject',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
