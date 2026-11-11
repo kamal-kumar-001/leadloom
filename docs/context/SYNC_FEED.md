@@ -644,3 +644,9 @@
 - Scorecard summaries (pending and all verdicts) now state the score is a product heuristic (PRD 5.2 weights) over raw page loads (repeat/bot traffic included) and team-entered outreach - not statistical validation; pending summary no longer implies rates become meaningful after thresholds. Panel carries a basis/limits line.
 - Route tests added: negative values and positiveReplies>replies rejected (replies>sent already covered).
 - Suite 373 passed EXIT:0 direct; browser-verified pending copy.
+
+## 2026-11-12 03:44 IST — Schema-vs-migrations consistency guard (engine suite)
+- New spec apps/engine/src/schema-migrations-consistency.spec.ts replays every migration's DDL (CREATE TABLE / ADD / DROP COLUMN, quoted and unquoted) and diffs the resulting columns against schema.prisma models in both directions; drift like 20261127 (columns added by migration but missing from schema, silently read as zero by the Prisma client) now fails the suite.
+- Raw-SQL-only surfaces are allowlisted with justification comments so future drift is a deliberate choice: outbound_jobs approval/recipient/sender columns (atomic-dispatch locking SQL), tables audit_log/usage_counters/workspace_plans/inbound_replies/workspace_invitations/campaign_recipients.
+- Guard also parses Unsupported(...) column types (enrichment_cache.embedding) and requires @@map on every model.
+- Negative path verified: removing outreachSent from the schema fails the guard naming validation_experiments.outreach_sent. Full suite 375 passed EXIT:0 direct.
