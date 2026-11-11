@@ -421,3 +421,5 @@
 - InboundReplyEvent now carries inReplyTo/references so threading survives the poller boundary.
 - poll-bridge.ts: recordPollEvents() persists each classified event via recordInboundReply (attribution re-derived server-side; the poller's campaignId context is never trusted for attribution) and returns a summary (fetched/recorded/duplicates/halted/ambiguous/unattributed). pollMailboxReplies() wraps it behind the LEADLOOM_IMAP_POLL_ENABLED gate and refuses to run otherwise.
 - Fixture tests: full poll-to-persistence flow with halt, poller dedupe replay, and the enablement gate. 316 engine tests pass, tsc clean. No scheduler/endpoint mounts the poll path yet; live polling remains off.
+## 2026-11-11 - Engine: G10 read-only reply reporting
+- GET /outbound/replies (session-scoped, optional campaignId filter) lists persisted inbound_replies newest-first with classification, confidence and attribution basis; listInboundReplies is tenant-scoped (empty for other workspaces). Test covered. 317 engine tests pass.

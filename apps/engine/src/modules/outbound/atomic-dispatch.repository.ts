@@ -442,4 +442,27 @@ export class AtomicDispatchRepository implements DispatchRepository {
       return { recorded: true, attribution: match.basis, haltedJobIds: halted.map((h) => h.id) };
     });
   }
+  /** G10: read-only reply reporting for the workspace, newest first. */
+  async listInboundReplies(workspaceId: string, campaignId?: string): Promise<Array<{
+    id: string; campaignId: string | null; mailboxId: string | null; messageId: string;
+    fromEmail: string; subject: string | null; classification: string; confidence: number;
+    attribution: string; receivedAt: string;
+  }>> {
+    const rows = await this.database.query<{
+      id: string; campaign_id: string | null; mailbox_id: string | null; message_id: string;
+      from_email: string; subject: string | null; classification: string; confidence: number;
+      attribution: string; received_at: Date;
+    }>(
+      `SELECT id, campaign_id, mailbox_id, message_id, from_email, subject, classification, confidence, attribution, received_at
+       FROM inbound_replies
+       WHERE workspace_id = $1::uuid AND ($2::uuid IS NULL OR campaign_id = $2::uuid)
+       ORDER BY received_at DESC LIMIT 200`,
+      [workspaceId, campaignId ?? null]);
+    return rows.map((r) => ({
+      id: r.id, campaignId: r.campaign_id, mailboxId: r.mailbox_id, messageId: r.message_id,
+      fromEmail: r.from_email, subject: r.subject, classification: r.classification,
+      confidence: Number(r.confidence), attribution: r.attribution,
+      receivedAt: new Date(r.received_at).toISOString(),
+    }));
+  }
 }

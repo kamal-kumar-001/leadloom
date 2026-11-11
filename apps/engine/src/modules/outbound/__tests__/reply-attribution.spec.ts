@@ -213,6 +213,26 @@ describe('G10 reply attribution and sequence halt', () => {
     expect(res.haltedJobIds).toEqual(expect.arrayContaining([j1, j2]));
   });
 
+  it('listInboundReplies returns newest first, scoped to workspace and campaign', async () => {
+    await addJob({ recipient: 'lead@example.invalid', key: 'k1' });
+    await repo.recordInboundReply(workspaceId, {
+      mailboxId, messageId: 'rl-1@x.invalid', fromEmail: 'lead@example.invalid',
+      classification: 'interested', confidence: 0.9, receivedAt: new Date('2026-11-10T09:00:00Z'),
+    });
+    await repo.recordInboundReply(workspaceId, {
+      mailboxId, messageId: 'rl-2@x.invalid', fromEmail: 'stranger@example.invalid',
+      classification: 'neutral', confidence: 0.3, receivedAt: new Date('2026-11-10T10:00:00Z'),
+    });
+    const all = await repo.listInboundReplies(workspaceId);
+    expect(all.map((r) => r.messageId)).toEqual(['rl-2@x.invalid', 'rl-1@x.invalid']);
+    expect(all[1].campaignId).toBe(campaignId);
+    expect(all[0].attribution).toBe('unattributed');
+    const filtered = await repo.listInboundReplies(workspaceId, campaignId);
+    expect(filtered.map((r) => r.messageId)).toEqual(['rl-1@x.invalid']);
+    const otherTenant = await repo.listInboundReplies(randomUUID());
+    expect(otherTenant).toEqual([]);
+  });
+
   it('persists classification and confidence for later reporting', async () => {
     await addJob({ recipient: 'lead@example.invalid', key: 'k1' });
     await repo.recordInboundReply(workspaceId, {

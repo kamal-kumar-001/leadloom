@@ -44,7 +44,7 @@ Module({})(RuntimeModule);
  */
 export interface RuntimeServices {
  credentials: Pick<CredentialService,'save'|'list'|'delete'>;
- outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'>;
+ outbound: Pick<AtomicDispatchRepository,'enqueue'|'suppress'|'listPendingApprovals'|'approve'|'reject'|'getApprovalStats'|'listInboundReplies'>;
  sessionKey: Buffer;
  /** Optional: accept web-minted NextAuth bridge JWTs (default off). */
  nextAuthBridgeKey?: Buffer;
@@ -262,6 +262,13 @@ export async function createApplication(services?:RuntimeServices) {
     services.outbound.getApprovalStats(session.workspaceId),
    ]);
    return {items,stats,sendingEnabled:false};
+  });
+  fastify.get('/outbound/replies',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply);if(!session)return;
+   const cId=request.query?.campaignId?z.string().uuid().safeParse(request.query.campaignId):null;
+   const campaignId=cId?.success?cId.data:undefined;
+   const items=await services.outbound.listInboundReplies(session.workspaceId,campaignId);
+   return {items,sendingEnabled:false};
   });
   fastify.post('/outbound/approvals/approve',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
