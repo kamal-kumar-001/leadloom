@@ -14,3 +14,5 @@ export * from './transport/poll-enablement';
 export * from './transport/oauth2-token-loop';
 export { buildListUnsubscribeHeaders, buildUnsubscribeToken, classifyReply } from './transport/unsubscribe';
 export type { UnsubscribeLinkInput, ReplyClassificationResult } from './transport/unsubscribe';
+export * from './campaign-recipients.repository';
+export * from './recipient-resolution';
