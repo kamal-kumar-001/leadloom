@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button, Badge, SpotlightCard, BrandMark } from '@leadloom/ui';
+import { Button, Badge, BrandMark } from '@leadloom/ui';
 import { SmoothScrollProvider } from '../../components/marketing/smooth-scroll-provider';
 import dynamic from 'next/dynamic';
 import { AmbientLoomFallback } from '../../components/marketing/3d/ambient-fallback';
@@ -18,6 +18,25 @@ import { ArrowRight, CheckCircle, ChevronDown } from 'lucide-react';
 export default function MarketingPage() {
   const [hoveredCta, setHoveredCta] = useState<'indigo' | 'matrix'>('indigo');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  // The landing is light by default (Kamal, 2026-11-10). Force light while
+  // this page is mounted (covers client-side navigation, where the layout's
+  // inline script is inert), then restore the user's stored theme on unmount.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme-lock', 'marketing');
+    root.setAttribute('data-theme', 'light');
+    root.classList.remove('dark');
+    return () => {
+      let stored = 'dark';
+      try {
+        stored = localStorage.getItem('leadloom_theme') === 'light' ? 'light' : 'dark';
+      } catch {}
+      root.removeAttribute('data-theme-lock');
+      root.setAttribute('data-theme', stored);
+      root.classList.toggle('dark', stored === 'dark');
+    };
+  }, []);
 
   const faqs = [
     {
@@ -77,6 +96,17 @@ export default function MarketingPage() {
 
         {/* Hero Section */}
         <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-28 px-4 sm:px-6 max-w-6xl mx-auto">
+          {/* Restrained token-driven gradient backdrop */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 -top-16 h-[560px]"
+            style={{
+              background:
+                'radial-gradient(560px 280px at 15% 0%, var(--accent-loom-glow), transparent 70%),' +
+                'radial-gradient(480px 240px at 85% 10%, var(--accent-weave-glow), transparent 70%),' +
+                'radial-gradient(520px 260px at 50% 35%, var(--accent-matrix-glow), transparent 70%)',
+            }}
+          />
           <div className="text-center max-w-3xl mx-auto mb-12">
             <Badge variant="loom" className="mb-4">
               🧵 Signal-driven outbound • Bring your own keys
@@ -90,7 +120,7 @@ export default function MarketingPage() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-text-secondary leading-relaxed max-w-2xl mx-auto">
-              Plug in your own Apollo, Hunter, and OpenAI keys to run adaptive waterfalls, validate startup ideas, and sequence cold email.
+              Bring your own Apollo, Hunter, and OpenAI keys. Waterfall enrichment, idea validation, and sequencing are rolling out in stages - anything not live yet is labelled, never faked.
             </p>
 
             {/* Email CTA: starts sign-up only (email prefills /signup) */}
@@ -152,86 +182,40 @@ export default function MarketingPage() {
           <ArchitectureTabs />
         </div>
 
-        {/* Pricing Matrix */}
-        <section className="py-14 sm:py-24 max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16">
+        {/* Pricing: nothing announced yet - no invented prices or plan benefits */}
+        <section className="py-14 sm:py-24 max-w-4xl mx-auto px-4 sm:px-6">
+          <div className="text-center max-w-2xl mx-auto mb-10">
             <Badge variant="loom" className="mb-3">
               Transparent Pricing
             </Badge>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary">
               Simple, honest pricing. Never pay for credits again.
             </h2>
+            <p className="mt-3 text-sm sm:text-base text-text-secondary">
+              LeadLoom pricing has not been announced yet. One thing is decided: you pay your data and email providers directly, at their own prices - LeadLoom does not resell marked-up credits.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Tier 1: Starter */}
-            <div className="p-8 rounded-xl border border-border-muted bg-canvas-surface/60 flex flex-col justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-text-primary">Starter</h3>
-                <p className="mt-1 text-xs text-text-muted">For solo founders and small teams</p>
-                <div className="mt-6 text-4xl font-bold font-mono text-text-primary">
-                  Pricing <span className="text-sm font-normal text-text-muted">to be announced</span>
-                </div>
-                <ul className="mt-6 space-y-3 text-xs text-text-secondary font-mono">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Unlimited rows & workspaces
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Unlimited BYOK API Keys (AES-256-GCM)
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Local Playwright scraping workers
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> SMTP/IMAP mailbox pool rotation
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Hosted for you, nothing to run
-                  </li>
-                </ul>
-              </div>
-              <Link href="/signup" className="mt-8">
-                <Button variant="outline" className="w-full">
-                  Get started
-                </Button>
-              </Link>
-            </div>
-
-            {/* Tier 2: Cloud Pro */}
-            <SpotlightCard className="p-8 border-brand-loom/40 bg-canvas-surface/90 flex flex-col justify-between shadow-2xl">
-              <div>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-bold text-text-primary">Cloud Pro</h3>
-                  <Badge variant="loom">Popular</Badge>
-                </div>
-                <p className="mt-1 text-xs text-text-muted">For high-velocity outbound and revenue teams</p>
-                <div className="mt-6 text-4xl font-bold font-mono text-brand-loom">
-                  $49 <span className="text-sm font-normal text-text-muted">/month</span>
-                </div>
-                <ul className="mt-6 space-y-3 text-xs text-text-secondary font-mono">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Everything in Starter
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Fully managed cloud infrastructure
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Managed residential proxy network
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Automated mailbox warm-up mesh
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-signal-verified" /> Priority email & Discord support
-                  </li>
-                </ul>
-              </div>
-              <Link href="/signup" className="mt-8">
-                <Button variant="primary" className="w-full">
-                  Get started
-                </Button>
-              </Link>
-            </SpotlightCard>
+          <div className="p-8 rounded-xl border border-border-muted bg-canvas-surface/60 max-w-2xl mx-auto">
+            <ul className="space-y-3 text-xs text-text-secondary font-mono">
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-signal-verified" /> Hosted for you - nothing to install or run
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-signal-verified" /> Bring your own provider keys, stored AES-256-GCM encrypted
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-signal-verified" /> Workspaces with saved tables, lists, and validator experiments
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-signal-verified" /> Capabilities still in rollout are labelled &quot;Not available yet&quot; - never faked
+              </li>
+            </ul>
+            <Link href="/signup" className="mt-8 block">
+              <Button variant="primary" className="w-full">
+                Get started
+              </Button>
+            </Link>
           </div>
         </section>
 
@@ -268,8 +252,16 @@ export default function MarketingPage() {
         </section>
 
         {/* Final High-Conversion CTA Block */}
-        <section className="py-14 sm:py-24 border-t border-border-subtle bg-gradient-to-b from-canvas to-canvas-surface">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+        <section className="relative py-14 sm:py-24 border-t border-border-subtle bg-gradient-to-b from-canvas to-canvas-surface overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[360px]"
+            style={{
+              background:
+                'radial-gradient(640px 300px at 50% 110%, var(--accent-loom-glow), transparent 70%)',
+            }}
+          />
+          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
             <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-text-primary">
               Ready to take back your GTM margins?
             </h2>

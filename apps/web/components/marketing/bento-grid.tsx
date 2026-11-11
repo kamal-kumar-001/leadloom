@@ -27,25 +27,28 @@ export function BentoGridSection() {
               <Radio className="w-5 h-5" />
             </div>
             <h3 className="text-xl font-bold text-text-primary">
-              Live Buying Signal Ingestion
+              Buying Signal Ingestion
             </h3>
             <p className="mt-2 text-sm text-text-secondary">
               Never prospect from stale databases again. Trigger outbound rows automatically when target accounts make moves in the wild.
             </p>
 
-            {/* Micro visual simulated feed */}
-            <div className="mt-6 space-y-2 font-mono text-xs">
+            {/* Micro visual - illustrative only */}
+            <p className="mt-6 text-[10px] font-mono uppercase tracking-widest text-text-muted">
+              Illustrative preview - not live data
+            </p>
+            <div className="mt-2 space-y-2 font-mono text-xs">
               <div className="p-2.5 rounded-lg border border-border-subtle bg-canvas-elevated/40 flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-signal-verified" />
-                  <span className="text-text-primary">github.com/astral-sh/uv</span>
+                  <span className="text-text-primary">github.com/acme-corp/platform</span>
                 </span>
                 <span className="text-brand-loom">+380 stars/wk (VP Eng engaged)</span>
               </div>
               <div className="p-2.5 rounded-lg border border-border-subtle bg-canvas-elevated/40 flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-signal-catchall" />
-                  <span className="text-text-primary">modal.com/careers</span>
+                  <span className="text-text-primary">acme-corp.com/careers</span>
                 </span>
                 <span className="text-signal-catchall">Hiring +2 ML Platform Staff</span>
               </div>
@@ -54,7 +57,7 @@ export function BentoGridSection() {
 
           <div className="mt-6 pt-4 border-t border-border-subtle flex items-center text-xs font-mono text-text-muted gap-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-signal-verified" />
-            <span>Connects directly to GitHub, LinkedIn Scrapers, and RSS</span>
+            <span>Signal source connectors are in rollout</span>
           </div>
         </SpotlightCard>
 
@@ -71,8 +74,11 @@ export function BentoGridSection() {
               Query multiple vendors in cascade. As soon as a low-cost provider verifies the email, expensive downstream API calls are aborted automatically.
             </p>
 
-            {/* Cascade Flow Indicator */}
-            <div className="mt-6 p-4 rounded-lg border border-border-subtle bg-canvas-elevated/40 space-y-2 font-mono text-xs">
+            {/* Cascade Flow Indicator - illustrative only */}
+            <p className="mt-6 text-[10px] font-mono uppercase tracking-widest text-text-muted">
+              Illustrative flow - not live data
+            </p>
+            <div className="mt-2 p-4 rounded-lg border border-border-subtle bg-canvas-elevated/40 space-y-2 font-mono text-xs">
               <div className="flex items-center justify-between text-text-muted">
                 <span>1. Apollo ($0.001)</span>
                 <span className="text-signal-failed">404 Miss</span>
@@ -89,7 +95,7 @@ export function BentoGridSection() {
           </div>
 
           <div className="mt-6 pt-4 border-t border-border-subtle text-xs font-mono text-signal-verified flex items-center gap-1.5">
-            <span>Guaranteed Zero Unnecessary API Calls</span>
+            <span>Downstream calls stop at the first verified result</span>
           </div>
         </SpotlightCard>
 
@@ -103,25 +109,24 @@ export function BentoGridSection() {
               Integrated Multi-Inbox Sequencer with Health Scoring
             </h3>
             <p className="mt-2 text-sm text-text-secondary">
-              Go from raw domain to warmed, rotated cold outreach in the same tab. LeadLoom rotates dispatches across 20+ secondary inboxes, checks SPF/DKIM/DMARC in real-time, and applies randomized human jitter.
+              Send sequences from your connected mailboxes with rotation, SPF/DKIM/DMARC checks, and randomized sending jitter. Mailbox connections and sending are in rollout and labelled as such in the app.
             </p>
             <div className="mt-4 flex flex-wrap gap-2 text-xs font-mono">
-              <Badge variant="verified">✓ 12/12 Inboxes Healthy</Badge>
-              <Badge variant="matrix">Jitter: 45s–180s Random Delay</Badge>
-              <Badge variant="loom">Unified IMAP AI Triage</Badge>
+              <Badge variant="matrix">Randomized send jitter</Badge>
+              <Badge variant="loom">Planned: unified IMAP triage</Badge>
             </div>
           </div>
 
-          {/* Visual Mini Composer Mock */}
+          {/* Visual Mini Composer Mock - illustrative only */}
           <div className="w-full md:w-96 p-4 rounded-xl border border-border-subtle bg-canvas-surface/90 font-mono text-xs shadow-xl">
             <div className="text-text-muted pb-2 border-b border-border-subtle mb-3 flex justify-between">
               <span>Sequence Step 1</span>
-              <span className="text-signal-verified">Rotated Pool</span>
+              <span className="text-text-muted">Illustrative preview</span>
             </div>
-            <div className="text-text-muted">To: <span className="text-text-primary">alex@vercel.com</span></div>
-            <div className="text-text-muted mb-2">Subject: <span className="text-text-primary">Quick note on v0 release</span></div>
+            <div className="text-text-muted">To: <span className="text-text-primary">alex@example.com</span></div>
+            <div className="text-text-muted mb-2">Subject: <span className="text-text-primary">Quick note on your launch</span></div>
             <div className="p-2.5 rounded bg-canvas-elevated/60 text-text-secondary leading-relaxed text-[11px]">
-              "Hey Alex, saw Vercel crossed +140 stars on GitHub this week. Noticed you are scaling edge infra..."
+              "Hey Alex, saw your team crossed a GitHub milestone this week. Noticed you are scaling your platform..."
             </div>
           </div>
         </SpotlightCard>

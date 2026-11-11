@@ -26,6 +26,12 @@ export function ThemeProvider({
 
   useEffect(() => {
     try {
+      // A route segment (e.g. the light-by-default landing) can lock the DOM
+      // theme; while locked, the stored preference is left untouched.
+      if (document.documentElement.getAttribute('data-theme-lock')) {
+        setMounted(true);
+        return;
+      }
       const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
       if (stored === 'light' || stored === 'dark') {
         setThemeState(stored);

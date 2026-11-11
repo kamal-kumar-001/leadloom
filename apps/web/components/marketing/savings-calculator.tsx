@@ -26,7 +26,7 @@ export function SavingsCalculator() {
             Why pay a middleman markup on your own data?
           </h2>
           <p className="mt-3 text-sm sm:text-base text-text-secondary">
-            Legacy GTM tools mark up Hunter and Apollo credits by 400% to 1,000%. See how much you keep by bringing your own API keys.
+            Credit-based platforms resell provider data at their own prices. This estimator is illustrative, not a quote - adjust the volume and check each provider's current pricing.
           </p>
         </div>
 
@@ -65,7 +65,7 @@ export function SavingsCalculator() {
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm font-semibold text-text-secondary">Credit-based platforms</span>
                 <span className="text-xs font-mono px-2 py-0.5 rounded bg-signal-failed/10 text-signal-failed border border-signal-failed/20">
-                  500% Credit Markup
+                  Marked-up credits
                 </span>
               </div>
               <div className="my-6">
@@ -74,12 +74,12 @@ export function SavingsCalculator() {
                   <span className="text-sm font-normal text-text-muted">/month</span>
                 </div>
                 <p className="mt-2 text-xs text-text-muted">
-                  Includes platform seat fees, marked-up proprietary credits, and locked proprietary exports.
+                  Illustrative assumption: ~$350/mo platform fee plus ~$0.04 per credit.
                 </p>
               </div>
             </div>
             <div className="text-xs font-mono text-signal-failed pt-4 border-t border-border-subtle">
-              ✕ High data loss when credits deplete mid-campaign
+              ✕ Credits can run out mid-campaign
             </div>
           </div>
 
@@ -94,7 +94,7 @@ export function SavingsCalculator() {
                   <span className="w-2 h-2 rounded-full bg-signal-verified" />
                   LeadLoom (your own keys)
                 </span>
-                <Badge variant="verified">100% Wholesale Cost</Badge>
+                <Badge variant="verified">Provider-direct pricing</Badge>
               </div>
               <div className="my-6">
                 <div className="text-4xl font-bold font-mono text-signal-verified">
@@ -102,18 +102,16 @@ export function SavingsCalculator() {
                   <span className="text-sm font-normal text-text-muted">/month</span>
                 </div>
                 <p className="mt-2 text-xs text-text-muted">
-                  Zero software markup. Pay Apollo & Hunter wholesale developer rates directly via your own keys.
+                  Pay providers like Apollo and Hunter directly through your own keys. Illustrative assumption: ~$0.0028 per contact.
                 </p>
               </div>
             </div>
             <div className="pt-4 border-t border-border-subtle flex items-center justify-between">
               <span className="text-xs font-mono text-signal-verified flex items-center gap-1.5 font-medium">
                 <ShieldCheck className="w-4 h-4" />
-                Annual Savings: ${annualSavings.toLocaleString()}
+                Illustrative annual difference: ${annualSavings.toLocaleString()}
               </span>
-              <span className="text-[11px] font-mono text-text-muted">
-                30-day domain cache active
-              </span>
+
             </div>
           </SpotlightCard>
         </div>

@@ -44,7 +44,7 @@ export function EmailCta({
         onChange={(e) => setEmail(e.target.value)}
         placeholder="Work email"
         autoComplete="email"
-        className="h-12 flex-1 rounded-md border border-border-muted bg-canvas-surface px-4 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus:ring-2 focus:ring-border-focus"
+        className="h-12 w-full sm:flex-1 rounded-md border border-border-muted bg-canvas-surface px-4 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus:ring-2 focus:ring-border-focus"
       />
       <Button type="submit" size="lg" variant="primary" className="h-12 px-6 text-sm">
         <span>Find Leads</span>
