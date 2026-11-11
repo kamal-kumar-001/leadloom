@@ -19,7 +19,7 @@ describe('PgSharedLimiter (fake bucket store)', () => {
       }
       return []; // cleanup delete
     };
-    return { query, calls, advance: (ms: number) => { now += ms; }, bucketCount: () => buckets.size };
+    return { query, calls, advance: (ms: number) => { now += ms; }, bucketCount: () => buckets.size, getNow: () => now };
   };
 
   it('allows up to max hits per window, then denies', async () => {
@@ -45,11 +45,15 @@ describe('PgSharedLimiter (fake bucket store)', () => {
 
   it('a new window frees capacity', async () => {
     const store = fakeStore(1000);
-    const l = new PgSharedLimiter(store.query, 1000);
+    const l = new PgSharedLimiter(store.query, 1000, store.getNow);
     expect(await l.take('k', 2)).toBe('allow');
     expect(await l.take('k', 2)).toBe('allow');
     expect(await l.take('k', 2)).toBe('deny');
+    // The deny cache holds for its TTL even across the window boundary...
     store.advance(1001);
+    expect(await l.take('k', 2)).toBe('deny');
+    // ...then the store (source of truth) frees capacity for the new window.
+    store.advance(60_000);
     expect(await l.take('k', 2)).toBe('allow');
   });
 
@@ -76,5 +80,23 @@ describe('PgSharedLimiter (fake bucket store)', () => {
     await l.take('x'.repeat(500), 5);
     const insert = store.calls.find((c) => c.text.startsWith('INSERT'));
     expect((insert!.params[0] as string).length).toBe(255);
+  });
+
+  it('deny cache bounds flood write rate: denied keys skip the store briefly', async () => {
+    const store = fakeStore(600_000);
+    let now = 5_000_000;
+    const l = new PgSharedLimiter(store.query, 600_000, () => now);
+    for (let i = 0; i < 3; i++) expect(await l.take('k', 3)).toBe('allow');
+    expect(await l.take('k', 3)).toBe('deny');
+    const callsAtDeny = store.calls.length;
+    // Further hits from the denied key cost no DB write while the cache holds.
+    for (let i = 0; i < 50; i++) expect(await l.take('k', 3)).toBe('deny');
+    expect(store.calls.length).toBe(callsAtDeny);
+    // Other keys are unaffected by the cached denial.
+    expect(await l.take('other', 3)).toBe('allow');
+    // After the TTL the store is consulted again (source of truth).
+    now += 61_000;
+    expect(await l.take('k', 3)).toBe('deny');
+    expect(store.calls.length).toBeGreaterThan(callsAtDeny);
   });
 });

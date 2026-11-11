@@ -1,6 +1,6 @@
 import {connectorStatuses} from './modules/connectors/connector-registry';
 import 'reflect-metadata';
-import { createHmac } from 'node:crypto';
+import { createHmac, createHash } from 'node:crypto';
 import { PrismaClient } from '@leadloom/database';
 import { verifySession } from './modules/auth/session';
 import { PrismaAccessGuard } from './modules/auth/access-guard';
@@ -560,14 +560,21 @@ export async function createApplication(services?:RuntimeServices) {
    // Postgres store when wired (production), per-process map otherwise.
    // Client IP for limit keys: the engine is loopback-only behind the web
    // proxy, so X-Forwarded-For is trusted ONLY when the direct peer is
-   // loopback (the proxy). Direct non-loopback callers cannot spoof it.
-   const pubClientIp=(request:any):string=>{
+   // loopback (the proxy). Direct non-loopback callers cannot spoof it here.
+   // NOTE: a public client CAN still send XFF to the web app, which forwards
+   // it from trusted loopback - per-IP keys are only as strong as the ingress
+   // sanitizing client-supplied XFF (a recorded deployment prerequisite; see
+   // PUMPGTM_GAP G13). The global ceilings below are the backstop meanwhile.
+   // IPs are hashed into the key so the shared store never retains raw
+   // client identifiers.
+   const pubClientKey=(request:any):string=>{
     const peer=String(request.ip??'unknown');
+    let ip=peer;
     if(peer==='127.0.0.1'||peer==='::1'||peer==='::ffff:127.0.0.1'){
      const fwd=String(request.headers?.['x-forwarded-for']??'').split(',')[0].trim();
-     if(fwd)return fwd.slice(0,45);
+     if(fwd)ip=fwd;
     }
-    return peer.slice(0,45);
+    return createHash('sha256').update(ip.slice(0,45)).digest('hex').slice(0,16);
    };
    const pubHits=new Map<string,number[]>();
    const pubLimit=async(key:string,max:number):Promise<'allow'|'deny'|'error'>=>{
@@ -578,10 +585,17 @@ export async function createApplication(services?:RuntimeServices) {
     if(arr.length>=max){pubHits.set(key,arr);return 'deny';}
     arr.push(now);pubHits.set(key,arr);return 'allow';
    };
-   const pubGate=async(request:any,reply:any,prefix:string,slug:string,max:number):Promise<boolean>=>{
-    const verdict=await pubLimit(`${prefix}:${pubClientIp(request)}:${slug}`,max);
-    if(verdict==='error'){reply.code(503).send({error:'Service temporarily unavailable'});return false;}
-    if(verdict==='deny'){reply.code(429).send({error:max<=5?'Too many submissions. Please try again in 10 minutes.':'Too many requests'});return false;}
+   // Global ceilings backstop per-IP evasion via spoofed/rotated XFF: even if
+   // every request wears a fresh client IP, the shared bucket caps total
+   // public load per 10-minute window.
+   const PUB_GLOBAL:Record<string,number>={pg:2000,ld:200};
+   const pubGate=async(request:any,reply:any,prefix:'pg'|'ld',slug:string,max:number):Promise<boolean>=>{
+    const verdict=await pubLimit(`${prefix}:${pubClientKey(request)}:${slug}`,max);
+    const globalVerdict=verdict==='allow'?await pubLimit(`${prefix}:global`,PUB_GLOBAL[prefix]):verdict;
+    for(const v of [verdict,globalVerdict]){
+     if(v==='error'){reply.code(503).send({error:'Service temporarily unavailable'});return false;}
+     if(v==='deny'){reply.code(429).send({error:max<=5?'Too many submissions. Please try again in 10 minutes.':'Too many requests'});return false;}
+    }
     return true;
    };
    fastify.get('/validator/pages/:slug',async(request:any,reply:any)=>{

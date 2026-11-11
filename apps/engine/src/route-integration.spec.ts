@@ -136,9 +136,10 @@ describe('waterfall/validator route integration', () => {
       expect((await hit()).statusCode).toBe(200);
       expect((await hit()).statusCode).toBe(200);
       expect((await hit()).statusCode).toBe(429);
-      expect(seen.length).toBe(3);
-      expect(seen[0]).toContain(`pg:`);
-      expect(seen[0]).toContain(slug);
+      const perSlug = seen.filter((k) => k.includes(slug));
+      expect(perSlug.length).toBe(3);
+      expect(perSlug[0]).toContain(`pg:`);
+      expect(perSlug[0]).toContain(slug);
     } finally {
       await app.close();
     }
@@ -156,19 +157,28 @@ describe('waterfall/validator route integration', () => {
     }
   });
 
-  it('limit keys trust X-Forwarded-For only from a loopback peer (the proxy)', async () => {
+  it('limit keys: hashed IPs, XFF trusted only from loopback, global ceiling checked', async () => {
     const seen: string[] = [];
     const publicRateLimit = async (key: string) => { seen.push(key); return 'allow' as const; };
     const app = await createApplication({ ...stubCore(), validator: new ValidatorController(new ValidatorService('https://app.test')), publicRateLimit } as never);
     try {
       const server = app.getHttpAdapter().getInstance();
+      const perKey = () => seen.filter((k) => !k.endsWith(':global'));
       // Default inject peer is loopback (the proxy's position): XFF is honored.
       await server.inject({ method: 'GET', url: '/validator/pages/some-slug', headers: { 'x-forwarded-for': '203.0.113.7, 10.0.0.1' } });
-      expect(seen[0]).toContain('203.0.113.7');
-      // A direct non-loopback caller cannot spoof its key with XFF.
+      await server.inject({ method: 'GET', url: '/validator/pages/some-slug', headers: { 'x-forwarded-for': '203.0.113.8' } });
+      const [k1, k2] = perKey();
+      // Distinct client IPs map to distinct keys, and keys carry no raw IP.
+      expect(k1).not.toBe(k2);
+      expect(k1).not.toContain('203.0.113.7');
+      expect(k1).toMatch(/^pg:[0-9a-f]{16}:some-slug$/);
+      // Every allowed request also hits the global ceiling bucket.
+      expect(seen).toContain('pg:global');
+      // A direct non-loopback caller cannot change its key with XFF.
       await server.inject({ method: 'GET', url: '/validator/pages/some-slug', remoteAddress: '198.51.100.9', headers: { 'x-forwarded-for': '203.0.113.7' } });
-      expect(seen[1]).toContain('198.51.100.9');
-      expect(seen[1]).not.toContain('203.0.113.7');
+      await server.inject({ method: 'GET', url: '/validator/pages/some-slug', remoteAddress: '198.51.100.9' });
+      const [, , k3, k4] = perKey();
+      expect(k3).toBe(k4);
     } finally {
       await app.close();
     }
