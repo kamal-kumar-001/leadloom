@@ -298,6 +298,56 @@ describe('G9 Approval-before-send queue behavior', () => {
     expect(pending).toHaveLength(0);
   });
 
+  it('suppression cancels held approved jobs so an opt-out cannot be resurrected by a future release', async () => {
+    const id = await repo.enqueue({
+      workspaceId,
+      campaignId,
+      recipientEmail: 'approved-optout@example.invalid',
+      idempotencyKey: 'key-optout',
+      stepNumber: 1,
+      scheduledAt: now,
+    });
+    expect((await repo.approve(workspaceId, { jobIds: [id] })).approvedCount).toBe(1);
+
+    await repo.suppress(workspaceId, 'approved-optout@example.invalid');
+    const row = await pg.query<{ status: string }>('SELECT status FROM outbound_jobs WHERE id=$1', [id]);
+    expect(row.rows[0].status).toBe('cancelled');
+  });
+
+  it('rejection also invalidates held approved jobs', async () => {
+    const id = await repo.enqueue({
+      workspaceId,
+      campaignId,
+      recipientEmail: 'approved-reject@example.invalid',
+      idempotencyKey: 'key-arej',
+      stepNumber: 1,
+      scheduledAt: now,
+    });
+    expect((await repo.approve(workspaceId, { jobIds: [id] })).approvedCount).toBe(1);
+
+    const { rejectedCount } = await repo.reject(workspaceId, { jobIds: [id] });
+    expect(rejectedCount).toBe(1);
+    const row = await pg.query<{ status: string }>('SELECT status FROM outbound_jobs WHERE id=$1', [id]);
+    expect(row.rows[0].status).toBe('rejected');
+  });
+
+  it('an approval racing a rejection wins nothing: the job stays rejected', async () => {
+    const id = await repo.enqueue({
+      workspaceId,
+      campaignId,
+      recipientEmail: 'race-lead@example.invalid',
+      idempotencyKey: 'key-race',
+      stepNumber: 1,
+      scheduledAt: now,
+    });
+    await repo.reject(workspaceId, { jobIds: [id] });
+    const { approvedCount, staleCount } = await repo.approve(workspaceId, { jobIds: [id] });
+    expect(approvedCount).toBe(0);
+    expect(staleCount).toBe(0);
+    const row = await pg.query<{ status: string }>('SELECT status FROM outbound_jobs WHERE id=$1', [id]);
+    expect(row.rows[0].status).toBe('rejected');
+  });
+
   it('enforces tenant boundary on approvals and rejections', async () => {
     const foreignWs = randomUUID();
     const id = await repo.enqueue({

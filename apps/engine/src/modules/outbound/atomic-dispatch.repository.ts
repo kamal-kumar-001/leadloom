@@ -136,7 +136,9 @@ export class AtomicDispatchRepository implements DispatchRepository {
     await this.database.transaction(async tx => {
       await tx.query(`INSERT INTO suppression_list (id,workspace_id,email_hash,reason,source)
         VALUES ($1::uuid,$2::uuid,$3,'unsubscribe','outbound') ON CONFLICT (workspace_id,email_hash) DO NOTHING RETURNING id`, [randomUUID(), workspaceId, hash]);
-      await tx.query(`UPDATE outbound_jobs SET status='cancelled',updated_at=$3::timestamptz WHERE workspace_id=$1::uuid AND recipient_hash=$2 AND status IN ('pending','pending_approval') RETURNING id`, [workspaceId, hash, this.clock()]);
+      // 'approved' included: an opt-out must also invalidate a held approval, so no
+      // future approved->pending release step can resurrect an opted-out recipient.
+      await tx.query(`UPDATE outbound_jobs SET status='cancelled',updated_at=$3::timestamptz WHERE workspace_id=$1::uuid AND recipient_hash=$2 AND status IN ('pending','pending_approval','approved') RETURNING id`, [workspaceId, hash, this.clock()]);
     });
   }
 
@@ -215,40 +217,53 @@ export class AtomicDispatchRepository implements DispatchRepository {
     const jobIds = input.jobIds ?? [];
     if (!input.all && !jobIds.length) return { approvedCount: 0, staleCount: 0 };
     for (const id of jobIds) z.string().uuid().parse(id);
+    // Candidate read is outside the per-job transaction (cheap filter only). Each decision
+    // below re-locks its campaign row FOR UPDATE inside one transaction, so a concurrent
+    // campaign edit either happens-before the decision (and is seen) or after (and flips
+    // the row back via invalidateStaleApprovals on the edit path, once that route exists).
     const candidates = await this.database.query<{
-      id: string; campaign_id: string; recipient_email: string; step_number: number; steps: unknown;
+      id: string; campaign_id: string;
     }>(
-      `SELECT j.id, j.campaign_id, j.recipient_email, j.step_number, c.steps
+      `SELECT j.id, j.campaign_id
        FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
        WHERE j.workspace_id = $1::uuid AND j.status = 'pending_approval'
          AND ($2::uuid IS NULL OR j.campaign_id = $2::uuid)
          AND ($3::bool OR j.id = ANY($4::uuid[]))`,
       [workspaceId, input.campaignId ?? null, input.all === true, jobIds]);
     let approvedCount = 0, staleCount = 0;
-    for (const job of candidates) {
-      const mailboxRows = await this.database.query<{ mailbox_id: string }>(
-        'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, job.campaign_id]);
-      const current = buildApprovalSnapshot({
-        campaignId: job.campaign_id, stepNumber: job.step_number, recipientEmail: job.recipient_email,
-        campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
-      });
-      const currentHash = approvalContentHash(current);
-      const stored = await this.database.query<{ approval_content_hash: string | null }>(
-        'SELECT approval_content_hash FROM outbound_jobs WHERE workspace_id=$1::uuid AND id=$2::uuid', [workspaceId, job.id]);
-      if (stored[0]?.approval_content_hash === currentHash) {
-        await this.database.query(
-          `UPDATE outbound_jobs SET status='approved', approved_at=$3::timestamptz, updated_at=$3::timestamptz
-           WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='pending_approval'`,
-          [workspaceId, job.id, this.clock()]);
-        approvedCount++;
-      } else {
+    for (const cand of candidates) {
+      const outcome = await this.database.transaction(async (tx) => {
+        const locked = await tx.query<{ id: string; recipient_email: string; step_number: number; approval_content_hash: string | null; steps: unknown }>(
+          `SELECT j.id, j.recipient_email, j.step_number, j.approval_content_hash, c.steps
+           FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
+           WHERE j.workspace_id = $1::uuid AND j.id = $2::uuid AND j.status = 'pending_approval'
+             AND c.id = (SELECT id FROM campaigns WHERE workspace_id=$1::uuid AND id=$3::uuid FOR UPDATE)`,
+          [workspaceId, cand.id, cand.campaign_id]);
+        const job = locked[0];
+        if (!job) return 'skipped' as const; // raced with reject/suppress/another approve
+        const mailboxRows = await tx.query<{ mailbox_id: string }>(
+          'SELECT mailbox_id FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, cand.campaign_id]);
+        const current = buildApprovalSnapshot({
+          campaignId: cand.campaign_id, stepNumber: job.step_number, recipientEmail: job.recipient_email,
+          campaignSteps: job.steps, mailboxIds: mailboxRows.map((m) => m.mailbox_id),
+        });
+        const currentHash = approvalContentHash(current);
+        if (job.approval_content_hash === currentHash) {
+          await tx.query(
+            `UPDATE outbound_jobs SET status='approved', approved_at=$3::timestamptz, updated_at=$3::timestamptz
+             WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='pending_approval'`,
+            [workspaceId, job.id, this.clock()]);
+          return 'approved' as const;
+        }
         // Content changed since queueing: refresh the snapshot and require a deliberate re-approval.
-        await this.database.query(
+        await tx.query(
           `UPDATE outbound_jobs SET approval_content_hash=$3, approval_snapshot=$4::jsonb, updated_at=$5::timestamptz
            WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='pending_approval'`,
           [workspaceId, job.id, currentHash, JSON.stringify(current), this.clock()]);
-        staleCount++;
-      }
+        return 'stale' as const;
+      });
+      if (outcome === 'approved') approvedCount++;
+      else if (outcome === 'stale') staleCount++;
     }
     return { approvedCount, staleCount };
   }
@@ -292,7 +307,7 @@ export class AtomicDispatchRepository implements DispatchRepository {
     if (input.all) {
       const rows = await this.database.query<{ id: string }>(
         `UPDATE outbound_jobs SET status='rejected', updated_at=$3::timestamptz
-         WHERE workspace_id=$1::uuid AND status='pending_approval'
+         WHERE workspace_id=$1::uuid AND status IN ('pending_approval','approved')
            AND ($2::uuid IS NULL OR campaign_id=$2::uuid)
          RETURNING id`,
         [workspaceId, input.campaignId ?? null, this.clock()]
@@ -304,7 +319,7 @@ export class AtomicDispatchRepository implements DispatchRepository {
     for (const id of jobIds) z.string().uuid().parse(id);
     const rows = await this.database.query<{ id: string }>(
       `UPDATE outbound_jobs SET status='rejected', updated_at=$3::timestamptz
-       WHERE workspace_id=$1::uuid AND id = ANY($2::uuid[]) AND status='pending_approval'
+       WHERE workspace_id=$1::uuid AND id = ANY($2::uuid[]) AND status IN ('pending_approval','approved')
        RETURNING id`,
       [workspaceId, jobIds, this.clock()]
     );
