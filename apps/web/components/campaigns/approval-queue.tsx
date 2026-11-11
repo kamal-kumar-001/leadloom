@@ -31,6 +31,41 @@ interface ApprovalQueueProps {
   onStatusChange?: () => void;
 }
 
+/** Per-message sender pin: rotate across the campaign's current pool, or pin to one mailbox from it. */
+function SenderPinSelect({
+  item,
+  mailboxes,
+  isUpdating,
+  onChange,
+}: {
+  item: OutboundApprovalRow;
+  mailboxes: WorkspaceMailboxRow[];
+  isUpdating: boolean;
+  onChange: (jobId: string, mailboxId: string | null) => void;
+}) {
+  const pool = item.availableMailboxIds ?? item.senderMailboxIds ?? [];
+  if (pool.length === 0)
+    return <span className="text-text-secondary">no sender mailboxes assigned to this campaign</span>;
+  return (
+    <select
+      data-job-id={item.id}
+      value={item.senderMailboxId ?? ''}
+      disabled={isUpdating}
+      onChange={(e) => onChange(item.id, e.target.value || null)}
+      className="bg-canvas border border-border-subtle rounded-md px-2 py-1 text-[11px] font-mono text-text-primary focus:outline-none focus:border-brand-loom disabled:opacity-50"
+    >
+      <option value="">
+        Rotate across {pool.length} assigned mailbox{pool.length === 1 ? '' : 'es'}
+      </option>
+      {pool.map((id) => (
+        <option key={id} value={id}>
+          Pin to {mailboxes.find((m) => m.id === id)?.email ?? `${id.slice(0, 8)}...`}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps) {
   const [items, setItems] = useState<OutboundApprovalRow[]>([]);
   const [stats, setStats] = useState<ApprovalQueueStats>({
@@ -323,29 +358,12 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
                   ) : null}
                   <div className="text-text-muted font-mono text-[11px] flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span>Sender:</span>
-                    {(() => {
-                      const pool = item.availableMailboxIds ?? item.senderMailboxIds ?? [];
-                      if (pool.length === 0)
-                        return <span className="text-text-secondary">no sender mailboxes assigned to this campaign</span>;
-                      return (
-                        <select
-                          data-job-id={item.id}
-                          value={item.senderMailboxId ?? ''}
-                          disabled={senderLoadingId === item.id}
-                          onChange={(e) => handleSenderChange(item.id, e.target.value || null)}
-                          className="bg-canvas border border-border-subtle rounded-md px-2 py-1 text-[11px] font-mono text-text-primary focus:outline-none focus:border-brand-loom disabled:opacity-50"
-                        >
-                          <option value="">
-                            Rotate across {pool.length} assigned mailbox{pool.length === 1 ? '' : 'es'}
-                          </option>
-                          {pool.map((id) => (
-                            <option key={id} value={id}>
-                              Pin to {mailboxes.find((m) => m.id === id)?.email ?? `${id.slice(0, 8)}...`}
-                            </option>
-                          ))}
-                        </select>
-                      );
-                    })()}
+                    <SenderPinSelect
+                      item={item}
+                      mailboxes={mailboxes}
+                      isUpdating={senderLoadingId === item.id}
+                      onChange={handleSenderChange}
+                    />
                   </div>
                   {item.stale && (
                     <div className="text-[11px] font-mono text-signal-pending">
