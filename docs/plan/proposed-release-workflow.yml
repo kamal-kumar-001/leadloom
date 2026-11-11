@@ -4,14 +4,32 @@
 # building, removing the hour-long on-host build/export that stalled the last
 # release and browned out the co-hosted apps.
 #
-# Preconditions:
-#   - The default GITHUB_TOKEN can push GHCR packages for this repo.
+# Preconditions and limits:
+#   - The workflow declares `permissions: packages: write` to request package
+#     push rights for GITHUB_TOKEN. Whether that grant actually takes effect
+#     depends on the repo/org Actions settings, which are NOT readable with the
+#     repo-scoped token and are therefore UNVERIFIED until the first run. The
+#     declaration does not override repo/org policy; if the first run is
+#     blocked, Kamal checks Settings > Actions > General > Workflow permissions.
 #   - Packages stay PRIVATE (the first-publish default). The host pulls with a
 #     one-time `docker login ghcr.io` using a read:packages token. Making the
 #     packages public is a separate disclosure decision and is NOT part of this
 #     workflow or its approval.
 #   - Host is x86_64 (confirmed by read-only diagnostic 2026-11-11), matching
 #     the hosted runner's linux/amd64 output. No buildx platform line needed.
+# Security posture:
+#   - Trigger is workflow_dispatch only: manual start by someone with repo
+#     write access, building a ref that already exists in THIS repo. No
+#     pull_request trigger, so no untrusted PR code ever runs here.
+#   - Actions are pinned to commit SHAs (tags shown in comments). No external
+#     scripts are fetched or executed; only official actions/* and docker/*
+#     actions are used.
+#   - The repo-root .dockerignore excludes .env, .env.*, .git, logs and data
+#     dirs, so secrets stay out of the build context and image layers. No
+#     secrets are passed as build args or env.
+#   - Runner is the standard hosted ubuntu-latest (free on public repos); no
+#     larger/paid runners, no artifact uploads outside the verified free GHCR
+#     container-storage policy.
 name: release-images
 on:
   workflow_dispatch:
@@ -27,17 +45,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.ref }}
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push engine
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: docker/engine.Dockerfile
@@ -46,7 +64,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/leadloom-engine:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/leadloom-engine:release
       - name: Build and push web
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: docker/web.Dockerfile
