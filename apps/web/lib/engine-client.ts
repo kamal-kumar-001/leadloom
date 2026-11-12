@@ -378,6 +378,20 @@ export const fetchWorkspaceTables = () => workspaceRead<WorkspaceTableRow[]>('/w
 export const fetchWorkspaceMailboxes = () => workspaceRead<WorkspaceMailboxRow[]>('/workspace/mailboxes');
 export const fetchWorkspaceCampaigns = () => workspaceRead<WorkspaceCampaignRow[]>('/workspace/campaigns');
 
+export interface CampaignJobRow {
+  id: string;
+  recipientEmail: string;
+  stepNumber: number;
+  status: string;
+  scheduledAt: string;
+  reservedAt: string | null;
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export const fetchCampaignJobs = (campaignId: string) =>
+  workspaceRead<{ campaign: { id: string; name: string; status: string }; jobs: CampaignJobRow[] }>(`/campaigns/${campaignId}/jobs`);
+
 export interface WorkspaceSuppressionRow {
   id: string;
   /** First 8 hex chars of the stored hash. The address itself is never available. */

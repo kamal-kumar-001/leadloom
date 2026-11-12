@@ -62,6 +62,40 @@ describe('WorkspaceReadService', () => {
   });
 });
 
+describe('listCampaignJobs', () => {
+  const jobsDb = (campaign: any, jobs: any[]) => {
+    const calls: any[] = [];
+    const db: any = {
+      campaign: { count: async () => 0, findMany: async () => [], findFirst: async (a: any) => { calls.push(['campaign', 'findFirst', a]); return campaign && a.where.workspaceId === campaign.workspaceId ? { id: campaign.id, name: campaign.name, status: campaign.status } : null; } },
+      outboundJob: { groupBy: async () => [], findMany: async (a: any) => { calls.push(['job', 'findMany', a]); return jobs; } },
+    };
+    return { calls, db };
+  };
+  const camp = { id: 'c1', workspaceId: 'ws-1', name: 'Q4 Outreach', status: 'active' };
+
+  it('returns null for another tenant\'s campaign id (never their jobs)', async () => {
+    const { calls, db } = jobsDb(camp, []);
+    const svc = new WorkspaceReadService(db);
+    expect(await svc.listCampaignJobs('ws-2', 'c1')).toBeNull();
+    expect(calls.filter((c) => c[0] === 'job').length).toBe(0);
+  });
+
+  it('maps job metadata to ISO dates and leaks no step bodies or provider ids', async () => {
+    const jobs = [{ id: 'j1', recipientEmail: 'ada@acme.test', stepNumber: 2, status: 'approved', scheduledAt: new Date('2026-11-10T09:00:00Z'), reservedAt: null, attempts: 1, createdAt: new Date('2026-11-09T09:00:00Z'), updatedAt: new Date('2026-11-11T09:00:00Z') }];
+    const { calls, db } = jobsDb(camp, jobs);
+    const out = await new WorkspaceReadService(db).listCampaignJobs('ws-1', 'c1');
+    expect(out).not.toBeNull();
+    expect(out!.campaign).toEqual({ id: 'c1', name: 'Q4 Outreach', status: 'active' });
+    expect(out!.jobs[0].scheduledAt).toBe('2026-11-10T09:00:00.000Z');
+    expect(out!.jobs[0].reservedAt).toBeNull();
+    expect(out!.jobs[0].updatedAt).toBe('2026-11-11T09:00:00.000Z');
+    const jobCall = calls.find((c) => c[0] === 'job')[2];
+    expect(jobCall.where).toEqual({ workspaceId: 'ws-1', campaignId: 'c1' });
+    expect(Object.keys(jobCall.select).join(',')).not.toMatch(/subject|body|messageId|provider|template/i);
+    expect(jobCall.take).toBe(100);
+  });
+});
+
 describe('listTableRows', () => {
   const wsDb = (workspaceId: string) => {
     const table = { id: 't1', workspaceId, name: 'Website research leads', rowCount: 1 };

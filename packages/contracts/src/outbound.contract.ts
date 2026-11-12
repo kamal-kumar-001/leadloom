@@ -147,3 +147,26 @@ export const RejectOutboundJobRequestSchema = z.object({
 });
 export type RejectOutboundJobRequest = z.infer<typeof RejectOutboundJobRequestSchema>;
 
+
+/**
+ * Per-recipient job drill-down for one campaign (GET /campaigns/:campaignId/jobs).
+ * Job metadata only: no step bodies, provider message ids, idempotency keys or hashes.
+ */
+export const CampaignJobRowSchema = z.object({
+  id: z.string().uuid(),
+  recipientEmail: z.string().email(),
+  stepNumber: z.number().int(),
+  status: z.string(),
+  scheduledAt: z.string(),
+  reservedAt: z.string().nullable(),
+  attempts: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CampaignJobRow = z.infer<typeof CampaignJobRowSchema>;
+
+export const CampaignJobsResponseSchema = z.object({
+  campaign: z.object({ id: z.string().uuid(), name: z.string(), status: z.string() }),
+  jobs: z.array(CampaignJobRowSchema),
+});
+export type CampaignJobsResponse = z.infer<typeof CampaignJobsResponseSchema>;

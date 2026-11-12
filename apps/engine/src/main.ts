@@ -64,7 +64,7 @@ export interface RuntimeServices {
  /** Honest report of the send gate actually applied to the outbound repository (LEADLOOM_OUTBOUND_SENDING_ENABLED). */
  outboundSendingEnabled?: boolean;
  /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
- reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listTableRows'|'listMailboxes'|'listCampaigns'|'listSuppressions'|'listExperiments'>;
+ reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listTableRows'|'listMailboxes'|'listCampaigns'|'listCampaignJobs'|'listSuppressions'|'listExperiments'>;
  /** Optional: admin-only workspace invitations (default off; LEADLOOM_TEAM_INVITES_ENABLED). Sends no mail. */
  invitations?: Pick<InvitationService,'invite'|'list'|'revoke'|'mine'|'accept'>;
  members?: Pick<MemberService,'list'|'setRole'|'remove'>;
@@ -171,6 +171,16 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.get('/workspace/suppressions',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listSuppressions(s.workspaceId);});
    fastify.get('/workspace/experiments',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listExperiments(s.workspaceId);});
    fastify.get('/workspace/campaigns',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listCampaigns(s.workspaceId);});
+   // Per-recipient job drill-down: tenant check inside the read service (null -> 404,
+   // no existence leak). Job metadata only - no step bodies or provider ids.
+   fastify.get('/campaigns/:campaignId/jobs',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false);if(!session)return;
+    const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
+    if(!campaignId.success)return reply.code(400).send({error:'Invalid campaign id'});
+    const result=await reads.listCampaignJobs(session.workspaceId,campaignId.data);
+    if(!result)return reply.code(404).send({error:'Campaign not found'});
+    return reply.code(200).send(result);
+   });
   }
   if(services.invitations) {
    const inv=services.invitations;
@@ -372,7 +382,6 @@ export async function createApplication(services?:RuntimeServices) {
    if(!await services.recipients.campaignExists(session.workspaceId,campaignId.data))return reply.code(404).send({error:'Campaign not found'});
    return reply.code(200).send({recipients:await services.recipients.listRecipients(session.workspaceId,campaignId.data)});
   });
-
   fastify.post('/outbound/jobs',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;

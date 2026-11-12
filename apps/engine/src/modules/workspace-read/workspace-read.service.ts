@@ -10,8 +10,8 @@ export interface WorkspaceReadDb {
   row: { findMany(a: any): Promise<any[]> };
   cell: { findMany(a: any): Promise<any[]> };
   mailbox: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
-  campaign: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
-  outboundJob: { groupBy(a: any): Promise<any[]> };
+  campaign: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]>; findFirst(a: any): Promise<any> };
+  outboundJob: { groupBy(a: any): Promise<any[]>; findMany(a: any): Promise<any[]> };
   inboundReply: { groupBy(a: any): Promise<any[]> };
   suppressionList: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   validationExperiment: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
@@ -148,6 +148,39 @@ export class WorkspaceReadService {
       const s = stats.get(c.id) ?? { awaitingApproval: 0, queued: 0, sending: 0, sent: 0, uncertain: 0, failed: 0, replies: 0, lastActivityAt: null };
       return { ...c, sendStatus: { ...s, lastActivityAt: s.lastActivityAt ? s.lastActivityAt.toISOString() : null } };
     });
+  }
+
+  /**
+   * Per-recipient job drill-down for one campaign owned by the session
+   * workspace. Returns null for foreign or unknown campaigns (404 at the
+   * route) - never another tenant's rows. Job metadata only: no step
+   * bodies, provider message ids, idempotency keys or recipient hashes.
+   */
+  async listCampaignJobs(workspaceId: string, campaignId: string) {
+    const campaign = await this.db.campaign.findFirst({
+      where: { id: campaignId, workspaceId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!campaign) return null;
+    const jobs = await this.db.outboundJob.findMany({
+      where: { workspaceId, campaignId },
+      select: {
+        id: true, recipientEmail: true, stepNumber: true, status: true,
+        scheduledAt: true, reservedAt: true, attempts: true, createdAt: true, updatedAt: true,
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: LIMIT,
+    });
+    return {
+      campaign,
+      jobs: jobs.map((j: any) => ({
+        ...j,
+        scheduledAt: j.scheduledAt?.toISOString?.() ?? j.scheduledAt,
+        reservedAt: j.reservedAt ? j.reservedAt.toISOString() : null,
+        createdAt: j.createdAt?.toISOString?.() ?? j.createdAt,
+        updatedAt: j.updatedAt?.toISOString?.() ?? j.updatedAt,
+      })),
+    };
   }
 
   /** Suppressions: a short hash prefix, reason and source only. The raw address is never stored and never reconstructed. */

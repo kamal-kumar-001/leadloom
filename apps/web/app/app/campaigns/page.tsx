@@ -9,6 +9,7 @@ import { CampaignCreateForm } from '../../../components/campaigns/campaign-creat
 import { ReleaseCampaignButton } from '../../../components/campaigns/release-campaign-button';
 import { CampaignStepsList } from '../../../components/campaigns/campaign-steps-list';
 import { CampaignRecipients } from '../../../components/campaigns/campaign-recipients';
+import { CampaignJobs } from '../../../components/campaigns/campaign-jobs';
 import { CampaignSenders } from '../../../components/campaigns/campaign-senders';
 import { CampaignStatusButton } from '../../../components/campaigns/campaign-status-button';
 import { RepliesPanel } from '../../../components/campaigns/replies-panel';
@@ -72,6 +73,7 @@ export default function CampaignsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [recipientsOpenFor, setRecipientsOpenFor] = useState<string | null>(null);
+  const [jobsOpenFor, setJobsOpenFor] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [stepsOpenFor, setStepsOpenFor] = useState<string | null>(null);
   const [sendersOpenFor, setSendersOpenFor] = useState<string | null>(null);
@@ -269,9 +271,18 @@ export default function CampaignsPage() {
                   </Button>
                   <Button
                     size="sm"
+                    variant={jobsOpenFor === camp.id ? 'primary' : 'outline'}
+                    className="text-xs gap-1.5"
+                    onClick={() => { setJobsOpenFor(jobsOpenFor === camp.id ? null : camp.id); if (jobsOpenFor !== camp.id) setRecipientsOpenFor(null); }}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{jobsOpenFor === camp.id ? 'Hide Jobs' : 'Jobs'}</span>
+                  </Button>
+                  <Button
+                    size="sm"
                     variant={recipientsOpenFor === camp.id ? 'primary' : 'outline'}
                     className="text-xs gap-1.5"
-                    onClick={() => setRecipientsOpenFor(recipientsOpenFor === camp.id ? null : camp.id)}
+                    onClick={() => { setRecipientsOpenFor(recipientsOpenFor === camp.id ? null : camp.id); if (recipientsOpenFor !== camp.id) setJobsOpenFor(null); }}
                   >
                     <FolderOpen className="w-3.5 h-3.5" />
                     <span>{recipientsOpenFor === camp.id ? 'Hide Recipients' : 'Recipients'}</span>
@@ -297,6 +308,12 @@ export default function CampaignsPage() {
           <CampaignRecipients
             campaignId={recipientsOpenFor}
             campaignName={campaigns.find((c) => c.id === recipientsOpenFor)!.name}
+          />
+        )}
+        {jobsOpenFor && campaigns.some((c) => c.id === jobsOpenFor) && (
+          <CampaignJobs
+            campaignId={jobsOpenFor}
+            campaignName={campaigns.find((c) => c.id === jobsOpenFor)!.name}
           />
         )}
 
