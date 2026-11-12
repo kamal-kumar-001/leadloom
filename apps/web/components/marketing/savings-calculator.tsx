@@ -31,7 +31,7 @@ export function SavingsCalculator() {
         </div>
 
         {/* Range Slider Container */}
-        <div className="mb-10 max-w-xl mx-auto p-6 rounded-xl border border-border-muted bg-canvas-surface/60 backdrop-blur-sm text-center">
+        <div className="mb-10 max-w-xl mx-auto p-6 mcard border border-border-muted bg-canvas-surface/60 backdrop-blur-sm text-center">
           <div className="flex justify-between items-center mb-2">
             <span className="text-xs font-mono text-text-muted uppercase tracking-wider">
               Monthly Leads Enriched & Contacted

@@ -6,7 +6,7 @@ export function ProblemSolution() {
   return (
     <section className="px-4 pb-24 sm:px-6">
       <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-2">
-        <Reveal className="rounded-xl border border-border-subtle bg-canvas-surface p-8">
+        <Reveal className="mcard border border-border-subtle bg-canvas-surface p-8">
           <p className="caption-3 mb-4 uppercase tracking-widest text-text-muted">The old way</p>
           <h3 className="heading-5">Buy credits. Blast lists. Get ignored.</h3>
           <p className="body-3 mt-4">

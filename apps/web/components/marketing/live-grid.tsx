@@ -65,7 +65,7 @@ export function LiveGrid() {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {LIVE_ITEMS.map((item, i) => (
             <Reveal key={item.title} delay={i * 80}>
-              <article className="h-full rounded-xl border border-border-subtle bg-canvas-surface p-6 transition-all duration-500 motion-base hover:-translate-y-1 hover:border-brand-loom/40 hover:shadow-lg">
+              <article className="h-full mcard border border-border-subtle bg-canvas-surface p-6 transition-all duration-500 motion-base hover:-translate-y-1 hover:border-brand-loom/40 hover:shadow-lg">
                 <div className="mb-4 flex items-center justify-between">
                   <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand-loom/30 bg-canvas-elevated text-brand-loom">
                     <item.icon className="h-5 w-5" />

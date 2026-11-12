@@ -30,7 +30,7 @@ export function StepsSection() {
         <div className="grid gap-6 md:grid-cols-3">
           {STEPS.map((step, i) => (
             <Reveal key={step.n} delay={i * 100}>
-              <article className="h-full rounded-xl border border-border-subtle bg-canvas p-6">
+              <article className="h-full mcard border border-border-subtle bg-canvas p-6">
                 <p className="heading-3 text-brand-loom">{step.n}</p>
                 <h3 className="title-1 mt-4">{step.title}</h3>
                 <p className="body-6 mt-2">{step.body}</p>

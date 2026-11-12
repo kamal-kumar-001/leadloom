@@ -71,12 +71,44 @@
 
 /* ---------- Hero heading gradient (skill B5, light theme) ---------- */
 
+/* Marketing cards: soft radius, layered shadow, gentle lift (premium pass). */
+.marketing-root .mcard {
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent-loom) 5%, transparent),
+    0 8px 24px color-mix(in srgb, var(--accent-loom) 5%, transparent);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.marketing-root .mcard:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 4px color-mix(in srgb, var(--accent-loom) 6%, transparent),
+    0 16px 40px color-mix(in srgb, var(--accent-loom) 8%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-root .mcard,
+  .marketing-root .mcard:hover {
+    transform: none;
+    transition: none;
+  }
+}
+
 /* Hero heading gradient (skill B5 structure, brand palette per Kamal 2026-11-12) */
 .marketing-root .hero-title {
-  background: linear-gradient(90deg, var(--accent-loom) 0%, color-mix(in srgb, var(--accent-loom) 52%, #f8fafc) 100%);
+  background: linear-gradient(100deg, var(--accent-loom) 0%, color-mix(in srgb, var(--accent-loom) 45%, #f8fafc) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Hero visual: floating product card (premium pass, Kamal 2026-11-12).
+   Layered soft shadow in the brand hue, no gradient surfaces. */
+.marketing-root .hero-visual {
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent-loom) 8%, transparent),
+    0 12px 32px color-mix(in srgb, var(--accent-loom) 10%, transparent),
+    0 48px 96px color-mix(in srgb, var(--accent-loom) 14%, transparent);
 }
 
 /* ---------- Motion (skill B7) ---------- */

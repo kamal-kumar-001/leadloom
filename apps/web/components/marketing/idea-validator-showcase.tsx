@@ -27,7 +27,7 @@ export function IdeaValidatorShowcase() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Left: Interactive Input Generator */}
           <div className="lg:col-span-5 space-y-4">
-            <div className="p-6 rounded-xl border border-border-muted bg-canvas-surface/80 backdrop-blur-md">
+            <div className="p-6 mcard border border-border-muted bg-canvas-surface/80 backdrop-blur-md">
               <label className="block text-xs font-mono text-text-muted mb-2 uppercase tracking-wider">
                 1. Enter Raw Product Hypothesis
               </label>

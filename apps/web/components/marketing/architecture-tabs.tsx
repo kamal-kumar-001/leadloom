@@ -63,7 +63,7 @@ export function ArchitectureTabs() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-border-muted bg-canvas-surface/90 overflow-hidden shadow-2xl">
+      <div className="mcard border border-border-muted bg-canvas-surface/90 overflow-hidden shadow-2xl">
         {/* Tab Headers */}
         <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2 bg-canvas-elevated/40">
           <div className="flex gap-2">

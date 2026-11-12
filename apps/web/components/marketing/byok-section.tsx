@@ -20,7 +20,7 @@ export function ByokSection() {
           </p>
         </Reveal>
         <div className="mx-auto grid max-w-4xl gap-6 md:grid-cols-2">
-          <Reveal className="rounded-xl border border-border-subtle bg-canvas-surface p-8">
+          <Reveal className="mcard border border-border-subtle bg-canvas-surface p-8">
             <h3 className="title-2 text-text-muted">Credit bundles elsewhere</h3>
             <ul className="mt-4 space-y-3">
               {[

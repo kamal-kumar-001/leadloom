@@ -15,7 +15,7 @@ export function FinalCta() {
         }}
       />
       <Reveal className="relative mx-auto max-w-[680px] text-center">
-        <h2 className="heading-2">Create your workspace today</h2>
+        <h2 className="heading-1">Create your workspace today</h2>
         <p className="body-2 mt-4">
           Saved tables and provider key storage are live. Enrichment, the idea
           validator and sending join next. Free while in early access.

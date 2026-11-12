@@ -19,7 +19,7 @@ export function PricingSection() {
           </p>
         </Reveal>
         <Reveal>
-          <div className="mx-auto max-w-2xl rounded-xl border border-border-muted bg-canvas-surface p-8">
+          <div className="mx-auto max-w-2xl mcard border border-border-muted bg-canvas-surface p-8">
             <ul className="space-y-3">
               {[
                 'Early access is free while the product is being built',

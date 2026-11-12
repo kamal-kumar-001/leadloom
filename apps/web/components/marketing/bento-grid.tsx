@@ -121,7 +121,7 @@ export function BentoGridSection() {
           </div>
 
           {/* Visual Mini Composer Mock - illustrative only */}
-          <div className="w-full md:w-96 p-4 rounded-xl border border-border-subtle bg-canvas-surface/90 font-mono text-xs shadow-xl">
+          <div className="w-full md:w-96 p-4 mcard border border-border-subtle bg-canvas-surface/90 font-mono text-xs shadow-xl">
             <div className="text-text-muted pb-2 border-b border-border-subtle mb-3 flex justify-between">
               <span>Sequence Step 1</span>
               <span className="text-text-muted">Illustrative preview</span>

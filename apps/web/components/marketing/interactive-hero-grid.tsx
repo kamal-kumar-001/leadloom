@@ -90,13 +90,20 @@ export function InteractiveHeroGrid() {
   };
 
   return (
-    <div className="w-full rounded-xl border border-border-muted bg-canvas-surface backdrop-blur-md overflow-hidden shadow-2xl">
+    <div className="w-full overflow-hidden rounded-2xl border border-border-muted bg-canvas-surface backdrop-blur-md">
+      {/* Window chrome */}
+      <div className="flex items-center gap-2 border-b border-border-subtle bg-canvas-elevated px-4 py-2.5">
+        <span className="h-2.5 w-2.5 rounded-full bg-border-muted" aria-hidden="true" />
+        <span className="h-2.5 w-2.5 rounded-full bg-border-muted" aria-hidden="true" />
+        <span className="h-2.5 w-2.5 rounded-full bg-border-muted" aria-hidden="true" />
+        <span className="caption-4 mx-auto text-text-muted">LeadLoom - simulated cascade preview</span>
+      </div>
       {/* Table Action Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3 bg-canvas-elevated">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-5 py-3.5">
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-brand-loom animate-pulse" />
-          <span className="text-xs font-mono font-medium text-text-primary">
-            Interactive Cascade Sandbox (No Signup Needed)
+          <span className="w-2 h-2 rounded-full bg-brand-loom animate-pulse" />
+          <span className="caption-3 text-text-primary">
+            Interactive demo - no signup needed
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -108,9 +115,9 @@ export function InteractiveHeroGrid() {
             className="text-xs"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>{isRunning ? 'Cascading Waterfalls...' : 'Run Simulated Waterfall on 5 Sample Accounts'}</span>
+            <span>{isRunning ? 'Cascading...' : 'Run simulated waterfall'}</span>
           </Button>
-          <Button size="sm" variant="ghost" onClick={reset} disabled={isRunning} className="text-xs">
+          <Button size="sm" variant="ghost" onClick={reset} disabled={isRunning} className="text-xs" aria-label="Reset demo">
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -118,50 +125,48 @@ export function InteractiveHeroGrid() {
 
       {/* Grid Columns */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse text-xs">
+        <table className="w-full text-left border-collapse text-sm">
           <thead>
-            <tr className="border-b border-border-subtle bg-canvas-elevated text-text-muted font-mono">
-              <th className="py-2.5 px-4 w-12">#</th>
-              <th className="py-2.5 px-4">Account</th>
-              <th className="py-2.5 px-4 whitespace-nowrap">Sample Buying Signal</th>
-              <th className="py-2.5 px-4 whitespace-nowrap">Adaptive Waterfall Email (Tier 1-3)</th>
-              <th className="py-2.5 px-4 text-right whitespace-nowrap">Telemetry</th>
+            <tr className="border-b border-border-subtle caption-4 text-text-muted">
+              <th className="py-3 px-5 font-medium">Account</th>
+              <th className="py-3 px-5 font-medium whitespace-nowrap">Sample buying signal</th>
+              <th className="py-3 px-5 font-medium whitespace-nowrap">Waterfall result</th>
+              <th className="py-3 px-5 font-medium text-right whitespace-nowrap">Telemetry</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-subtle">
             {rows.map((row) => (
               <tr key={row.id} className="hover:bg-canvas-subtle transition-colors">
-                <td className="py-2.5 px-4 font-mono text-text-muted">{row.id}</td>
-                <td className="py-2.5 px-4 font-medium text-text-primary">
-                  {row.company} <span className="text-text-muted font-mono font-normal">({row.domain})</span>
+                <td className="py-3.5 px-5 font-medium text-text-primary">
+                  {row.company} <span className="text-text-muted font-normal">({row.domain})</span>
                 </td>
-                <td className="py-2.5 px-4">
+                <td className="py-3.5 px-5">
                   <Badge variant="loom">{row.signal}</Badge>
                 </td>
-                <td className="py-2.5 px-4">
+                <td className="py-3.5 px-5">
                   {row.status === 'idle' && (
-                    <span className="text-text-muted font-mono">Ready to cascade...</span>
+                    <span className="text-text-muted">Ready to cascade</span>
                   )}
                   {row.status === 'running' && (
-                    <span className="inline-flex items-center gap-1.5 text-brand-loom font-mono">
-                      <Clock className="w-3 h-3 animate-spin" /> Checking Apollo → Hunter...
+                    <span className="inline-flex items-center gap-1.5 text-brand-loom">
+                      <Clock className="w-3 h-3 animate-spin" /> Checking providers
                     </span>
                   )}
                   {row.status === 'verified' && (
-                    <div className="inline-flex items-center gap-2 font-mono">
+                    <div className="inline-flex items-center gap-2">
                       <CheckCircle className="w-3.5 h-3.5 text-signal-verified" />
-                      <span className="text-text-primary font-medium">{row.email}</span>
-                      <span className="text-xs text-text-muted bg-canvas-elevated px-1.5 py-0.5 rounded border border-border-subtle">
+                      <span className="text-text-primary font-medium font-mono text-xs">{row.email}</span>
+                      <span className="caption-4 text-text-muted bg-canvas-elevated px-1.5 py-0.5 rounded border border-border-subtle">
                         {row.provider}
                       </span>
                     </div>
                   )}
                 </td>
-                <td className="py-2.5 px-4 text-right font-mono text-text-muted">
+                <td className="py-3.5 px-5 text-right font-mono text-xs text-text-muted">
                   {row.latency ? (
-                    <span className="text-signal-verified font-medium">{row.latency}ms • $0.003</span>
+                    <span className="text-signal-verified font-medium">{row.latency}ms - $0.003</span>
                   ) : (
-                    <span>—</span>
+                    <span>-</span>
                   )}
                 </td>
               </tr>
@@ -171,12 +176,12 @@ export function InteractiveHeroGrid() {
       </div>
 
       {/* Footer Guarantee Note */}
-      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between border-t border-border-subtle px-4 py-2 bg-canvas-surface text-xs text-text-muted">
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between border-t border-border-subtle px-5 py-2.5 caption-4 text-text-muted">
         <span className="flex items-start gap-1.5">
           <Zap className="w-3 h-3 mt-0.5 shrink-0 text-signal-verified" />
-          <span>Simulated example: early exit on Hunter for Row 1, so the Dropcontact step ($0.03) is skipped. No real provider calls.</span>
+          <span>Simulated example: early exit on the first provider for row 1, so the next step ($0.03) is skipped. No real provider calls.</span>
         </span>
-        <span className="font-mono text-text-primary font-medium">Simulated cost: $0.015</span>
+        <span className="font-mono text-xs text-text-primary font-medium">Simulated cost: $0.015</span>
       </div>
     </div>
   );
