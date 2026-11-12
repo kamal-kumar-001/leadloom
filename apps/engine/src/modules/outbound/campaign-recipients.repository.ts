@@ -119,6 +119,41 @@ export class CampaignRecipientsRepository {
     return { pool: await this.listMailboxPool(workspaceId, campaignId) };
   }
 
+  /**
+   * Lifecycle transitions with fail-closed validation: activating requires at
+   * least one step and one pool sender (an active campaign without both could
+   * never send), pausing requires active, returning to draft requires paused.
+   * Same-status requests are idempotent no-ops. Returns null when the campaign
+   * is not in this workspace (route answers 404), otherwise ok/reason.
+   */
+  async setCampaignStatus(
+    workspaceId: string,
+    campaignId: string,
+    target: 'draft' | 'active' | 'paused',
+  ): Promise<{ ok: true; status: string } | { ok: false; reason: string } | null> {
+    const rows = await this.database.query<{ status: string; steps: unknown }>(
+      'SELECT status, steps FROM campaigns WHERE workspace_id=$1::uuid AND id=$2::uuid', [workspaceId, campaignId]);
+    if (rows.length !== 1) return null;
+    const current = rows[0].status;
+    if (current === target) return { ok: true, status: current };
+    if (target === 'active') {
+      if (current !== 'draft' && current !== 'paused') return { ok: false, reason: `Campaign cannot be activated from '${current}'` };
+      const steps = Array.isArray(rows[0].steps) ? rows[0].steps : [];
+      if (steps.length === 0) return { ok: false, reason: 'Add at least one step before activating' };
+      const pool = await this.database.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, campaignId]);
+      if ((pool[0]?.n ?? 0) === 0) return { ok: false, reason: 'Assign at least one sender mailbox before activating' };
+    } else if (target === 'paused') {
+      if (current !== 'active') return { ok: false, reason: `Only an active campaign can be paused (currently '${current}')` };
+    } else {
+      if (current !== 'paused') return { ok: false, reason: `Pause the campaign before returning it to draft (currently '${current}')` };
+    }
+    await this.database.query(
+      'UPDATE campaigns SET status=$3, updated_at=$4::timestamptz WHERE workspace_id=$1::uuid AND id=$2::uuid',
+      [workspaceId, campaignId, target, new Date().toISOString()]);
+    return { ok: true, status: target };
+  }
+
   /** True only when the campaign belongs to this workspace (route 404 check, no existence leak). */
   async campaignExists(workspaceId: string, campaignId: string): Promise<boolean> {
     const rows = await this.database.query<{ id: string }>(

@@ -349,6 +349,21 @@ export async function createApplication(services?:RuntimeServices) {
    if(!result)return reply.code(404).send({error:'Campaign or mailbox not found'});
    return reply.code(200).send(result);
   });
+  // Campaign lifecycle: the user-facing draft -> active -> paused transitions.
+  // Validation lives in the repository (steps + sender pool required to activate);
+  // invalid transitions answer 409 with the named reason, unknown campaigns 404.
+  fastify.put('/campaigns/:campaignId/status',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
+   if(!services.recipients)return reply.code(503).send({error:'Campaign store unavailable'});
+   const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
+   const parsed=z.object({status:z.enum(['draft','active','paused'])}).strict().safeParse(request.body);
+   if(!campaignId.success||!parsed.success)return reply.code(400).send({error:'Invalid status request'});
+   const result=await services.recipients.setCampaignStatus(session.workspaceId,campaignId.data,parsed.data.status);
+   if(!result)return reply.code(404).send({error:'Campaign not found'});
+   if(!result.ok)return reply.code(409).send({error:result.reason});
+   return reply.code(200).send({id:campaignId.data,status:result.status});
+  });
   fastify.get('/campaigns/:campaignId/recipients',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,false);if(!session)return;
    if(!services.recipients)return reply.code(503).send({error:'Recipient store unavailable'});

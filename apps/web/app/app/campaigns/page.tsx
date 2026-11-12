@@ -10,6 +10,7 @@ import { ReleaseCampaignButton } from '../../../components/campaigns/release-cam
 import { CampaignStepsList } from '../../../components/campaigns/campaign-steps-list';
 import { CampaignRecipients } from '../../../components/campaigns/campaign-recipients';
 import { CampaignSenders } from '../../../components/campaigns/campaign-senders';
+import { CampaignStatusButton } from '../../../components/campaigns/campaign-status-button';
 import { RepliesPanel } from '../../../components/campaigns/replies-panel';
 import {
   Send,
@@ -254,6 +255,7 @@ export default function CampaignsPage() {
                     <AtSign className="w-3.5 h-3.5" />
                     <span>{sendersOpenFor === camp.id ? 'Hide Senders' : 'Senders'}</span>
                   </Button>
+                  <CampaignStatusButton campaignId={camp.id} campaignName={camp.name} status={camp.status} onChanged={loadCampaigns} />
                   <ReleaseCampaignButton campaignId={camp.id} campaignName={camp.name} onReleased={loadCampaigns} />
                 </div>
               </Card>

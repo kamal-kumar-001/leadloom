@@ -877,3 +877,16 @@ export async function setCampaignMailboxPool(campaignId: string, mailboxIds: str
   if (result.data && !result.isMock) return { data: result.data.pool };
   return { data: null, error: result.error || 'Sender pool could not be saved.' };
 }
+
+/** Lifecycle transition for one campaign. 409 answers carry the server's named reason. */
+export async function setCampaignStatus(
+  campaignId: string,
+  status: 'draft' | 'active' | 'paused',
+): Promise<{ data: { id: string; status: string } | null; error?: string }> {
+  const result = await engineFetch<{ id: string; status: string }>(`/campaigns/${campaignId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+  if (result.data && !result.isMock) return { data: result.data };
+  return { data: null, error: result.error || 'Campaign status could not be changed.' };
+}
