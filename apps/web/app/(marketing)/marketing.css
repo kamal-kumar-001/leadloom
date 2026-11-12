@@ -457,3 +457,15 @@
   background: linear-gradient(180deg, #f7e9b8 0%, #F3E3A0 55%, #d9c172 100%);
   border: 1px solid color-mix(in srgb, #F3E3A0 65%, #8a7433);
 }
+
+/* Mega nav panel: mcard look WITHOUT its hover translateY. mcard:hover sets
+   transform: translateY(-2px), which stomps the Tailwind -translate-x-1/2
+   centering (Tailwind v3 puts it in the same transform property); the panel
+   jumped half its width on pointer entry and oscillated - the navbar dropdown
+   flicker Kamal reported (voice 2026-11-12 21:49). */
+.marketing-root .mega-panel {
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent-loom) 5%, transparent),
+    0 8px 24px color-mix(in srgb, var(--accent-loom) 5%, transparent);
+}

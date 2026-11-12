@@ -215,7 +215,7 @@ export function SiteNav() {
             openMenu === menu.label && (
               <div
                 key={menu.label}
-                className="absolute left-1/2 top-full mt-3 w-[min(92vw,640px)] -translate-x-1/2 mcard border border-border-subtle bg-canvas-surface p-3 shadow-lg"
+                className="mega-panel absolute left-1/2 top-full mt-3 w-[min(92vw,640px)] -translate-x-1/2 border border-border-subtle bg-canvas-surface p-3 shadow-lg"
                 role="menu"
                 aria-label={menu.label}
               >
