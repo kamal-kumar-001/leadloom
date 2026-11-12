@@ -710,3 +710,8 @@
 ### [2026-11-12T07:45:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G10) | Non-Breaking
 - G10 reply-tracking row re-verified; no corrections. 15 poll-bridge/reply-attribution specs + 1 gated imap-read integration spec passed (real fixture IMAP).
 - Confirmed: poll gated on LEADLOOM_IMAP_POLL_ENABLED (poll-enablement.ts); recordInboundReply attributes via thread headers, dedupes on (workspace_id, message_id), cancels pending_approval/pending/approved jobs for the matched campaign+recipient; Replies UI shows classification + 'matched to message' attribution label.
+
+### [2026-11-12T08:15:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G6/G7/G8/G11/G12) | Non-Breaking
+- Final sweep rows re-verified; no corrections. 80 waterfall connector specs + 1 registry spec passed.
+- G6: LEADLOOM_CONNECTORS_LIVE_ENABLED default-off; test-connection returns DISABLED without it. G7/G8/G11: no LinkedIn-DM/X-DM/MCP modules exist - rows accurate. G12: entitlement gate still optional/deny-by-default, plan decisions Kamal's.
+- FULL GAP-DOC SWEEP COMPLETE: all rows G1-G13 re-verified against current code this week.
