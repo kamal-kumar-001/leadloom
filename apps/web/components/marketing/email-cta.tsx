@@ -31,6 +31,7 @@ export function EmailCta({
     <form
       id={id}
       onSubmit={submit}
+      noValidate
       className={`flex w-full max-w-md flex-col gap-3 sm:flex-row ${className}`}
     >
       <label htmlFor={inputId} className="sr-only">
@@ -39,7 +40,6 @@ export function EmailCta({
       <input
         id={inputId}
         type="email"
-        required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="Work email"

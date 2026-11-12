@@ -172,7 +172,7 @@ function ForgotPasswordForm() {
           <AuthAlert type="info" message={infoMessage} className="mb-4" />
         )}
 
-        <form onSubmit={handleResetPassword} className="space-y-4">
+        <form onSubmit={handleResetPassword} className="space-y-4" noValidate>
           <div className="space-y-1 text-left">
             <span className="text-[11px] text-text-muted">Account:</span>
             <span className="text-xs font-medium text-text-primary block font-mono">{email}</span>
@@ -199,7 +199,6 @@ function ForgotPasswordForm() {
                 id="new-password"
                 label=""
                 autoComplete="new-password"
-                required
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
@@ -207,7 +206,6 @@ function ForgotPasswordForm() {
                 }}
                 placeholder="Min. 10 characters"
                 disabled={isSubmitting}
-                error={passwordError || undefined}
               />
             </FormField>
           </div>
@@ -258,13 +256,12 @@ function ForgotPasswordForm() {
         <AuthAlert type="info" message={infoMessage} className="mb-4" />
       )}
 
-      <form onSubmit={handleRequestCode} className="space-y-4">
-        <FormField id="reset-email" label="Work Email" error={emailError} required>
+      <form onSubmit={handleRequestCode} className="space-y-4" noValidate>
+        <FormField id="reset-email" label="Email" error={emailError} required>
           <input
             id="reset-email"
             type="email"
             autoComplete="email"
-            required
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -272,7 +269,7 @@ function ForgotPasswordForm() {
             }}
             placeholder="you@company.com"
             disabled={isSubmitting}
-            className="w-full bg-canvas-subtle border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 text-xs font-sans transition-colors"
+            className="w-full bg-canvas-subtle border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 text-xs font-sans transition-colors aria-[invalid=true]:border-signal-failed"
           />
         </FormField>
 

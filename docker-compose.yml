@@ -126,6 +126,9 @@ services:
       AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET:-}
       AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
       AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+      # Explicit per-provider switches: placeholder credentials alone never light up a button.
+      LEADLOOM_OAUTH_GITHUB_ENABLED: ${LEADLOOM_OAUTH_GITHUB_ENABLED:-false}
+      LEADLOOM_OAUTH_GOOGLE_ENABLED: ${LEADLOOM_OAUTH_GOOGLE_ENABLED:-false}
       LEADLOOM_PASSWORD_AUTH_ENABLED: ${LEADLOOM_PASSWORD_AUTH_ENABLED:-false}
     depends_on: [api]
     networks: [egress]

@@ -5,4 +5,5 @@ export * from './resend-countdown';
 export * from './auth-alert';
 export * from './oauth-buttons';
 export * from './auth-flow-client';
-export * from './use-auth-methods';
+export * from './safe-callback';
+export type { AuthMethods } from './auth-methods';

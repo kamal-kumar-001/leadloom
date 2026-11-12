@@ -106,13 +106,12 @@ function VerifyEmailForm() {
         <AuthAlert type="info" message={infoMessage} className="mb-4" />
       )}
 
-      <form onSubmit={handleVerify} className="space-y-5">
+      <form onSubmit={handleVerify} className="space-y-5" noValidate>
         <FormField id="verify-email" label="Account Email" error={emailError} required>
           <input
             id="verify-email"
             type="email"
             autoComplete="email"
-            required
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -120,7 +119,7 @@ function VerifyEmailForm() {
             }}
             placeholder="you@company.com"
             disabled={isSubmitting}
-            className="w-full bg-canvas-subtle border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 text-xs font-sans transition-colors"
+            className="w-full bg-canvas-subtle border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 text-xs font-sans transition-colors aria-[invalid=true]:border-signal-failed"
           />
         </FormField>
 

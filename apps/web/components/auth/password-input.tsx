@@ -31,9 +31,10 @@ export function PasswordInput({
           {...props}
           id={id}
           type={show ? 'text' : 'password'}
+          aria-invalid={props['aria-invalid'] ?? (error ? true : undefined)}
           className={`w-full bg-canvas-subtle border ${
             error ? 'border-signal-failed' : 'border-border-subtle'
-          } text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 pr-10 text-xs font-sans transition-colors ${className}`}
+          } text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none rounded-md px-3 py-2.5 pr-10 text-xs font-sans transition-colors aria-[invalid=true]:border-signal-failed ${className}`}
         />
         <button
           type="button"

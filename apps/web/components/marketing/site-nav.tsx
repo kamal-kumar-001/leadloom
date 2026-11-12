@@ -181,13 +181,13 @@ export function SiteNav() {
             >
               Sign in
             </Link>
-            <a
-              href="#get-started"
+            <Link
+              href="/signup"
               className="button-sm flex items-center gap-1.5 rounded-full bg-brand-loom px-4 py-2 text-text-onAccent transition-all duration-300 motion-base hover:bg-brand-loomHover active:scale-[0.98]"
             >
               Get started
               <ArrowRight className="h-4 w-4" />
-            </a>
+            </Link>
           </div>
 
           {/* Mobile toggle: two lines transform between states (no icon swap) */}
@@ -251,15 +251,15 @@ export function SiteNav() {
                   {link.label}
                 </a>
               ))}
-              <a
-                href="#get-started"
+              <Link
+                href="/signup"
                 onClick={() => setMobileOpen(false)}
                 className="menu-link button-md mt-4 flex w-fit items-center gap-2 rounded-full bg-brand-loom px-6 py-3 text-text-onAccent active:scale-[0.98]"
                 style={{ animationDelay: '240ms' }}
               >
                 Get started
                 <ArrowRight className="h-5 w-5" />
-              </a>
+              </Link>
               <p className="menu-link caption-2 mt-6 text-text-muted" style={{ animationDelay: '300ms' }}>
                 Integrations, use cases and feature statuses are listed further down this page.
               </p>
