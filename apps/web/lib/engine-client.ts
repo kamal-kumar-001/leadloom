@@ -586,7 +586,7 @@ export interface ConnectorStatusItem {
   id: string;
   name: string;
   state: 'login_verify_only' | 'not_built' | 'partner_limited' | 'unverified';
-  sendingEnabled: false;
+  sendingEnabled: boolean;
   enabled: boolean;
   note: string;
   reference?: string;
@@ -631,7 +631,7 @@ export interface ApprovalQueueStats {
 export interface ApprovalQueueResponse {
   items: OutboundApprovalRow[];
   stats: ApprovalQueueStats;
-  sendingEnabled: false;
+  sendingEnabled: boolean;
 }
 
 export async function fetchApprovalQueue(campaignId?: string): Promise<{ data: ApprovalQueueResponse | null; error?: string }> {
@@ -683,8 +683,8 @@ export async function approveOutboundJobs(input: {
   jobIds?: string[];
   all?: boolean;
   campaignId?: string;
-}): Promise<{ approvedCount: number; staleCount: number; sendingEnabled: false; error?: string }> {
-  const result = await engineFetch<{ approvedCount: number; staleCount: number; sendingEnabled: false }>('/outbound/approvals/approve', {
+}): Promise<{ approvedCount: number; staleCount: number; sendingEnabled: boolean; error?: string }> {
+  const result = await engineFetch<{ approvedCount: number; staleCount: number; sendingEnabled: boolean }>('/outbound/approvals/approve', {
     method: 'POST',
     body: JSON.stringify(input),
   });

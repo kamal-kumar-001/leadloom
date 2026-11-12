@@ -719,3 +719,7 @@
 ### [2026-11-12T10:22:00Z] Team A | apps/engine outbound worker mount | Non-Breaking
 - Send worker now mountable via LEADLOOM_WORKER_ENABLED (default off); send gate LEADLOOM_OUTBOUND_SENDING_ENABLED unchanged and separate. New: SnapshotMessageComposer (approved-snapshot-only content, tenant-scoped), MailboxTransportRouter (per-mailbox sealed creds at send time), strict SMTP send options (port allow-list, pinned IP, SNI, TLS1.2+, STARTTLS; plaintext/private-host dev hooks refused in production). /ready 503 until mounted; /health reports real gate state.
 - Verified: gated integration on real PG + fixture SMTP delivers the approved resolved message exactly once; engine suite 401 passed / 40 skipped (EXIT:0); gated full run 440 passed (EXIT:0). Live unchanged (94fa7ab, all flags off).
+
+### [2026-11-12T10:28:00Z] Team A | apps/web approval toast + engine-client types | Non-Breaking
+- Approve toast now derives from the route's real send-gate state (gate on: "sent only after the separate gated release"; off: "approved and held"); engine-client sendingEnabled types widened false -> boolean to match the routes. Browser-verified on the local stack.
+- Full send loop proven in the real local stack: connect (real sealed flow, no mail) -> enqueue -> browser approve -> release -> mounted worker -> fixture SMTP received the resolved snapshot from the mailbox identity; second recipient sent only after the per-mailbox cooldown elapsed (rotation honored); exactly-once, jobs accepted.

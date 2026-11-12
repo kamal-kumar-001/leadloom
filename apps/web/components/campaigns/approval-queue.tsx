@@ -144,7 +144,9 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
         await loadQueue();
         onStatusChange?.();
       } else {
-        notify.success('Message approved and held (sending stays disabled)');
+        notify.success(res.sendingEnabled
+          ? 'Message approved - it is sent only after the separate gated release'
+          : 'Message approved and held (sending stays disabled)');
         await loadQueue();
         onStatusChange?.();
       }
