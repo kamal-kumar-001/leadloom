@@ -33,8 +33,11 @@ export class WaterfallService {
   private domainCache: DomainCacheService;
   private estimator: PreFlightEstimatorService;
 
-  constructor(private readonly entitlements?: WaterfallEntitlementPort) {
-    this.domainCache = new DomainCacheService();
+  constructor(
+    private readonly entitlements?: WaterfallEntitlementPort,
+    domainCache?: DomainCacheService
+  ) {
+    this.domainCache = domainCache ?? new DomainCacheService();
     this.runner = new DAGRunnerService(this.domainCache);
     this.estimator = new PreFlightEstimatorService();
 

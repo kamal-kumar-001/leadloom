@@ -160,7 +160,7 @@ export class DAGRunnerService {
       }
 
       // 1. Check FinOps 30-Day Domain Cache
-      const cached = cacheScope ? this.domainCache.get<ProviderExecutionOutput>(node.provider, input.domain, cacheScope) : null;
+      const cached = cacheScope ? await this.domainCache.get<ProviderExecutionOutput>(node.provider, input.domain, cacheScope) : null;
       let output: ProviderExecutionOutput;
       let isCacheHit = false;
 
@@ -184,7 +184,7 @@ export class DAGRunnerService {
 
         // Store successful/deliverable payload in 30-day domain cache
         if (cacheScope && output.status === 'hit' && output.email) {
-          this.domainCache.set(
+          await this.domainCache.set(
             node.provider,
             input.domain,
             output,

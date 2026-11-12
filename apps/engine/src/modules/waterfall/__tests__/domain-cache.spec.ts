@@ -3,7 +3,7 @@ import { DomainCacheService } from '../domain-cache.service';
 import { DAGRunnerService } from '../dag-runner.service';
 import { MockProviderAdapter } from '../adapters/mock.adapter';
 
-describe('DomainCacheService — 30-Day Domain-Level FinOps Deduplication', () => {
+describe('DomainCacheService — 30-Day Domain-Level FinOps Deduplication (In-Memory Baseline)', () => {
   it('should normalize domains and compute deterministic SHA-256 hashes', () => {
     const cache = new DomainCacheService();
 
@@ -20,17 +20,19 @@ describe('DomainCacheService — 30-Day Domain-Level FinOps Deduplication', () =
     expect(hash1).toBe(hash2);
   });
 
-  it('should store and retrieve cached entry within 30 days and increment hit count', () => {
+  it('should store and retrieve cached entry within 30 days and increment hit count', async () => {
     const cache = new DomainCacheService();
+    expect(cache.isDbBacked()).toBe(false);
 
-    cache.set('apollo', 'stripe.com', { email: 'sales@stripe.com' }, 100);
+    await cache.set('apollo', 'stripe.com', { email: 'sales@stripe.com' }, 100);
 
-    expect(cache.has('apollo', 'stripe.com')).toBe(true);
+    expect(await cache.has('apollo', 'stripe.com')).toBe(true);
 
-    const hit1 = cache.get<{ email: string }>('apollo', 'https://www.stripe.com');
+    const hit1 = await cache.get<{ email: string }>('apollo', 'https://www.stripe.com');
     expect(hit1).not.toBeNull();
     expect(hit1?.responsePayload.email).toBe('sales@stripe.com');
     expect(hit1?.hitCount).toBe(2);
+    expect(await cache.size()).toBe(1);
   });
 
   it('should guarantee $0.00 external cost when DAGRunner hits cached domain', async () => {
@@ -62,12 +64,32 @@ describe('DomainCacheService — 30-Day Domain-Level FinOps Deduplication', () =
     expect(secondRun.trace[0].reason).toContain('FinOps 30-day domain cache hit');
   });
 
-  it('should expire entries when TTL is breached', () => {
+  it('should expire entries when TTL is breached', async () => {
     const cache = new DomainCacheService();
     // Set with 0ms TTL (immediate expiry)
-    cache.set('hunter', 'airbnb.com', { email: 'test@airbnb.com' }, 300, -1000);
+    await cache.set('hunter', 'airbnb.com', { email: 'test@airbnb.com' }, 300, -1000);
 
-    const entry = cache.get('hunter', 'airbnb.com');
+    const entry = await cache.get('hunter', 'airbnb.com');
     expect(entry).toBeNull();
+    expect(await cache.has('hunter', 'airbnb.com')).toBe(false);
+  });
+
+  it('should support delete, clear, and pruneExpired', async () => {
+    const cache = new DomainCacheService();
+    await cache.set('hunter', 'a.com', { email: 'a@a.com' }, 100);
+    await cache.set('apollo', 'b.com', { email: 'b@b.com' }, 200, -5000); // expired
+
+    expect(await cache.size()).toBe(2);
+
+    const pruned = await cache.pruneExpired();
+    expect(pruned).toBe(1);
+
+    const deleted = await cache.delete('hunter', 'a.com');
+    expect(deleted).toBe(true);
+    expect(await cache.has('hunter', 'a.com')).toBe(false);
+
+    await cache.set('hunter', 'c.com', { email: 'c@c.com' }, 100);
+    await cache.clear();
+    expect(await cache.size()).toBe(0);
   });
 });
