@@ -366,3 +366,94 @@
   margin-left: 0;
   margin-right: 0;
 }
+
+/* ---------- Floating-signals hero (Kamal 2026-11-12 20:46 direction) ---------- */
+.marketing-root .float-hero {
+  padding: 2rem 0.5rem 0;
+}
+.marketing-root .float-hero-glow {
+  position: absolute;
+  inset: -12% -8%;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side at 30% 25%, color-mix(in srgb, var(--accent-loom) 12%, transparent), transparent 70%),
+    radial-gradient(closest-side at 75% 80%, color-mix(in srgb, var(--accent-weave) 14%, transparent), transparent 70%);
+}
+.marketing-root .float-chip {
+  --rot: 0deg;
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-md);
+  transform: rotate(var(--rot));
+  animation: floatDrift 7s var(--ease-base) infinite;
+  transition: box-shadow 0.35s var(--ease-base);
+}
+.marketing-root .float-chip:hover {
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+.marketing-root .float-chip-1 { top: -1.4rem; left: 5%; --rot: -4deg; }
+.marketing-root .float-chip-2 { top: -1.4rem; right: 5%; --rot: 3deg; animation-delay: 1.2s; animation-duration: 8s; }
+.marketing-root .float-chip-3 { bottom: -2.8rem; left: 5%; --rot: 2deg; animation-delay: 2.1s; animation-duration: 7.5s; }
+.marketing-root .float-chip-4 { bottom: -2.8rem; right: 5%; --rot: -3deg; animation-delay: 0.6s; }
+.marketing-root .float-chip-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--accent-loom);
+  box-shadow: 0 0 12px 2px var(--accent-loom-glow);
+}
+.marketing-root .float-chip-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.marketing-root .float-chip-sub {
+  display: block;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+@keyframes floatDrift {
+  0%, 100% { transform: translateY(0) rotate(var(--rot)); }
+  50% { transform: translateY(-10px) rotate(var(--rot)); }
+}
+@media (max-width: 640px) {
+  .marketing-root .float-chip { padding: 0.45rem 0.65rem; }
+  .marketing-root .float-chip-title { font-size: 12px; }
+  .marketing-root .float-chip-sub { font-size: 11px; }
+  .marketing-root .float-chip-2,
+  .marketing-root .float-chip-3 { display: none; }
+  .marketing-root .float-chip-1 { top: -1.2rem; left: 2%; }
+  .marketing-root .float-chip-4 { bottom: -2.8rem; right: 2%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-root .float-chip { animation: none; }
+}
+
+/* Float-hero depth: chips drift BEHIND the glass slab (they show through its
+   translucency) so they never cover the queue copy. */
+.marketing-root .float-hero .slab-stage {
+  position: relative;
+  z-index: 3;
+}
+
+/* The amber Approve key is the brand object in BOTH themes: the light tokens
+   flip --accent-loom to purple, which broke the key gradient on /light. */
+.marketing-root .light-page .approve-key {
+  color: #3E1F47;
+  background: linear-gradient(180deg, #f7e9b8 0%, #F3E3A0 55%, #d9c172 100%);
+  border: 1px solid color-mix(in srgb, #F3E3A0 65%, #8a7433);
+}

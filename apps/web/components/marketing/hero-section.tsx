@@ -3,12 +3,12 @@
 import React from 'react';
 import { Reveal } from './reveal';
 import { EmailCta } from './email-cta';
-import { ApprovalScene } from './3d/approval-scene';
+import { FloatHero } from './float-hero';
 
 /**
  * Landing hero - Approval Key direction (selected by Kamal, 2026-11-12).
- * Editorial serif headline over a dimensional scene: deep-glass approval slab
- * with a physical amber key before a luminous globe of buying signals. The
+ * Editorial serif headline beside the floating hero: the approval queue
+ * slab with its amber key, surrounded by floating buying-signal cards. The
  * subhead keeps the honest live/coming-soon breakdown. On mobile the key
  * visual sits inside the opening flow, between the headline and the CTA.
  * All motion honors reduced-motion; without WebGL a static card renders.
@@ -34,7 +34,10 @@ export function HeroSection() {
         </div>
 
         <Reveal delay={200} className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <ApprovalScene />
+          <FloatHero />
+          <p className="caption-2 mt-24 text-center text-text-muted">
+            Illustrative preview of the approval queue.
+          </p>
         </Reveal>
 
         <div className="lg:col-start-1 lg:row-start-2">
