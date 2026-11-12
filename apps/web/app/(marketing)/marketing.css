@@ -326,3 +326,43 @@
     transform: none;
   }
 }
+
+/* ---------- Light portfolio variant (/light, Kamal 2026-11-12 19:07) ---------- */
+/* Same sections as the dark Approval Key landing, re-themed through the
+   existing light tokens. The dark cinematic hero loop is framed as a
+   contained product media card so it reads as a screenshot tile on the
+   light canvas rather than a full-bleed black block. */
+
+.marketing-root .light-page .hero-title {
+  background: linear-gradient(100deg, var(--accent-loom) 0%, color-mix(in srgb, var(--accent-loom) 55%, #7c5a8f) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.marketing-root .light-page .approval-video-wrap {
+  mask-image: none;
+  -webkit-mask-image: none;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border-muted);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 16px 40px -8px rgba(62, 31, 71, 0.18),
+    0 48px 96px -24px rgba(62, 31, 71, 0.16);
+}
+
+.marketing-root .light-page .slab-card {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08),
+    0 24px 64px -12px rgba(62, 31, 71, 0.22),
+    0 0 80px -32px rgba(62, 31, 71, 0.15);
+}
+
+/* Light variant: the dark hero's bleed margins made the masked video fade
+   over the text column; as a framed card it must stay inside its column. */
+.marketing-root .light-page .approval-scene-wrap {
+  margin-left: 0;
+  margin-right: 0;
+}

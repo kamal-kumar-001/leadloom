@@ -24,8 +24,8 @@ export function ApprovalScene() {
   }, []);
 
   return (
-    <div className="relative lg:-mx-16 xl:-mx-24">
-      <div className="relative [mask-image:radial-gradient(115%_100%_at_50%_45%,black_60%,transparent_100%)]">
+    <div className="approval-scene-wrap relative lg:-mx-16 xl:-mx-24">
+      <div className="approval-video-wrap relative [mask-image:radial-gradient(115%_100%_at_50%_45%,black_60%,transparent_100%)]">
         {reduced ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
