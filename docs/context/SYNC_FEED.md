@@ -723,3 +723,6 @@
 ### [2026-11-12T10:28:00Z] Team A | apps/web approval toast + engine-client types | Non-Breaking
 - Approve toast now derives from the route's real send-gate state (gate on: "sent only after the separate gated release"; off: "approved and held"); engine-client sendingEnabled types widened false -> boolean to match the routes. Browser-verified on the local stack.
 - Full send loop proven in the real local stack: connect (real sealed flow, no mail) -> enqueue -> browser approve -> release -> mounted worker -> fixture SMTP received the resolved snapshot from the mailbox identity; second recipient sent only after the per-mailbox cooldown elapsed (rotation honored); exactly-once, jobs accepted.
+
+### [2026-11-12T10:30:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G3 uncertainty note) | Non-Breaking
+- Recorded the retry/reconciliation policy: at-most-once per claim; 'uncertain' never blind-retried; crashed 'reserved' jobs need operator reconciliation (automated requeue-after-timeout is a future decision). Verified scope is fixture exactly-once in the healthy path, not a crash-proof guarantee. Local dev flags restored to OFF after fixture e2e.
