@@ -702,3 +702,7 @@
 ### [2026-11-12T06:45:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G4) | Non-Breaking
 - G4 website-research row re-verified against current code; no corrections. 12 ai-researcher specs + 7 workspace-read specs + 6 route specs passed.
 - Confirmed: API flag-gated (LEADLOOM_RESEARCH_API_ENABLED), fetch separately gated + private-host blocklist, save enforces write role and recomputes analysis server-side (client sends domain+pageText only), reads tenant-scoped (404 cross-workspace), honest fetch-disabled UI copy.
+
+### [2026-11-12T07:15:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G5) | Non-Breaking
+- G5 intent-fixture row re-verified against current code; no corrections. 4 intent-fixture specs passed (direct exit code 0).
+- Confirmed: analyze session-gated, save write-role-gated, pasted JSON only (no fetch/egress path exists), engine-computed normalization, Source='fixture_hiring_board_sample' + per-row caveat, 'fixture only' badge on the UI panel.
