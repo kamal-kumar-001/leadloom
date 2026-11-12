@@ -85,6 +85,40 @@ export class CampaignRecipientsRepository {
     };
   }
 
+  /** Pool members for a campaign: mailbox id + email, tenant-scoped; [] for another workspace's campaign. */
+  async listMailboxPool(workspaceId: string, campaignId: string): Promise<{ id: string; email: string }[]> {
+    const rows = await this.database.query<Record<string, unknown>>(
+      `SELECT m.id, m.email FROM campaign_mailboxes cm JOIN mailboxes m ON m.id = cm.mailbox_id AND m.workspace_id = cm.workspace_id
+       WHERE cm.workspace_id=$1::uuid AND cm.campaign_id=$2::uuid ORDER BY m.email ASC`,
+      [workspaceId, campaignId],
+    );
+    return rows.map((r) => ({ id: String(r.id), email: String(r.email) }));
+  }
+
+  /**
+   * Replaces a campaign's sender pool. Every id must belong to this workspace; returns null
+   * when the campaign or any mailbox is foreign (route maps to 404, no existence leak).
+   * Held approvals go stale on pool change by design: the approval snapshot covers sender
+   * scope, so a changed pool forces a fresh review before sign-off.
+   */
+  async setMailboxPool(workspaceId: string, campaignId: string, mailboxIds: string[]): Promise<{ pool: { id: string; email: string }[] } | null> {
+    if (!await this.campaignExists(workspaceId, campaignId)) return null;
+    if (mailboxIds.length > 0) {
+      const m = await this.database.query<{ id: string }>(
+        'SELECT id FROM mailboxes WHERE workspace_id=$1::uuid AND id = ANY($2::uuid[])', [workspaceId, mailboxIds]);
+      if (m.length !== mailboxIds.length) return null;
+    }
+    await this.database.query(
+      'DELETE FROM campaign_mailboxes WHERE workspace_id=$1::uuid AND campaign_id=$2::uuid', [workspaceId, campaignId]);
+    for (const mailboxId of mailboxIds) {
+      await this.database.query(
+        'INSERT INTO campaign_mailboxes (campaign_id, mailbox_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid) ON CONFLICT DO NOTHING',
+        [campaignId, mailboxId, workspaceId],
+      );
+    }
+    return { pool: await this.listMailboxPool(workspaceId, campaignId) };
+  }
+
   /** True only when the campaign belongs to this workspace (route 404 check, no existence leak). */
   async campaignExists(workspaceId: string, campaignId: string): Promise<boolean> {
     const rows = await this.database.query<{ id: string }>(

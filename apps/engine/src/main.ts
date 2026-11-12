@@ -328,6 +328,27 @@ export async function createApplication(services?:RuntimeServices) {
    const res=await services.recipients.addRecipients(session.workspaceId,campaignId.data,parsed.data.recipients);
    return reply.code(200).send(res);
   });
+  // Sender pool management: the user-facing way to assign mailboxes to a campaign.
+  // Pool changes invalidate held approvals via the sender-scoped approval snapshot.
+  fastify.get('/campaigns/:campaignId/mailboxes',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,false);if(!session)return;
+   if(!services.recipients)return reply.code(503).send({error:'Campaign store unavailable'});
+   const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
+   if(!campaignId.success)return reply.code(400).send({error:'Invalid campaign id'});
+   if(!await services.recipients.campaignExists(session.workspaceId,campaignId.data))return reply.code(404).send({error:'Campaign not found'});
+   return reply.code(200).send({pool:await services.recipients.listMailboxPool(session.workspaceId,campaignId.data)});
+  });
+  fastify.put('/campaigns/:campaignId/mailboxes',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
+   if(!services.recipients)return reply.code(503).send({error:'Campaign store unavailable'});
+   const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
+   const parsed=z.object({mailboxIds:z.array(z.string().uuid()).max(50)}).strict().safeParse(request.body);
+   if(!campaignId.success||!parsed.success)return reply.code(400).send({error:'Invalid pool request'});
+   const result=await services.recipients.setMailboxPool(session.workspaceId,campaignId.data,[...new Set(parsed.data.mailboxIds)]);
+   if(!result)return reply.code(404).send({error:'Campaign or mailbox not found'});
+   return reply.code(200).send(result);
+  });
   fastify.get('/campaigns/:campaignId/recipients',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,false);if(!session)return;
    if(!services.recipients)return reply.code(503).send({error:'Recipient store unavailable'});

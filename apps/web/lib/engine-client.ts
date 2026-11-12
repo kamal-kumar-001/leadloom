@@ -855,3 +855,25 @@ export const importCampaignRecipients = (campaignId: string, recipients: Recipie
 
 export const fetchCampaignRecipients = (campaignId: string) =>
   engineFetch<{ recipients: CampaignRecipientRow[] }>(`/campaigns/${campaignId}/recipients`, { method: 'GET' });
+
+export interface CampaignPoolMailbox {
+  id: string;
+  email: string;
+}
+
+/** Current sender pool for one campaign. */
+export async function fetchCampaignMailboxPool(campaignId: string): Promise<{ data: CampaignPoolMailbox[] | null; error?: string }> {
+  const result = await engineFetch<{ pool: CampaignPoolMailbox[] }>(`/campaigns/${campaignId}/mailboxes`);
+  if (result.data && !result.isMock) return { data: result.data.pool };
+  return { data: null, error: result.error || 'Sender pool could not be loaded.' };
+}
+
+/** Replace the sender pool for one campaign. Empty pool blocks message approval server-side. */
+export async function setCampaignMailboxPool(campaignId: string, mailboxIds: string[]): Promise<{ data: CampaignPoolMailbox[] | null; error?: string }> {
+  const result = await engineFetch<{ pool: CampaignPoolMailbox[] }>(`/campaigns/${campaignId}/mailboxes`, {
+    method: 'PUT',
+    body: JSON.stringify({ mailboxIds }),
+  });
+  if (result.data && !result.isMock) return { data: result.data.pool };
+  return { data: null, error: result.error || 'Sender pool could not be saved.' };
+}

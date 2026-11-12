@@ -9,6 +9,7 @@ import { CampaignCreateForm } from '../../../components/campaigns/campaign-creat
 import { ReleaseCampaignButton } from '../../../components/campaigns/release-campaign-button';
 import { CampaignStepsList } from '../../../components/campaigns/campaign-steps-list';
 import { CampaignRecipients } from '../../../components/campaigns/campaign-recipients';
+import { CampaignSenders } from '../../../components/campaigns/campaign-senders';
 import { RepliesPanel } from '../../../components/campaigns/replies-panel';
 import {
   Send,
@@ -20,6 +21,7 @@ import {
   FolderOpen,
   Calendar,
   Globe,
+  AtSign,
 } from 'lucide-react';
 
 interface CampaignStep {
@@ -71,6 +73,7 @@ export default function CampaignsPage() {
   const [recipientsOpenFor, setRecipientsOpenFor] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [stepsOpenFor, setStepsOpenFor] = useState<string | null>(null);
+  const [sendersOpenFor, setSendersOpenFor] = useState<string | null>(null);
 
   const loadCampaigns = useCallback(async () => {
     setIsLoading(true);
@@ -242,6 +245,15 @@ export default function CampaignsPage() {
                     <FolderOpen className="w-3.5 h-3.5" />
                     <span>{recipientsOpenFor === camp.id ? 'Hide Recipients' : 'Recipients'}</span>
                   </Button>
+                  <Button
+                    size="sm"
+                    variant={sendersOpenFor === camp.id ? 'primary' : 'outline'}
+                    className="text-xs gap-1.5"
+                    onClick={() => setSendersOpenFor(sendersOpenFor === camp.id ? null : camp.id)}
+                  >
+                    <AtSign className="w-3.5 h-3.5" />
+                    <span>{sendersOpenFor === camp.id ? 'Hide Senders' : 'Senders'}</span>
+                  </Button>
                   <ReleaseCampaignButton campaignId={camp.id} campaignName={camp.name} onReleased={loadCampaigns} />
                 </div>
               </Card>
@@ -253,6 +265,13 @@ export default function CampaignsPage() {
           <CampaignRecipients
             campaignId={recipientsOpenFor}
             campaignName={campaigns.find((c) => c.id === recipientsOpenFor)!.name}
+          />
+        )}
+
+        {sendersOpenFor && campaigns.some((c) => c.id === sendersOpenFor) && (
+          <CampaignSenders
+            campaignId={sendersOpenFor}
+            campaignName={campaigns.find((c) => c.id === sendersOpenFor)!.name}
           />
         )}
 
