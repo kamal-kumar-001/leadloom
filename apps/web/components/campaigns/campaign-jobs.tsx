@@ -12,7 +12,11 @@ import { fetchCampaignJobs, type CampaignJobRow } from '../../lib/engine-client'
  * bodies and provider ids stay server-side.
  */
 function fmt(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : '-';
+  if (!iso) return '-';
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${date}, ${time}`;
 }
 
 export function CampaignJobs({ campaignId, campaignName }: { campaignId: string; campaignName: string }) {
