@@ -698,3 +698,7 @@
 ## 2026-11-12 06:15 IST — G3 stale-verification sweep: claims hold
 - Outbound specs re-run against current code: 147 unit/route passed; gated integration runs 154 passed + imap-read fixture 1 passed (LEADLOOM_INTEGRATION=1, real PG, local smtp/hoodiecrow fixtures). Confirmed by spec: resolved per-recipient snapshot signed (not template); strict resolution in enqueue/approve/invalidate; enqueue fails closed without recipient fields; recipient edits invalidate held approvals; empty sender pool fails closed (added 04:52); pin signed into hash + narrows claim() + fails closed when mailbox leaves pool; recipients tenant-scoped with upsert on (campaign,email).
 - Spot checks: worker NOT mounted in bootstrap (/ready answers 503 "workers not mounted"; sending default off via LEADLOOM_OUTBOUND_SENDING_ENABLED); paste-CSV import UI present (components/campaigns/campaign-recipients.tsx). No row corrections needed.
+
+### [2026-11-12T06:45:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G4) | Non-Breaking
+- G4 website-research row re-verified against current code; no corrections. 12 ai-researcher specs + 7 workspace-read specs + 6 route specs passed.
+- Confirmed: API flag-gated (LEADLOOM_RESEARCH_API_ENABLED), fetch separately gated + private-host blocklist, save enforces write role and recomputes analysis server-side (client sends domain+pageText only), reads tenant-scoped (404 cross-workspace), honest fetch-disabled UI copy.
