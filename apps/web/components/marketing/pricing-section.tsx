@@ -19,8 +19,12 @@ export function PricingSection() {
           </p>
         </Reveal>
         <Reveal>
-          <div className="mx-auto max-w-2xl mcard border border-border-muted bg-canvas-surface p-8">
-            <ul className="space-y-3">
+          <div className="mx-auto max-w-2xl mcard border border-border-muted bg-canvas-surface p-8 sm:p-10">
+            <p className="select-none text-center text-6xl font-semibold leading-none tracking-tight text-text-primary sm:text-7xl">
+              Free
+            </p>
+            <p className="caption-2 mt-2 text-center text-text-muted">while LeadLoom is in early access</p>
+            <ul className="mt-8 space-y-3">
               {[
                 'Early access is free while the product is being built',
                 'Provider key storage with AES-256-GCM encryption at rest',

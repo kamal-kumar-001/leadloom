@@ -101,14 +101,47 @@
   color: transparent;
 }
 
-/* Hero visual: floating product card (premium pass, Kamal 2026-11-12).
-   Layered soft shadow in the brand hue, no gradient surfaces. */
+/* Hero headline: large editorial serif (Approval Key artwork direction). */
+.marketing-root .hero-serif {
+  font-family: var(--font-fraunces), Georgia, 'Times New Roman', serif;
+  font-weight: 500;
+  font-size: clamp(2.4rem, 5.4vw, 4.1rem);
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+}
+
+/* Hero visual: floating product card on a perspective stage (premium pass).
+   The card rests in slight perspective and settles upright on hover; the
+   floor shadow grounds it. Reduced-motion: flat and still. */
+.marketing-root .hero-stage {
+  perspective: 1400px;
+}
 .marketing-root .hero-visual {
   border-radius: 1rem;
+  transform: perspective(1400px) rotateX(7deg);
+  transform-origin: 50% 100%;
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--accent-loom) 8%, transparent),
     0 12px 32px color-mix(in srgb, var(--accent-loom) 10%, transparent),
     0 48px 96px color-mix(in srgb, var(--accent-loom) 14%, transparent);
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.marketing-root .hero-visual:hover {
+  transform: perspective(1400px) rotateX(0deg);
+}
+.marketing-root .hero-floor {
+  height: 3rem;
+  margin: -1.25rem 8% 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-loom) 16%, transparent), transparent 75%);
+  filter: blur(6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-root .hero-visual,
+  .marketing-root .hero-visual:hover {
+    transform: none;
+    transition: none;
+  }
 }
 
 /* ---------- Motion (skill B7) ---------- */
@@ -207,5 +240,89 @@
   }
   .marketing-root .menu-line {
     transition: none;
+  }
+}
+
+/* ---------- Approval slab (Approval Key direction, 2026-11-12) ---------- */
+
+.marketing-root .slab-stage {
+  perspective: 1400px;
+}
+
+.marketing-root .slab-card {
+  position: relative;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    0 0 80px -20px rgba(243, 227, 160, 0.18);
+  will-change: transform;
+}
+
+/* The amber Approve key: physical, lit from within. Slow breathing glow and
+   an occasional light sweep; hover lifts it slightly. */
+.marketing-root .approve-key {
+  position: relative;
+  overflow: hidden;
+  color: #3E1F47;
+  background: linear-gradient(180deg, #f7e9b8 0%, var(--accent-loom) 55%, #d9c172 100%);
+  border: 1px solid color-mix(in srgb, var(--accent-loom) 65%, #8a7433);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 4px rgba(62, 31, 71, 0.25),
+    0 6px 18px -4px rgba(243, 227, 160, 0.55),
+    0 0 34px -6px rgba(243, 227, 160, 0.45);
+  transition: transform 0.35s var(--ease-base), box-shadow 0.35s var(--ease-base);
+  animation: approveKeyGlow 4.2s var(--ease-base) infinite;
+}
+.marketing-root .approve-key::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.5) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: approveKeySweep 4.2s var(--ease-base) infinite;
+}
+.marketing-root .approve-key:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -2px 4px rgba(62, 31, 71, 0.25),
+    0 10px 24px -4px rgba(243, 227, 160, 0.65),
+    0 0 48px -6px rgba(243, 227, 160, 0.55);
+}
+
+@keyframes approveKeyGlow {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -2px 4px rgba(62, 31, 71, 0.25),
+      0 6px 18px -4px rgba(243, 227, 160, 0.55),
+      0 0 34px -6px rgba(243, 227, 160, 0.45);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -2px 4px rgba(62, 31, 71, 0.25),
+      0 8px 22px -4px rgba(243, 227, 160, 0.7),
+      0 0 52px -4px rgba(243, 227, 160, 0.6);
+  }
+}
+@keyframes approveKeySweep {
+  0%, 55% { transform: translateX(-120%); }
+  85%, 100% { transform: translateX(120%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-root .approve-key,
+  .marketing-root .approve-key::after {
+    animation: none;
+    transition: none;
+  }
+  .marketing-root .approve-key:hover {
+    transform: none;
   }
 }

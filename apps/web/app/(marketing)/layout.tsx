@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Manrope } from 'next/font/google';
+import { Manrope, Fraunces } from 'next/font/google';
 import './marketing.css';
 
 /**
@@ -21,6 +21,14 @@ const manrope = Manrope({
   display: 'swap',
 });
 
+/* Editorial serif for the hero headline (Approval Key direction artwork). */
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-fraunces',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: 'LeadLoom — Find the accounts already showing buying signals',
   description:
@@ -39,10 +47,10 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <script
         dangerouslySetInnerHTML={{
           __html:
-            "(function(){try{var h=document.documentElement;h.setAttribute('data-theme-lock','marketing');h.setAttribute('data-theme','light');h.classList.remove('dark');}catch(e){}})();",
+            "(function(){try{var h=document.documentElement;h.setAttribute('data-theme-lock','marketing');h.setAttribute('data-theme','dark');h.classList.add('dark');}catch(e){}})();",
         }}
       />
-      <div className={`${manrope.variable} marketing-root`}>{children}</div>
+      <div className={`${manrope.variable} ${fraunces.variable} marketing-root`}>{children}</div>
     </>
   );
 }

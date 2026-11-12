@@ -3,58 +3,52 @@
 import React from 'react';
 import { Reveal } from './reveal';
 import { EmailCta } from './email-cta';
-import { InteractiveHeroGrid } from './interactive-hero-grid';
+import { ApprovalScene } from './3d/approval-scene';
 
 /**
- * Landing hero (skill A2 above the fold): badge, headline, subheadline with
- * the early access qualifier, the one primary CTA (email prefills /signup,
- * nothing else), a proof line, and the interactive simulated waterfall as
- * the hero visual. Headline states intended value; it does not promise live
- * discovery. Gradients come from shared theme tokens (LANDING.md).
- *
- * Premium pass (Kamal, 2026-11-12): more vertical air, a staggered entrance
- * on the base curve, and the demo presented as a floating product card with
- * a soft brand glow. Copy and honesty labels unchanged.
+ * Landing hero - Approval Key direction (selected by Kamal, 2026-11-12).
+ * Editorial serif headline over a dimensional scene: deep-glass approval slab
+ * with a physical amber key before a luminous globe of buying signals. The
+ * subhead keeps the honest live/coming-soon breakdown. On mobile the key
+ * visual sits inside the opening flow, between the headline and the CTA.
+ * All motion honors reduced-motion; without WebGL a static card renders.
  */
 export function HeroSection() {
   return (
-    <section className="relative overflow-hidden px-4 pb-24 pt-36 sm:px-6 sm:pb-32 sm:pt-48">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 -top-24 h-[640px]"
-        style={{
-          background:
-            'radial-gradient(620px 320px at 50% 0%, var(--accent-loom-glow), transparent 70%)',
-        }}
-      />
-      <div className="relative mx-auto max-w-6xl">
-        <div className="mx-auto mb-16 max-w-[880px] text-center sm:mb-20">
+    <section className="relative overflow-hidden px-4 pb-24 pt-36 sm:px-6 sm:pb-32 sm:pt-44">
+      <div className="relative mx-auto grid max-w-6xl gap-10 lg:grid-cols-2 lg:items-center lg:gap-12">
+        <div className="lg:col-start-1 lg:row-start-1">
           <Reveal>
-            <p className="caption-3 mb-8 inline-flex items-center gap-2 rounded-full border border-brand-loom/25 bg-canvas-surface px-4 py-1.5 text-brand-loom shadow-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-signal-verified" aria-hidden="true" />
-              Early access is open
+            <p className="caption-3 mb-8 inline-flex items-center gap-2 tracking-[0.18em] text-text-muted">
+              HUMAN APPROVAL, BY DESIGN.
             </p>
           </Reveal>
 
           <Reveal delay={90}>
-            <h1 className="heading-1 mx-auto max-w-[820px] text-text-primary">
-              Your outbound,
+            <h1 className="hero-serif max-w-[560px] text-text-primary">
+              Turn buying signals into
               <br />
-              <span className="hero-title">rebuilt around buying signals</span>
+              <span className="hero-title">outreach you stand behind.</span>
             </h1>
           </Reveal>
+        </div>
 
+        <Reveal delay={200} className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <ApprovalScene />
+        </Reveal>
+
+        <div className="lg:col-start-1 lg:row-start-2">
           <Reveal delay={180}>
-            <p className="body-2 mx-auto mt-7 max-w-[560px]">
-              LeadLoom is an early access workspace for founders and small GTM teams.
-              Live today: saved tables and encrypted storage for your own provider keys.
-              Shipping next: enrichment, approval review, the idea validator and sending,
+            <p className="body-2 mt-2 max-w-[520px]">
+              LeadLoom finds contacts from buying signals and prepares the outreach -
+              then waits for your approval. Live today: saved tables and encrypted storage for
+              your own provider keys. Shipping next: enrichment, the approval flow and sending,
               clearly labeled until they are live.
             </p>
           </Reveal>
 
           <Reveal delay={270}>
-            <div id="get-started" className="mt-10 flex flex-col items-center gap-3 scroll-mt-32">
+            <div id="get-started" className="mt-10 flex flex-col items-start gap-3 scroll-mt-32">
               <EmailCta id="hero" />
               <p className="caption-2 text-text-muted">
                 Free during early access. Your email only prefills sign up.
@@ -62,22 +56,6 @@ export function HeroSection() {
             </div>
           </Reveal>
         </div>
-
-        <Reveal delay={380}>
-          <div className="relative">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -inset-x-8 -top-10 bottom-0"
-              style={{
-                background:
-                  'radial-gradient(closest-side at 50% 20%, var(--accent-loom-glow), transparent 75%)',
-              }}
-            />
-            <div className="hero-visual relative">
-              <InteractiveHeroGrid />
-            </div>
-          </div>
-        </Reveal>
       </div>
     </section>
   );

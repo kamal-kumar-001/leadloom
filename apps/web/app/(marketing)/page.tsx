@@ -37,8 +37,8 @@ export default function MarketingPage() {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-theme-lock', 'marketing');
-    root.setAttribute('data-theme', 'light');
-    root.classList.remove('dark');
+    root.setAttribute('data-theme', 'dark');
+    root.classList.add('dark');
     return () => {
       let stored = 'dark';
       try {

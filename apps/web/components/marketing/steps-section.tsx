@@ -31,7 +31,7 @@ export function StepsSection() {
           {STEPS.map((step, i) => (
             <Reveal key={step.n} delay={i * 100}>
               <article className="h-full mcard border border-border-subtle bg-canvas p-6">
-                <p className="heading-3 text-brand-loom">{step.n}</p>
+                <p aria-hidden="true" className="select-none text-6xl font-semibold leading-none" style={{ color: 'color-mix(in srgb, var(--accent-loom) 18%, transparent)' }}>{step.n}</p>
                 <h3 className="title-1 mt-4">{step.title}</h3>
                 <p className="body-6 mt-2">{step.body}</p>
               </article>
