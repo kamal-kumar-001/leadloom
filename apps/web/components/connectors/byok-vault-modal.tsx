@@ -55,6 +55,10 @@ export function ByokVaultModal({
     e.preventDefault();
 
     const isOllama = connector.id === ('ollama' as unknown);
+    if (isOllama && (!ollamaUrl.trim() || !ollamaModel.trim())) {
+      notify.error('Enter both the Ollama base URL and the model tag.');
+      return;
+    }
     if (!isOllama && apiKey.trim().length < 8) {
       notify.error('API key must be at least 8 characters long');
       return;
@@ -129,7 +133,7 @@ export function ByokVaultModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5" noValidate>
           {/* AES-256 Security Architecture Pill */}
           <div className="bg-brand-loom/10 border border-brand-loom/25 rounded-xl p-3.5 flex items-start gap-3">
             <Lock className="w-4 h-4 text-brand-loom shrink-0 mt-0.5" />
@@ -157,7 +161,6 @@ export function ByokVaultModal({
                   onChange={(e) => setOllamaUrl(e.target.value)}
                   placeholder="http://127.0.0.1:11434"
                   className="w-full bg-canvas border border-border-subtle rounded-lg px-3.5 py-2.5 text-xs text-text-primary font-mono focus:outline-none focus:border-brand-loom"
-                  required
                 />
                 <span className="text-[11px] text-text-muted mt-1 block">
                   Must resolve strictly to localhost (127.0.0.1) for FinOps security fencing.
@@ -173,7 +176,6 @@ export function ByokVaultModal({
                   onChange={(e) => setOllamaModel(e.target.value)}
                   placeholder="llama3:8b"
                   className="w-full bg-canvas border border-border-subtle rounded-lg px-3.5 py-2.5 text-xs text-text-primary font-mono focus:outline-none focus:border-brand-loom"
-                  required
                 />
               </div>
             </div>
@@ -203,7 +205,6 @@ export function ByokVaultModal({
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="sk-••••••••••••••••••••••••"
                   className="w-full bg-canvas border border-border-subtle rounded-lg pl-3.5 pr-10 py-2.5 text-xs text-text-primary font-mono focus:outline-none focus:border-brand-loom"
-                  required
                   autoFocus
                 />
                 <button

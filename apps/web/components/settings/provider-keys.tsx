@@ -183,6 +183,7 @@ export function ProviderKeysCard() {
         <form
           onSubmit={handleAddKey}
           className="p-4 rounded-xl bg-canvas-elevated border border-border-subtle space-y-4"
+          noValidate
         >
           <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
             <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">

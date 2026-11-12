@@ -90,6 +90,10 @@ export default function ValidatorPage() {
 
   async function onGenerate(e: React.FormEvent) {
     e.preventDefault();
+    if (!hypothesis.trim()) {
+      setGenerateError('Describe the hypothesis before generating a page.');
+      return;
+    }
     setGenerating(true);
     setGenerateError(null);
     setCreatedUrl(null);
@@ -174,11 +178,10 @@ export default function ValidatorPage() {
           <h2 className="text-sm font-semibold text-text-primary">New experiment</h2>
           <Plus className="w-4 h-4 text-text-muted" />
         </div>
-        <form onSubmit={onGenerate} className="space-y-3">
+        <form onSubmit={onGenerate} className="space-y-3" noValidate>
           <div>
             <label className="block text-xs font-mono text-text-muted mb-1.5">HYPOTHESIS</label>
             <textarea
-              required
               rows={2}
               value={hypothesis}
               onChange={(e) => setHypothesis(e.target.value)}

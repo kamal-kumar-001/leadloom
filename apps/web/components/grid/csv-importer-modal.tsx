@@ -208,7 +208,7 @@ export function CsvImporterModal({
           )}
 
           {step === 'mapping' && (
-            <form onSubmit={handleProceedToPreview} className="space-y-4">
+            <form onSubmit={handleProceedToPreview} className="space-y-4" noValidate>
               <div className="flex items-center justify-between text-xs text-text-muted pb-2 border-b border-border-subtle">
                 <span>File: <strong className="text-text-primary font-mono">{file?.name}</strong></span>
                 <span>Detected: <strong className="text-text-primary font-mono">{rawRows.length} rows</strong></span>
@@ -223,7 +223,6 @@ export function CsvImporterModal({
                     value={companyCol}
                     onChange={(e) => setCompanyCol(e.target.value)}
                     className="w-full bg-canvas border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-loom"
-                    required
                   >
                     <option value="">-- Select Header --</option>
                     {headers.map((h) => (
@@ -242,7 +241,6 @@ export function CsvImporterModal({
                     value={domainCol}
                     onChange={(e) => setDomainCol(e.target.value)}
                     className="w-full bg-canvas border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-loom"
-                    required
                   >
                     <option value="">-- Select Header --</option>
                     {headers.map((h) => (

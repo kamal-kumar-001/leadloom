@@ -135,7 +135,7 @@ export function AddWaterfallModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5" noValidate>
           {/* Column Name */}
           <div>
             <label className="block text-xs font-medium text-text-primary mb-1">
@@ -147,7 +147,6 @@ export function AddWaterfallModal({
               onChange={(e) => setColumnName(e.target.value)}
               placeholder="e.g. Verified Work Email"
               className="w-full bg-canvas border border-border-subtle rounded-lg px-3.5 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-loom font-medium"
-              required
             />
           </div>
 

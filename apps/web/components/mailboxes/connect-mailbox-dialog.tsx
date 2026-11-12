@@ -321,7 +321,7 @@ export function ConnectMailboxDialog({
         )}
 
         {/* 3. Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="space-y-1.5">
             <label
               htmlFor="mailbox-email"
@@ -333,7 +333,6 @@ export function ConnectMailboxDialog({
               id="mailbox-email"
               ref={emailInputRef}
               type="email"
-              required
               autoComplete="off"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -354,7 +353,6 @@ export function ConnectMailboxDialog({
             <input
               id="mailbox-password"
               type="password"
-              required
               autoComplete="off"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -386,7 +384,6 @@ export function ConnectMailboxDialog({
                   <input
                     id="smtp-host"
                     type="text"
-                    required
                     value={smtpHost}
                     onChange={(e) => setSmtpHost(e.target.value)}
                     disabled={isLoading}
@@ -421,7 +418,6 @@ export function ConnectMailboxDialog({
                   <input
                     id="imap-host"
                     type="text"
-                    required
                     value={imapHost}
                     onChange={(e) => setImapHost(e.target.value)}
                     disabled={isLoading}

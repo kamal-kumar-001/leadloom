@@ -87,6 +87,14 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
 
   const handleFinalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!page) return;
+    const unanswered = page.surveyQuestions.some(
+      (q) => q.type !== 'choice' && !(responses[q.text] ?? '').trim()
+    );
+    if (unanswered) {
+      notify.error('Please answer every question before submitting.');
+      return;
+    }
     await submitLead(responses);
   };
 
@@ -130,7 +138,7 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
         </p>
 
         {!submitted ? (
-          <form onSubmit={handleInitialSubmit} className="mt-10 max-w-md mx-auto w-full flex flex-col sm:flex-row gap-3">
+          <form onSubmit={handleInitialSubmit} className="mt-10 max-w-md mx-auto w-full flex flex-col sm:flex-row gap-3" noValidate>
             <input
               type="email"
               value={email}
@@ -166,7 +174,7 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
               </div>
             </div>
 
-            <form onSubmit={handleFinalSubmit} className="space-y-4 font-mono text-xs">
+            <form onSubmit={handleFinalSubmit} className="space-y-4 font-mono text-xs" noValidate>
               {page.surveyQuestions.map((q, i) => (
                 <div key={q.id}>
                   <label className="block text-text-secondary mb-1.5 font-medium">
@@ -184,7 +192,6 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
                     </select>
                   ) : (
                     <textarea
-                      required
                       rows={3}
                       value={responses[q.text] ?? ''}
                       onChange={(e) => setResponses((r) => ({ ...r, [q.text]: e.target.value }))}

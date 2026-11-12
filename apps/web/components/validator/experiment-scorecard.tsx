@@ -40,6 +40,10 @@ export function ExperimentScorecardPanel({
 
   async function onSaveOutreach(e: React.FormEvent) {
     e.preventDefault();
+    if (!sent.trim() || !replies.trim() || !positive.trim()) {
+      setSaveError('All three counts are required.');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     const res = await recordOutreach(scorecard.experimentId, {
@@ -106,7 +110,7 @@ export function ExperimentScorecardPanel({
         ) : (
           <p className="text-xs text-text-muted">No outreach recorded yet. These numbers are entered by your team, not estimated.</p>
         )}
-        <form onSubmit={onSaveOutreach} className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-end">
+        <form onSubmit={onSaveOutreach} className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-end" noValidate>
           {[
             { label: 'Outreach sent', val: sent, set: setSent },
             { label: 'Replies', val: replies, set: setReplies },
@@ -117,7 +121,6 @@ export function ExperimentScorecardPanel({
               <input
                 type="number"
                 min={0}
-                required
                 value={f.val}
                 onChange={(e) => f.set(e.target.value)}
                 className="w-full rounded-md border border-border-muted bg-canvas-elevated px-3 py-1.5 text-sm text-text-primary focus:border-brand-loom focus:outline-none focus:ring-1 focus:ring-brand-loom"

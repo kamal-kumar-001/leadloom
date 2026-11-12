@@ -209,7 +209,7 @@ export function InviteMemberDialog({
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <FormField
               id="invite-email"
               label="Email Address"
