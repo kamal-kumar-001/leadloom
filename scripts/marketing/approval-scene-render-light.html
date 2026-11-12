@@ -120,7 +120,7 @@ const ensureGlobeObj = () => {
 window.__globe = globe; window.__scene = scene; window.__THREE = THREE;
 
 // our bloom on top of globe.gl's own EffectComposer (created by three-render-objects)
-globe.postProcessingComposer().addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.22, 0.4, 0.93));
+globe.postProcessingComposer().addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.1, 0.35, 0.95));
 
 // dim land so city lights carry the night-earth look; emissive keeps lights punchy
 const tuneGlobeMat = (tries) => {
@@ -156,7 +156,7 @@ function makeLabelSprite(title, sub) {
   ctx.fillStyle = '#141c2e';
   ctx.font = '600 42px system-ui, -apple-system, sans-serif';
   ctx.fillText(title, 256, 52);
-  ctx.fillStyle = '#4d5666';
+  ctx.fillStyle = '#333c4b';
   ctx.font = '400 31px system-ui, -apple-system, sans-serif';
   ctx.fillText(sub, 256, 98);
   const t = new THREE.CanvasTexture(cv);
@@ -190,7 +190,7 @@ function queueTexture() {
   const ctx = cv.getContext('2d');
   ctx.scale(2, 2);
   const sans = 'system-ui, -apple-system, sans-serif';
-  const fg = '#0f172a', dim = '#3d4657', faint = '#6d7688';
+  const fg = '#0f172a', dim = '#222b3a', faint = '#475163';
   const hairline = 'rgba(15,23,42,0.16)';
   ctx.save();
   ctx.strokeStyle = 'rgba(124,90,143,0.6)';
@@ -226,7 +226,7 @@ function queueTexture() {
   ctx.fillStyle = faint; ctx.font = `500 22px ${sans}`; ctx.fillText('Subject', 56, 258);
   ctx.fillStyle = fg; ctx.font = `600 27px ${sans}`; ctx.fillText('A faster way to scale your outbound', 162, 260);
   ctx.strokeStyle = hairline; ctx.beginPath(); ctx.moveTo(52, 286); ctx.lineTo(970, 286); ctx.stroke();
-  ctx.fillStyle = '#232c3d'; ctx.font = `400 24px ${sans}`;
+  ctx.fillStyle = '#141b28'; ctx.font = `400 24px ${sans}`;
   const lines = [
     'Hi Jordan,', 0,
     'Noticed Horizon is expanding into new markets. We help', 52,
