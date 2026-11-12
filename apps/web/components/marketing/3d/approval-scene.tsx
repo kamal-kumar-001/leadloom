@@ -14,6 +14,14 @@ import React, { useEffect, useState } from 'react';
  */
 export function ApprovalScene() {
   const [reduced, setReduced] = useState(false);
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+  // Light portfolio variant (/light): the scene has a light-themed render;
+  // pick it when this instance lives inside the light page wrapper.
+  const [light, setLight] = useState(false);
+
+  useEffect(() => {
+    setLight(!!wrapRef.current?.closest('.light-page'));
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -23,28 +31,31 @@ export function ApprovalScene() {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
+  const base = light ? 'approval-scene-light-v1' : 'approval-scene-v5';
+
   return (
-    <div className="approval-scene-wrap relative lg:-mx-16 xl:-mx-24">
+    <div ref={wrapRef} className="approval-scene-wrap relative lg:-mx-16 xl:-mx-24">
       <div className="approval-video-wrap relative [mask-image:radial-gradient(115%_100%_at_50%_45%,black_60%,transparent_100%)]">
         {reduced ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src="/hero/approval-scene-v5-poster.png"
+            src={`/hero/${base}-poster.png`}
             alt="Illustrative 3D preview of the approval queue: a glass slab with an approval request and a glowing amber Approve send key before a globe of signal points."
             className="h-auto w-full"
           />
         ) : (
           <video
+            key={base}
             autoPlay
             muted
             loop
             playsInline
             preload="auto"
-            poster="/hero/approval-scene-v5-poster.png"
+            poster={`/hero/${base}-poster.png`}
             aria-hidden="true"
             className="h-auto w-full"
           >
-            <source src="/hero/approval-scene-v5.mp4" type="video/mp4" />
+            <source src={`/hero/${base}.mp4`} type="video/mp4" />
           </video>
         )}
       </div>
