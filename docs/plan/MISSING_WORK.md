@@ -147,3 +147,5 @@ Mount only after D and E are stable; Playwright concurrency <= 2 with the docume
 ## 14. Parked by the planner, not decided by Kamal
 
 The planner suggested deferring multi-workspace membership, custom per-member permissions, CSV import, DNS inspector, waterfall UI builder modal, upgrade checkout/pricing UI and waitlist storage from the hero CTA. These are suggestions only; Kamal has not ruled on them. Anything requiring provider spend or a real send waits for his explicit go.
+
+- **E5 (web+engine, DONE 2026-11-12)**: per-campaign send-status visibility: campaign cards now show real queued/awaiting-approval/sending/sent/uncertain/failed/reply counts aggregated from outbound_jobs and inbound_replies (see SYNC_FEED 2026-11-12T13:26Z). Remaining in this area: per-recipient job drill-down and delivery-event timeline.

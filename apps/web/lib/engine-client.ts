@@ -321,6 +321,16 @@ export interface WorkspaceCampaignStep {
   subject: string;
   bodyTemplate: string;
 }
+export interface CampaignSendStatus {
+  awaitingApproval: number;
+  queued: number;
+  sending: number;
+  sent: number;
+  uncertain: number;
+  failed: number;
+  replies: number;
+  lastActivityAt: string | null;
+}
 export interface WorkspaceCampaignRow {
   id: string;
   name: string;
@@ -330,6 +340,7 @@ export interface WorkspaceCampaignRow {
   scheduleTimezone: string;
   createdAt: string;
   updatedAt: string;
+  sendStatus?: CampaignSendStatus;
 }
 export interface CreateWorkspaceCampaignInput {
   name: string;

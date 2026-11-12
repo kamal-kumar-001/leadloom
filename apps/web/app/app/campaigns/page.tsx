@@ -227,6 +227,36 @@ export default function CampaignsPage() {
                       <span>Created: {new Date(camp.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
+                  {(() => {
+                    const s = camp.sendStatus;
+                    const total = s ? s.awaitingApproval + s.queued + s.sending + s.sent + s.uncertain + s.failed : 0;
+                    if (!s || (total === 0 && s.replies === 0)) {
+                      return <p className="mt-3 text-xs text-text-muted">No send activity yet</p>;
+                    }
+                    const chips: Array<{ label: string; value: number; className: string }> = [
+                      { label: 'Awaiting approval', value: s.awaitingApproval, className: 'text-signal-pending' },
+                      { label: 'Queued', value: s.queued, className: 'text-text-muted' },
+                      { label: 'Sending', value: s.sending, className: 'text-brand-matrix' },
+                      { label: 'Sent', value: s.sent, className: 'text-signal-verified' },
+                      { label: 'Uncertain', value: s.uncertain, className: 'text-signal-pending' },
+                      { label: 'Failed', value: s.failed, className: 'text-signal-failed' },
+                      { label: 'Replies', value: s.replies, className: 'text-brand-matrix' },
+                    ].filter((c) => c.value > 0);
+                    return (
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono" aria-label="Send status">
+                        {chips.map((c) => (
+                          <span key={c.label} className={c.className}>
+                            {c.label}: {c.value.toLocaleString()}
+                          </span>
+                        ))}
+                        {s.lastActivityAt && (
+                          <span className="text-text-muted">
+                            Last activity: {new Date(s.lastActivityAt).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-end gap-1.5 flex-wrap">
                   <Button

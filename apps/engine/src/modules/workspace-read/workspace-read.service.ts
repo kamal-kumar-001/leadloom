@@ -11,6 +11,8 @@ export interface WorkspaceReadDb {
   cell: { findMany(a: any): Promise<any[]> };
   mailbox: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   campaign: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
+  outboundJob: { groupBy(a: any): Promise<any[]> };
+  inboundReply: { groupBy(a: any): Promise<any[]> };
   suppressionList: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   validationExperiment: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   byokCredential: { count(a: any): Promise<number> };
@@ -86,12 +88,65 @@ export class WorkspaceReadService {
     });
   }
 
-  listCampaigns(workspaceId: string) {
-    return this.db.campaign.findMany({
-      where: { workspaceId },
-      select: { id: true, name: true, status: true, steps: true, dailyLimitTotal: true, scheduleTimezone: true, createdAt: true, updatedAt: true },
-      orderBy: { createdAt: 'desc' },
-      take: LIMIT,
+  /**
+   * Campaigns with real per-campaign send status, aggregated from the outbound
+   * job table and the G10 reply store. Counts only: no recipient addresses,
+   * message ids or step bodies. A campaign with no jobs reports zeroes.
+   */
+  async listCampaigns(workspaceId: string) {
+    const [campaigns, jobGroups, replyGroups] = await Promise.all([
+      this.db.campaign.findMany({
+        where: { workspaceId },
+        select: { id: true, name: true, status: true, steps: true, dailyLimitTotal: true, scheduleTimezone: true, createdAt: true, updatedAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: LIMIT,
+      }),
+      this.db.outboundJob.groupBy({
+        by: ['campaignId', 'status'],
+        where: { workspaceId },
+        _count: { _all: true },
+        _max: { updatedAt: true },
+      }),
+      this.db.inboundReply.groupBy({
+        by: ['campaignId'],
+        where: { workspaceId },
+        _count: { _all: true },
+        _max: { receivedAt: true },
+      }),
+    ]);
+    // Job lifecycle vocabulary (atomic-dispatch.repository.ts):
+    // pending_approval -> approved/pending -> reserved -> accepted | uncertain; cancelled/rejected end states.
+    const byStatus: Record<string, 'awaitingApproval' | 'queued' | 'sending' | 'sent' | 'uncertain' | 'failed'> = {
+      pending_approval: 'awaitingApproval',
+      pending: 'queued',
+      approved: 'queued',
+      reserved: 'sending',
+      accepted: 'sent',
+      uncertain: 'uncertain',
+      cancelled: 'failed',
+      rejected: 'failed',
+    };
+    const stats = new Map<string, { awaitingApproval: number; queued: number; sending: number; sent: number; uncertain: number; failed: number; replies: number; lastActivityAt: Date | null }>();
+    for (const g of jobGroups as any[]) {
+      const bucket = byStatus[g.status];
+      if (!bucket) continue;
+      const s = stats.get(g.campaignId) ?? { awaitingApproval: 0, queued: 0, sending: 0, sent: 0, uncertain: 0, failed: 0, replies: 0, lastActivityAt: null };
+      s[bucket] += g._count._all;
+      const at = g._max?.updatedAt ? new Date(g._max.updatedAt) : null;
+      if (at && (!s.lastActivityAt || at > s.lastActivityAt)) s.lastActivityAt = at;
+      stats.set(g.campaignId, s);
+    }
+    for (const g of replyGroups as any[]) {
+      if (!g.campaignId) continue;
+      const s = stats.get(g.campaignId) ?? { awaitingApproval: 0, queued: 0, sending: 0, sent: 0, uncertain: 0, failed: 0, replies: 0, lastActivityAt: null };
+      s.replies += g._count._all;
+      const at = g._max?.receivedAt ? new Date(g._max.receivedAt) : null;
+      if (at && (!s.lastActivityAt || at > s.lastActivityAt)) s.lastActivityAt = at;
+      stats.set(g.campaignId, s);
+    }
+    return campaigns.map((c: any) => {
+      const s = stats.get(c.id) ?? { awaitingApproval: 0, queued: 0, sending: 0, sent: 0, uncertain: 0, failed: 0, replies: 0, lastActivityAt: null };
+      return { ...c, sendStatus: { ...s, lastActivityAt: s.lastActivityAt ? s.lastActivityAt.toISOString() : null } };
     });
   }
 

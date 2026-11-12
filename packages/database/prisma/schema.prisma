@@ -449,3 +449,26 @@ model PublicRateLimitBucket {
   @@index([windowStart])
   @@map("public_rate_limit_buckets")
 }
+
+// G10 replies, written by the outbound repository via raw SQL. This model is
+// read-only here (workspace-scoped status reporting); it intentionally carries
+// no relations so reads never traverse into jobs or mailboxes.
+model InboundReply {
+  id             String   @id @db.Uuid
+  workspaceId    String   @map("workspace_id") @db.Uuid
+  outboundJobId  String?  @map("outbound_job_id") @db.Uuid
+  campaignId     String?  @map("campaign_id") @db.Uuid
+  mailboxId      String?  @map("mailbox_id") @db.Uuid
+  messageId      String   @map("message_id")
+  fromEmail      String   @map("from_email")
+  subject        String?
+  classification String
+  confidence     Float    @default(0)
+  attribution    String
+  receivedAt     DateTime @map("received_at") @db.Timestamptz
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([workspaceId, messageId])
+  @@index([workspaceId, campaignId])
+  @@map("inbound_replies")
+}

@@ -7,7 +7,8 @@ function fakeDb() {
     count: async (a: any) => { calls.push([name, 'count', a]); return 3; },
     findMany: async (a: any) => { calls.push([name, 'findMany', a]); return []; },
   });
-  return { calls, db: { table: { ...rec('table'), findFirst: async (a: any) => { calls.push(['table', 'findFirst', a]); return null; } }, column: rec('column'), row: rec('row'), cell: rec('cell'), mailbox: rec('mailbox'), campaign: rec('campaign'), suppressionList: rec('sup'), validationExperiment: rec('exp'), byokCredential: rec('key') } };
+  const grp = (name: string) => ({ groupBy: async (a: any) => { calls.push([name, 'groupBy', a]); return []; } });
+  return { calls, db: { table: { ...rec('table'), findFirst: async (a: any) => { calls.push(['table', 'findFirst', a]); return null; } }, column: rec('column'), row: rec('row'), cell: rec('cell'), mailbox: rec('mailbox'), campaign: rec('campaign'), suppressionList: rec('sup'), validationExperiment: rec('exp'), byokCredential: rec('key'), outboundJob: grp('job'), inboundReply: grp('reply') } };
 }
 
 describe('WorkspaceReadService', () => {
@@ -15,7 +16,7 @@ describe('WorkspaceReadService', () => {
     const { calls, db } = fakeDb();
     const svc = new WorkspaceReadService(db as any);
     await svc.summary('ws-1'); await svc.listTables('ws-1'); await svc.listMailboxes('ws-1'); await svc.listCampaigns('ws-1');
-    expect(calls.length).toBe(9);
+    expect(calls.length).toBe(11);
     for (const c of calls) expect(c[2].where).toEqual({ workspaceId: 'ws-1' });
   });
   it('never selects mailbox token or key columns', async () => {
@@ -23,6 +24,23 @@ describe('WorkspaceReadService', () => {
     await new WorkspaceReadService(db as any).listMailboxes('ws-1');
     const sel = Object.keys(calls[0][2].select).join(',');
     expect(sel).not.toMatch(/token|dek|iv|authtag|smtp|imap/i);
+  });
+  it('campaigns carry real per-campaign send-status buckets and reply counts', async () => {
+    const db: any = {
+      campaign: { findMany: async () => [{ id: 'c1', name: 'A', status: 'active', steps: [], dailyLimitTotal: 50, scheduleTimezone: 'UTC', createdAt: new Date(), updatedAt: new Date() }, { id: 'c2', name: 'B', status: 'draft', steps: [], dailyLimitTotal: 10, scheduleTimezone: 'UTC', createdAt: new Date(), updatedAt: new Date() }] },
+      outboundJob: { groupBy: async () => [
+        { campaignId: 'c1', status: 'pending_approval', _count: { _all: 2 }, _max: { updatedAt: new Date('2026-11-01') } },
+        { campaignId: 'c1', status: 'approved', _count: { _all: 1 }, _max: { updatedAt: new Date('2026-11-02') } },
+        { campaignId: 'c1', status: 'accepted', _count: { _all: 5 }, _max: { updatedAt: new Date('2026-11-03') } },
+        { campaignId: 'c1', status: 'uncertain', _count: { _all: 1 }, _max: { updatedAt: new Date('2026-11-04') } },
+        { campaignId: 'c1', status: 'cancelled', _count: { _all: 3 }, _max: { updatedAt: new Date('2026-11-05') } },
+      ] },
+      inboundReply: { groupBy: async () => [{ campaignId: 'c1', _count: { _all: 4 }, _max: { receivedAt: new Date('2026-11-06') } }] },
+    };
+    const out = await new WorkspaceReadService(db).listCampaigns('w');
+    expect(out[0].sendStatus).toEqual({ awaitingApproval: 2, queued: 1, sending: 0, sent: 5, uncertain: 1, failed: 3, replies: 4, lastActivityAt: new Date('2026-11-06').toISOString() });
+    expect(out[1].sendStatus).toEqual({ awaitingApproval: 0, queued: 0, sending: 0, sent: 0, uncertain: 0, failed: 0, replies: 0, lastActivityAt: null });
+    expect(JSON.stringify(out)).not.toMatch(/from_email|message_id|recipient/i);
   });
   it('summary returns only counts', async () => {
     const { db } = fakeDb();
