@@ -134,6 +134,7 @@ Mount only after D and E are stable; Playwright concurrency <= 2 with the docume
 - **J2**: captcha decision for public auth endpoints (currently none).
 - **J3**: resolve the 14 skipped engine tests or document why each is skipped.
 - **J4**: isolated PG16 suite + migration fixture check in a CI-like script (PHASES.md Phase 5).
+- **J4a (verified 2026-11-12)**: migration path re-verified before any release claim: `prisma migrate deploy` on an EMPTY database fails by known design (20261110_inbound_sync sorts before 20261110_init_v2); `scripts/bootstrap-fresh.sh` is the supported fresh-install path and applied all 22 migrations cleanly on a throwaway DB, including inbound_replies (13 columns, matches the read-only InboundReply model). Separately, the long-lived LOCAL dev DB has drift (20261124_campaign_recipients recorded as failed because the table already exists there); harmless for dev, but release must use bootstrap-fresh/migrate-deploy on a clean target, never a repaired dev DB. No host migration history was edited.
 - **J5**: full Stage 4 landing build: mega menus per `LANDING.md`, `REFERENCE_MAP.md` from public sources only ("reference product", never named), comparison claims only with sourced facts.
 
 ---
