@@ -165,7 +165,7 @@ export async function createApplication(services?:RuntimeServices) {
    if(services.waterfallConnectors) {
     fastify.get('/waterfall/connectors',async(request:any,reply:any)=>{
      const session=await authorize(request,reply);if(!session)return;
-     return {connectors:await services.waterfallConnectors!.list(session.workspaceId),sendingEnabled:false};
+     return {connectors:await services.waterfallConnectors!.list(session.workspaceId),sendingEnabled:services.outboundSendingEnabled===true};
     });
    }
    fastify.get('/workspace/suppressions',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listSuppressions(s.workspaceId);});
@@ -331,7 +331,7 @@ export async function createApplication(services?:RuntimeServices) {
    if(!parsed.success)return reply.code(400).send({error:'Invalid job request'});
    try {
     const id=await services.outbound.enqueue({...parsed.data,workspaceId:session.workspaceId,scheduledAt:new Date(parsed.data.scheduledAt)});
-    return reply.code(202).send({id,status:'pending_approval',sendingEnabled:false});
+    return reply.code(202).send({id,status:'pending_approval',sendingEnabled:services.outboundSendingEnabled===true});
    } catch (err) {
     // Resolution failures are actionable by the caller (fix the template or recipient); other errors stay generic.
     const msg=err instanceof Error ? err.message : '';
@@ -349,21 +349,21 @@ export async function createApplication(services?:RuntimeServices) {
     services.outbound.listPendingApprovals(session.workspaceId,campaignId),
     services.outbound.getApprovalStats(session.workspaceId),
    ]);
-   return {items,stats,sendingEnabled:false};
+   return {items,stats,sendingEnabled:services.outboundSendingEnabled===true};
   });
   fastify.get('/outbound/replies',async(request:any,reply:any)=>{
    const session=await authorize(request,reply);if(!session)return;
    const cId=request.query?.campaignId?z.string().uuid().safeParse(request.query.campaignId):null;
    const campaignId=cId?.success?cId.data:undefined;
    const items=await services.outbound.listInboundReplies(session.workspaceId,campaignId);
-   return {items,sendingEnabled:false};
+   return {items,sendingEnabled:services.outboundSendingEnabled===true};
   });
   fastify.post('/outbound/approvals/approve',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    const b=z.object({jobIds:z.array(z.string().uuid()).optional(),all:z.boolean().optional(),campaignId:z.string().uuid().optional()}).strict().safeParse(request.body);
    if(!b.success)return reply.code(400).send({error:'Invalid approval request'});
    const result=await services.outbound.approve(session.workspaceId,b.data);
-   return {...result,sendingEnabled:false};
+   return {...result,sendingEnabled:services.outboundSendingEnabled===true};
   });
   fastify.post('/outbound/approvals/reject',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
@@ -375,7 +375,7 @@ export async function createApplication(services?:RuntimeServices) {
    const session=await authorize(request,reply,true);if(!session)return;
    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid job ID'});
    const result=await services.outbound.approve(session.workspaceId,{jobIds:[id.data]});
-   return {...result,sendingEnabled:false};
+   return {...result,sendingEnabled:services.outboundSendingEnabled===true};
   });
   // Per-job sender pin: narrow a held message to one mailbox from the campaign's pool (or clear back to rotation).
   // Recomputes the approval snapshot/hash so the reviewer deliberately approves the pinned sender context.
@@ -385,7 +385,7 @@ export async function createApplication(services?:RuntimeServices) {
    const b=z.object({mailboxId:z.string().uuid().nullable()}).strict().safeParse(request.body);
    if(!b.success)return reply.code(400).send({error:'Invalid sender request'});
    const r=await services.outbound.setSenderMailbox(session.workspaceId,id.data,b.data.mailboxId);
-   return r.ok?{updated:true,sendingEnabled:false}:reply.code(400).send({error:r.error});
+   return r.ok?{updated:true,sendingEnabled:services.outboundSendingEnabled===true}:reply.code(400).send({error:r.error});
   });
   fastify.post('/outbound/approvals/:id/reject',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
