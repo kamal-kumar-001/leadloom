@@ -44,7 +44,7 @@ export class SmtpTransport implements OutboundTransport {
 
   async send(reservation: SendReservation): Promise<{ providerMessageId: string }> {
     if (reservation.mailboxId.length === 0) throw new Error('Reservation missing mailbox scope');
-    const message = await this.options.composer.resolve(reservation.messageRef);
+    const message = await this.options.composer.resolve(reservation.messageRef, { workspaceId: reservation.workspaceId });
     const headers: Record<string, string> = { ...(this.options.unsubscribe
       ? buildListUnsubscribeHeaders({
           baseUrl: this.options.unsubscribe.baseUrl,

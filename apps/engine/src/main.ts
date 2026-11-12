@@ -59,6 +59,10 @@ export interface RuntimeServices {
  /** Optional: email+password accounts with verified email (default off; main gates it behind LEADLOOM_PASSWORD_AUTH_ENABLED). */
  passwordAccounts?: PasswordAccountService;
  unsubscribeKey?: Buffer;
+ /** Optional: mounted send worker (default off; LEADLOOM_WORKER_ENABLED). The app starts it after init and stops it on close. Sending itself stays separately gated on the repository's sendingEnabled flag. */
+ outboundWorker?: { start(): void; stop(): void };
+ /** Honest report of the send gate actually applied to the outbound repository (LEADLOOM_OUTBOUND_SENDING_ENABLED). */
+ outboundSendingEnabled?: boolean;
  /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
  reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listTableRows'|'listMailboxes'|'listCampaigns'|'listSuppressions'|'listExperiments'>;
  /** Optional: admin-only workspace invitations (default off; LEADLOOM_TEAM_INVITES_ENABLED). Sends no mail. */
@@ -715,9 +719,17 @@ export async function createApplication(services?:RuntimeServices) {
  // report per-route mount state so health checks show exactly what exists.
  // Every mounted mutation route still requires a session + write role, and
  // sessions can only be minted when the login issuer itself is mounted.
- fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:false,routes:{provisioning:services?.provisioning&&services.nextAuthBridgeKey?'mounted:bridge-token-required':'unmounted',entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted',research:services?.websiteSignals?(services.websiteFetcher?'mounted:session-required:fetch-enabled':'mounted:session-required:pasted-text-only'):'unmounted'}}));
- fastify.get('/ready',async(_request:any,reply:any)=>reply.code(503).send({status:'not-ready',reason:'Database/auth/provider workers are not mounted'}));
+ fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:services?.outboundSendingEnabled===true,worker:services?.outboundWorker?'mounted':'unmounted',routes:{provisioning:services?.provisioning&&services.nextAuthBridgeKey?'mounted:bridge-token-required':'unmounted',entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted',research:services?.websiteSignals?(services.websiteFetcher?'mounted:session-required:fetch-enabled':'mounted:session-required:pasted-text-only'):'unmounted'}}));
+ // Readiness is honest about the worker: 503 until the send worker is actually mounted
+ // (LEADLOOM_WORKER_ENABLED), 200 once it is. The send gate is reported separately and
+ // stays off unless LEADLOOM_OUTBOUND_SENDING_ENABLED was set at boot.
+ fastify.get('/ready',async(_request:any,reply:any)=>{
+  if(services?.outboundWorker)return {status:'ready',workers:'mounted',sendingEnabled:services.outboundSendingEnabled===true};
+  return reply.code(503).send({status:'not-ready',reason:'Send worker is not mounted (LEADLOOM_WORKER_ENABLED unset)',workers:'not-mounted'});
+ });
  await app.init();
+ services?.outboundWorker?.start();
+ fastify.addHook('onClose',async()=>{services?.outboundWorker?.stop();});
  return app;
 }
 
@@ -725,14 +737,18 @@ if(require.main===module) {
  (async()=>{
   let services:RuntimeServices|undefined;
   let prisma:PrismaClient|undefined,vault:VaultService|undefined;
+  let outboundRepo:AtomicDispatchRepository|undefined;
+  let unsubscribeKey:Buffer|undefined;
   if(process.env.DATABASE_URL || process.env.LEADLOOM_MASTER_KEY || process.env.LEADLOOM_SESSION_KEY) {
    if(!process.env.DATABASE_URL || !process.env.LEADLOOM_MASTER_KEY || !process.env.LEADLOOM_SESSION_KEY) throw new Error('Incomplete runtime configuration');
    const key=Buffer.from(process.env.LEADLOOM_SESSION_KEY,'base64');
    if(key.length<32)throw new Error('Invalid session signing key');
    prisma=new PrismaClient();await prisma.$connect();vault=VaultService.fromEnv();
-   const unsubscribeKey=process.env.LEADLOOM_UNSUBSCRIBE_KEY?Buffer.from(process.env.LEADLOOM_UNSUBSCRIBE_KEY,'base64'):undefined;
+   unsubscribeKey=process.env.LEADLOOM_UNSUBSCRIBE_KEY?Buffer.from(process.env.LEADLOOM_UNSUBSCRIBE_KEY,'base64'):undefined;
    if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
-   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma),undefined,{sendingEnabled:process.env.LEADLOOM_OUTBOUND_SENDING_ENABLED==='true'}),recipients:new CampaignRecipientsRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),...(unsubscribeKey?{unsubscribeKey}:{})};
+   const sendingEnabled=process.env.LEADLOOM_OUTBOUND_SENDING_ENABLED==='true';
+   outboundRepo=new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma),undefined,{sendingEnabled});
+   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:outboundRepo,recipients:new CampaignRecipientsRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),outboundSendingEnabled:sendingEnabled,...(unsubscribeKey?{unsubscribeKey}:{})};
    services.accessGuard=new PrismaAccessGuard(prisma);
    services.reads=new WorkspaceReadService(prisma as any);
    if(process.env.LEADLOOM_ENTITLEMENTS_ENFORCED==='true') {
@@ -832,6 +848,28 @@ if(require.main===module) {
     const pubPg=new PgSharedLimiter((text,params)=>db.$queryRawUnsafe(text,...params) as Promise<Array<Record<string,unknown>>>,600_000);
     services.publicRateLimit=(key,max)=>pubPg.take(key,max);
    }
+  }
+  // G3 worker mount (default off; LEADLOOM_WORKER_ENABLED). The loop only ticks
+  // dispatch; jobs become send-reservable solely through the gated release step
+  // (LEADLOOM_OUTBOUND_SENDING_ENABLED), so mounting with sending off just idles.
+  // Mailbox credentials are loaded tenant-scoped at send time from the sealed
+  // mailbox-connect store; the strict SMTP policy mirrors mailbox connect
+  // (dev-only private hosts share LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS).
+  if(process.env.LEADLOOM_WORKER_ENABLED==='true') {
+   const {OutboundWorker}=await import('./modules/outbound/worker.js');
+   const {DispatchService}=await import('./modules/outbound/dispatch.service.js');
+   const {SnapshotMessageComposer}=await import('./modules/outbound/transport/snapshot-composer.js');
+   const {MailboxTransportRouter}=await import('./modules/outbound/transport/mailbox-transport-router.js');
+   const {PrismaMailboxConnectStore}=await import('./modules/mailbox-connect/prisma-mailbox-connect-store.js');
+   const dispatchDb=new PrismaDispatchDatabase(prisma!);
+   const router=new MailboxTransportRouter({
+    endpoints:new PrismaMailboxConnectStore(prisma!,vault!),
+    composer:new SnapshotMessageComposer(dispatchDb),
+    unsubscribe:unsubscribeKey?{baseUrl:process.env.APP_BASE_URL??'http://localhost:3000',signingKey:unsubscribeKey}:null,
+    hooks:{allowPrivateHosts:process.env.NODE_ENV!=='production'&&process.env.LEADLOOM_MAILBOX_ALLOW_PRIVATE_HOSTS==='true'},
+   });
+   const intervalMs=Math.max(5_000,Number(process.env.LEADLOOM_WORKER_INTERVAL_MS??60_000)||60_000);
+   services!.outboundWorker=new OutboundWorker(new DispatchService(outboundRepo!,router),outboundRepo!,{intervalMs,onTickError:()=>undefined});
   }
   const app=await createApplication(services);
   const close=async()=>{await app.close();await prisma?.$disconnect();vault?.destroy();};

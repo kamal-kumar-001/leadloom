@@ -1,4 +1,5 @@
-import { resolvePublic } from '../../mailbox-connect/host-policy';
+import { isIP } from 'node:net';
+import { resolvePublic, SMTP_PORTS } from '../../mailbox-connect/host-policy';
 import type { SmtpClient, SmtpSendInput } from './smtp-transport';
 import type { ImapClient, RawInboundMessage } from './imap-poller';
 
@@ -179,4 +180,80 @@ export async function createImapflowClient(config: MailboxClientConfig, limits: 
     },
   };
   return self;
+}
+
+/** TEST/DEV hooks for the strict SMTP send path: resolver, trusted CA, socket remap, and the dev-only private-host switch (never set by production main; mirrors the mailbox-connect verifier). */
+export interface SmtpSendHooks {
+  resolve?: (host: string) => Promise<string[]>;
+  ca?: string;
+  connectTo?: (pinnedIp: string) => string | { host: string; port?: number };
+  /** Dev-only: skip the public-address policy and TLS requirement so a local fixture server can be used. Refused in production. */
+  allowPrivateHosts?: boolean;
+}
+
+/**
+ * Options for the worker's SMTP SEND connection. The same policy as the
+ * mailbox-connect verifier and the IMAP read path: port allow-list, resolve
+ * once, refuse non-public addresses, dial the pinned address, verify the
+ * certificate against the original host name (SNI), TLS 1.2+, and mandatory
+ * STARTTLS away from 465 - a password is never sent in clear. The
+ * plaintextForTestsOnly fixture hook and the dev-only allowPrivateHosts hook
+ * are both refused in production, and plaintext is additionally refused away
+ * from loopback.
+ */
+export async function buildSendOptions(config: MailboxClientConfig, hooks: SmtpSendHooks = {}): Promise<Record<string, unknown>> {
+  const base = buildSmtpOptions(config) as Record<string, unknown>; // validates auth material
+  const timeouts = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000 };
+  if (config.plaintextForTestsOnly) {
+    const loopback = ['127.0.0.1', '::1', 'localhost'].includes(config.host);
+    if (process.env.NODE_ENV === 'production' || !loopback) throw new Error('plaintext SMTP is refused outside local test fixtures');
+    return { ...base, secure: false, ignoreTLS: true, ...timeouts };
+  }
+  if (hooks.allowPrivateHosts) {
+    if (process.env.NODE_ENV === 'production') throw new Error('allowPrivateHosts is refused in production');
+    const direct = isIP(config.host) ? config.host : config.host === 'localhost' ? '127.0.0.1' : config.host;
+    return {
+      ...base,
+      host: direct,
+      secure: config.port === 465,
+      requireTLS: false,
+      tls: { servername: config.host, rejectUnauthorized: true, minVersion: 'TLSv1.2', ...(hooks.ca ? { ca: hooks.ca } : {}) },
+      ...timeouts,
+    };
+  }
+  if (!SMTP_PORTS.includes(config.port)) throw new Error('SMTP port not allowed');
+  const ip = await resolvePublic(config.host, hooks.resolve);
+  if (!ip) throw new Error('SMTP host is not a resolvable public host');
+  const dial = hooks.connectTo ? hooks.connectTo(ip) : ip;
+  const dialHost = typeof dial === 'string' ? dial : dial.host;
+  const dialPort = typeof dial === 'string' ? config.port : (dial.port ?? config.port);
+  return {
+    ...base,
+    host: dialHost,
+    port: dialPort,
+    secure: config.port === 465,
+    requireTLS: config.port !== 465,
+    name: 'leadloom',
+    tls: { servername: config.host, rejectUnauthorized: true, minVersion: 'TLSv1.2', ...(hooks.ca ? { ca: hooks.ca } : {}) },
+    ...timeouts,
+  };
+}
+
+/** Real SMTP send client with the strict policy applied. Call only inside the authorized worker. */
+export async function createStrictSmtpClient(config: MailboxClientConfig, hooks: SmtpSendHooks = {}): Promise<SmtpClient> {
+  const nodemailer = await import('nodemailer');
+  const transporter = nodemailer.createTransport((await buildSendOptions(config, hooks)) as any);
+  return {
+    async sendMail(input: SmtpSendInput): Promise<{ messageId: string }> {
+      const result = await transporter.sendMail({
+        from: input.from,
+        to: input.to,
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+        headers: input.headers,
+      });
+      return { messageId: result.messageId ?? '' };
+    },
+  };
 }

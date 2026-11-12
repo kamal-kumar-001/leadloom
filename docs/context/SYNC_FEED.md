@@ -715,3 +715,7 @@
 - Final sweep rows re-verified; no corrections. 80 waterfall connector specs + 1 registry spec passed.
 - G6: LEADLOOM_CONNECTORS_LIVE_ENABLED default-off; test-connection returns DISABLED without it. G7/G8/G11: no LinkedIn-DM/X-DM/MCP modules exist - rows accurate. G12: entitlement gate still optional/deny-by-default, plan decisions Kamal's.
 - FULL GAP-DOC SWEEP COMPLETE: all rows G1-G13 re-verified against current code this week.
+
+### [2026-11-12T10:22:00Z] Team A | apps/engine outbound worker mount | Non-Breaking
+- Send worker now mountable via LEADLOOM_WORKER_ENABLED (default off); send gate LEADLOOM_OUTBOUND_SENDING_ENABLED unchanged and separate. New: SnapshotMessageComposer (approved-snapshot-only content, tenant-scoped), MailboxTransportRouter (per-mailbox sealed creds at send time), strict SMTP send options (port allow-list, pinned IP, SNI, TLS1.2+, STARTTLS; plaintext/private-host dev hooks refused in production). /ready 503 until mounted; /health reports real gate state.
+- Verified: gated integration on real PG + fixture SMTP delivers the approved resolved message exactly once; engine suite 401 passed / 40 skipped (EXIT:0); gated full run 440 passed (EXIT:0). Live unchanged (94fa7ab, all flags off).
