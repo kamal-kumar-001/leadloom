@@ -83,7 +83,7 @@
   transform: translateY(-2px);
   box-shadow:
     0 2px 4px color-mix(in srgb, var(--accent-loom) 6%, transparent),
-    0 16px 40px color-mix(in srgb, var(--accent-loom) 8%, transparent);
+    0 16px 40px color-mix(in srgb, var(--accent-loom) 12%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
   .marketing-root .mcard,
@@ -121,7 +121,7 @@
   transform: perspective(1400px) rotateX(7deg);
   transform-origin: 50% 100%;
   box-shadow:
-    0 1px 2px color-mix(in srgb, var(--accent-loom) 8%, transparent),
+    0 1px 2px color-mix(in srgb, var(--accent-loom) 12%, transparent),
     0 12px 32px color-mix(in srgb, var(--accent-loom) 10%, transparent),
     0 48px 96px color-mix(in srgb, var(--accent-loom) 14%, transparent);
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.7s cubic-bezier(0.22, 1, 0.36, 1);
@@ -468,4 +468,17 @@
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--accent-loom) 5%, transparent),
     0 8px 24px color-mix(in srgb, var(--accent-loom) 5%, transparent);
+}
+
+/* Subtle page gradient backdrop (Kamal, voice 2026-11-12 22:09: "a little
+   gradient effect in the background of the lead loom"). Painted as a
+   background-image layer on the page wrapper itself (above the flat canvas
+   color, below all content; a separate z-index:-1 element disappears behind
+   the opaque wrapper background). Fixed attachment keeps the wash
+   viewport-anchored. Deliberately low alpha. */
+.marketing-root .page-bg {
+  background-image:
+    radial-gradient(58% 44% at 50% 0%, color-mix(in srgb, var(--accent-loom) 12%, transparent), transparent 70%),
+    radial-gradient(40% 34% at 88% 12%, color-mix(in srgb, var(--accent-weave) 9%, transparent), transparent 70%);
+  background-attachment: fixed;
 }

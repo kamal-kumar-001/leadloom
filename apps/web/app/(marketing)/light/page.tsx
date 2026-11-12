@@ -53,7 +53,7 @@ export default function MarketingPage() {
 
   return (
     <SmoothScrollProvider>
-      <div className="light-page min-h-screen bg-canvas text-text-primary selection:bg-brand-loom/30">
+      <div className="light-page page-bg min-h-screen bg-canvas text-text-primary selection:bg-brand-loom/30">
         <a href="#main" className="skip-link">
           Skip to content
         </a>
