@@ -315,14 +315,46 @@ export interface WorkspaceMailboxRow {
   connectionCheckedAt?: string | null;
   connectionErrorCode?: string | null;
 }
+export interface WorkspaceCampaignStep {
+  stepNumber: number;
+  delayHours: number;
+  subject: string;
+  bodyTemplate: string;
+}
 export interface WorkspaceCampaignRow {
   id: string;
   name: string;
   status: string;
+  steps?: WorkspaceCampaignStep[];
   dailyLimitTotal: number;
   scheduleTimezone: string;
   createdAt: string;
   updatedAt: string;
+}
+export interface CreateWorkspaceCampaignInput {
+  name: string;
+  steps: WorkspaceCampaignStep[];
+  dailyLimitTotal: number;
+  scheduleTimezone: string;
+  tableId?: string;
+  mailboxPoolIds?: string[];
+}
+export async function createWorkspaceCampaign(input: CreateWorkspaceCampaignInput): Promise<{ data: WorkspaceCampaignRow | null; error?: string }> {
+  const result = await engineFetch<WorkspaceCampaignRow>('/workspace/campaigns', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (result.data && !result.isMock) return { data: result.data };
+  return { data: null, error: result.error || 'Campaign could not be created.' };
+}
+/** Gated release of held approved jobs for one campaign. sendingEnabled reflects the real server gate. */
+export async function releaseCampaign(campaignId: string): Promise<{ released: number; sendingEnabled: boolean; error?: string }> {
+  const result = await engineFetch<{ released: number; sendingEnabled: boolean }>('/outbound/release', {
+    method: 'POST',
+    body: JSON.stringify({ campaignId }),
+  });
+  if (result.data) return result.data;
+  return { released: 0, sendingEnabled: false, error: result.error || 'Release failed' };
 }
 
 async function workspaceRead<T>(path: string): Promise<{ data: T | null; error?: string }> {

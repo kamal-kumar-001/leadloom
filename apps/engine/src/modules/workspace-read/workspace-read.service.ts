@@ -89,7 +89,7 @@ export class WorkspaceReadService {
   listCampaigns(workspaceId: string) {
     return this.db.campaign.findMany({
       where: { workspaceId },
-      select: { id: true, name: true, status: true, dailyLimitTotal: true, scheduleTimezone: true, createdAt: true, updatedAt: true },
+      select: { id: true, name: true, status: true, steps: true, dailyLimitTotal: true, scheduleTimezone: true, createdAt: true, updatedAt: true },
       orderBy: { createdAt: 'desc' },
       take: LIMIT,
     });

@@ -5,6 +5,9 @@ import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
 import { fetchWorkspaceCampaigns, type WorkspaceCampaignRow } from '../../../lib/engine-client';
 import { notify } from '@/lib/notify';
 import { ApprovalQueue } from '../../../components/campaigns/approval-queue';
+import { CampaignCreateForm } from '../../../components/campaigns/campaign-create-form';
+import { ReleaseCampaignButton } from '../../../components/campaigns/release-campaign-button';
+import { CampaignStepsList } from '../../../components/campaigns/campaign-steps-list';
 import { CampaignRecipients } from '../../../components/campaigns/campaign-recipients';
 import { RepliesPanel } from '../../../components/campaigns/replies-panel';
 import {
@@ -66,6 +69,8 @@ export default function CampaignsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [recipientsOpenFor, setRecipientsOpenFor] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [stepsOpenFor, setStepsOpenFor] = useState<string | null>(null);
 
   const loadCampaigns = useCallback(async () => {
     setIsLoading(true);
@@ -125,14 +130,24 @@ export default function CampaignsPage() {
           <Button
             size="sm"
             variant="primary"
-            onClick={() => notify.info('Campaign builder opens once mailboxes and tables are connected')}
+            onClick={() => setCreateOpen((v) => !v)}
             className="text-xs gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>New Campaign</span>
+            <span>{createOpen ? 'Close Builder' : 'New Campaign'}</span>
           </Button>
         </div>
       </div>
+
+      {createOpen && (
+        <CampaignCreateForm
+          onCreated={() => {
+            setCreateOpen(false);
+            loadCampaigns();
+          }}
+          onCancel={() => setCreateOpen(false)}
+        />
+      )}
 
       {/* 1. G9: Approval-Before-Send Queue */}
       <ApprovalQueue onStatusChange={loadCampaigns} />
@@ -209,7 +224,15 @@ export default function CampaignsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-end">
+                <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-end gap-1.5 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant={stepsOpenFor === camp.id ? 'primary' : 'outline'}
+                    className="text-xs gap-1.5"
+                    onClick={() => setStepsOpenFor(stepsOpenFor === camp.id ? null : camp.id)}
+                  >
+                    <span>{stepsOpenFor === camp.id ? 'Hide Steps' : `Steps (${Array.isArray(camp.steps) ? camp.steps.length : 0})`}</span>
+                  </Button>
                   <Button
                     size="sm"
                     variant={recipientsOpenFor === camp.id ? 'primary' : 'outline'}
@@ -219,6 +242,7 @@ export default function CampaignsPage() {
                     <FolderOpen className="w-3.5 h-3.5" />
                     <span>{recipientsOpenFor === camp.id ? 'Hide Recipients' : 'Recipients'}</span>
                   </Button>
+                  <ReleaseCampaignButton campaignId={camp.id} campaignName={camp.name} onReleased={loadCampaigns} />
                 </div>
               </Card>
             ))}
@@ -230,6 +254,17 @@ export default function CampaignsPage() {
             campaignId={recipientsOpenFor}
             campaignName={campaigns.find((c) => c.id === recipientsOpenFor)!.name}
           />
+        )}
+
+        {stepsOpenFor && campaigns.some((c) => c.id === stepsOpenFor) && (
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold text-text-primary">
+              Steps in {campaigns.find((c) => c.id === stepsOpenFor)!.name}
+            </h3>
+            <CampaignStepsList
+              steps={campaigns.find((c) => c.id === stepsOpenFor)!.steps ?? []}
+            />
+          </div>
         )}
       </div>
 

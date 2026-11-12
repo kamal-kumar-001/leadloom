@@ -6,7 +6,7 @@ import { verifySession } from './modules/auth/session';
 import { PrismaAccessGuard } from './modules/auth/access-guard';
 import type { AccessGuard } from './modules/auth/access-guard';
 import { AccountSuspendedError, SignupLimitedError } from './modules/provisioning/provisioning.service';
-import { BYOKProviderEnum } from '@leadloom/contracts';
+import { BYOKProviderEnum, CreateWorkspaceCampaignSchema } from '@leadloom/contracts';
 import { SlidingWindowLimiter } from './modules/auth/rate-limiter';
 import type { ProvisioningService } from './modules/provisioning/provisioning.service';
 import type { EntitlementService } from './modules/entitlements/entitlements.service';
@@ -304,6 +304,19 @@ export async function createApplication(services?:RuntimeServices) {
   // Campaign recipients: the entry path into the recipient store that per-recipient resolution reads.
   const RecipientInput=z.object({email:z.string().email().max(320),firstName:z.string().max(120).nullish(),lastName:z.string().max(120).nullish(),companyName:z.string().max(200).nullish(),title:z.string().max(200).nullish(),customFields:z.record(z.string(),z.unknown()).optional()}).strict();
   const RecipientsBody=z.object({recipients:z.array(RecipientInput).min(1).max(500)}).strict();
+  // Campaign create (G-gap: campaign-create UI): tenant-scoped, role-checked, plan-gated.
+  // Table and mailbox pool references are verified inside this workspace; unknown ids 404
+  // without leaking existence. New campaigns start as 'draft' - nothing becomes sendable here.
+  fastify.post('/workspace/campaigns',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return;
+   if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
+   if(!services.recipients)return reply.code(503).send({error:'Campaign store unavailable'});
+   const parsed=CreateWorkspaceCampaignSchema.safeParse(request.body);
+   if(!parsed.success)return reply.code(400).send({error:'Invalid campaign request'});
+   const created=await services.recipients.createCampaign(session.workspaceId,parsed.data);
+   if(!created)return reply.code(404).send({error:'Table or mailbox not found'});
+   return reply.code(201).send(created);
+  });
   fastify.post('/campaigns/:campaignId/recipients',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;

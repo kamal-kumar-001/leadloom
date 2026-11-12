@@ -726,3 +726,6 @@
 
 ### [2026-11-12T10:30:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G3 uncertainty note) | Non-Breaking
 - Recorded the retry/reconciliation policy: at-most-once per claim; 'uncertain' never blind-retried; crashed 'reserved' jobs need operator reconciliation (automated requeue-after-timeout is a future decision). Verified scope is fixture exactly-once in the healthy path, not a crash-proof guarantee. Local dev flags restored to OFF after fixture e2e.
+
+### [2026-11-12T11:08:00Z] Team A | campaign create UI + release button (engine + web) | Non-Breaking
+- New POST /workspace/campaigns (contracts CreateWorkspaceCampaignSchema; role+plan gate; tenant-scoped table/pool verification, 404 without leak; creates draft only). listCampaigns now returns steps. Web: CampaignCreateForm + CampaignStepsEditor + CampaignStepsList (real steps; sample flow still labeled) + ReleaseCampaignButton with confirm and API-truth toasts. Spec: campaign-create.spec.ts (4 tests, auth/role/validation/tenant cases). Engine suite 405 passed; next build clean. Browser-verified on local stack with send gate OFF: create -> import -> enqueue -> approve -> release honestly blocked. Local dev DB fixture: campaign 'E2E Create Flow' (draft) + pool link to fixture mailbox.

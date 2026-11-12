@@ -25,6 +25,22 @@ export const CampaignStepSchema = z.object({
 });
 export type CampaignStep = z.infer<typeof CampaignStepSchema>;
 
+export const CreateWorkspaceCampaignStepSchema = CampaignStepSchema.extend({
+  subject: z.string().min(1).max(500),
+  bodyTemplate: z.string().min(1).max(20000),
+});
+
+/** Workspace UI campaign create: table and mailbox pool optional at creation; pool members must belong to the workspace. */
+export const CreateWorkspaceCampaignSchema = z.object({
+  name: z.string().min(1).max(255),
+  steps: z.array(CreateWorkspaceCampaignStepSchema).min(1).max(20),
+  dailyLimitTotal: z.number().int().min(1).max(10000).default(50),
+  scheduleTimezone: z.string().min(1).max(64).default('UTC'),
+  tableId: z.string().uuid().optional(),
+  mailboxPoolIds: z.array(z.string().uuid()).max(50).default([]),
+});
+export type CreateWorkspaceCampaign = z.infer<typeof CreateWorkspaceCampaignSchema>;
+
 export const CampaignStatusEnum = z.enum(['draft', 'active', 'paused', 'completed']);
 export type CampaignStatus = z.infer<typeof CampaignStatusEnum>;
 

@@ -43,6 +43,48 @@ export class CampaignRecipientsRepository {
     return { upserted };
   }
 
+  /**
+   * Creates a draft campaign owned by this workspace. Steps are stored as validated JSON
+   * (contract CreateWorkspaceCampaignSchema). Optional table and mailbox pool are verified
+   * tenant-scoped first; returns null when a referenced table/mailbox is not in this workspace
+   * (route maps to 404, no existence leak).
+   */
+  async createCampaign(
+    workspaceId: string,
+    input: { name: string; steps: unknown[]; dailyLimitTotal: number; scheduleTimezone: string; tableId?: string; mailboxPoolIds: string[] },
+  ): Promise<{ id: string; name: string; status: string; dailyLimitTotal: number; scheduleTimezone: string; steps: unknown } | null> {
+    if (input.tableId) {
+      const t = await this.database.query<{ id: string }>(
+        'SELECT id FROM tables WHERE workspace_id=$1::uuid AND id=$2::uuid', [workspaceId, input.tableId]);
+      if (t.length !== 1) return null;
+    }
+    if (input.mailboxPoolIds.length > 0) {
+      const m = await this.database.query<{ id: string }>(
+        'SELECT id FROM mailboxes WHERE workspace_id=$1::uuid AND id = ANY($2::uuid[])', [workspaceId, input.mailboxPoolIds]);
+      if (m.length !== input.mailboxPoolIds.length) return null;
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    const rows = await this.database.query<Record<string, unknown>>(
+      `INSERT INTO campaigns (id, workspace_id, table_id, name, status, steps, daily_limit_total, schedule_timezone, created_at, updated_at)
+       VALUES ($1::uuid,$2::uuid,$3::uuid,$4,'draft',$5::jsonb,$6,$7,$8,$8)
+       RETURNING id, name, status, steps, daily_limit_total, schedule_timezone`,
+      [id, workspaceId, input.tableId ?? null, input.name.trim(), JSON.stringify(input.steps), input.dailyLimitTotal, input.scheduleTimezone, now],
+    );
+    for (const mailboxId of input.mailboxPoolIds) {
+      await this.database.query(
+        'INSERT INTO campaign_mailboxes (campaign_id, mailbox_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid) ON CONFLICT DO NOTHING',
+        [id, mailboxId, workspaceId],
+      );
+    }
+    const r = rows[0];
+    return {
+      id: String(r.id), name: String(r.name), status: String(r.status),
+      steps: typeof r.steps === 'string' ? JSON.parse(r.steps) : r.steps,
+      dailyLimitTotal: Number(r.daily_limit_total), scheduleTimezone: String(r.schedule_timezone),
+    };
+  }
+
   /** True only when the campaign belongs to this workspace (route 404 check, no existence leak). */
   async campaignExists(workspaceId: string, campaignId: string): Promise<boolean> {
     const rows = await this.database.query<{ id: string }>(
