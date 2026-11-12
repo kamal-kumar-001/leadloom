@@ -706,3 +706,7 @@
 ### [2026-11-12T07:15:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G5) | Non-Breaking
 - G5 intent-fixture row re-verified against current code; no corrections. 4 intent-fixture specs passed (direct exit code 0).
 - Confirmed: analyze session-gated, save write-role-gated, pasted JSON only (no fetch/egress path exists), engine-computed normalization, Source='fixture_hiring_board_sample' + per-row caveat, 'fixture only' badge on the UI panel.
+
+### [2026-11-12T07:45:00Z] Team A | docs/plan/PUMPGTM_GAP.md (G10) | Non-Breaking
+- G10 reply-tracking row re-verified; no corrections. 15 poll-bridge/reply-attribution specs + 1 gated imap-read integration spec passed (real fixture IMAP).
+- Confirmed: poll gated on LEADLOOM_IMAP_POLL_ENABLED (poll-enablement.ts); recordInboundReply attributes via thread headers, dedupes on (workspace_id, message_id), cancels pending_approval/pending/approved jobs for the matched campaign+recipient; Replies UI shows classification + 'matched to message' attribution label.
