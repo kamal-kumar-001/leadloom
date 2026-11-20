@@ -1,0 +1,11 @@
+{
+  "person": {
+    "email": "jordan.blake@northstar.example",
+    "email_status": "verified",
+    "first_name": "Jordan",
+    "last_name": "Blake",
+    "title": "VP Engineering",
+    "linkedin_url": "https://www.linkedin.com/in/jordan-blake-example",
+    "organization": { "name": "Northstar Analytics" }
+  }
+}

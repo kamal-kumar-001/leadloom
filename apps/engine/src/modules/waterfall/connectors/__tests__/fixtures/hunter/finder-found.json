@@ -1,0 +1,13 @@
+{
+  "data": {
+    "first_name": "Jordan",
+    "last_name": "Blake",
+    "email": "jordan.blake@northstar.example",
+    "score": 97,
+    "domain": "northstar.example",
+    "accept_all": false,
+    "position": "VP Engineering",
+    "company": "Northstar Analytics",
+    "verification": { "status": "valid" }
+  }
+}

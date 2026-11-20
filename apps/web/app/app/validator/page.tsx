@@ -2,17 +2,19 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Badge, Button, Card, EmptyState } from '@leadloom/ui';
+import { Badge, Button, Card, EmptyState, GatedButton, type GateState } from '@leadloom/ui';
 import {
   fetchWorkspaceExperiments,
   fetchExperimentScorecard,
   fetchOwnerPage,
+  fetchEntitlementDecision,
   generateExperiment,
   setExperimentPublish,
   type ExperimentScorecard,
   type WorkspaceExperimentRow,
 } from '../../../lib/engine-client';
 import { ExperimentScorecardPanel } from '../../../components/validator/experiment-scorecard';
+import { gateFromDecision } from '../../../lib/gate';
 import { PagePreviewModal, type OwnerPagePreview } from '../../../components/validator/page-preview-modal';
 import {
   FlaskConical,
@@ -66,6 +68,10 @@ export default function ValidatorPage() {
   const [scorecard, setScorecard] = useState<ExperimentScorecard | null>(null);
   const [scorecardLoading, setScorecardLoading] = useState(false);
   const [preview, setPreview] = useState<OwnerPagePreview | null>(null);
+  // Plan gate for generation, from the engine's own decision route. When the
+  // engine has no entitlement service mounted, enforcement is off there too,
+  // so the button stays normal - a UI lock is never the boundary.
+  const [generateGate, setGenerateGate] = useState<GateState>({ kind: 'available' });
 
   const loadExperiments = useCallback(async () => {
     setIsLoading(true);
@@ -86,6 +92,10 @@ export default function ValidatorPage() {
 
   useEffect(() => {
     loadExperiments();
+    fetchEntitlementDecision('validator').then((res) => {
+      if (res.unconfigured) return; // enforcement off server-side too; normal button
+      setGenerateGate(gateFromDecision(res.data));
+    });
   }, [loadExperiments]);
 
   async function onGenerate(e: React.FormEvent) {
@@ -200,9 +210,15 @@ export default function ValidatorPage() {
                 className="w-full rounded-md border border-border-muted bg-canvas-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-loom focus:outline-none focus:ring-1 focus:ring-brand-loom"
               />
             </div>
-            <Button size="md" variant="primary" type="submit" disabled={generating || !hypothesis.trim()}>
-              {generating ? 'Generating...' : 'Generate smoke-test page'}
-            </Button>
+            {generateGate.kind === 'available' ? (
+              <Button size="md" variant="primary" type="submit" disabled={generating || !hypothesis.trim()}>
+                {generating ? 'Generating...' : 'Generate smoke-test page'}
+              </Button>
+            ) : (
+              <GatedButton size="md" variant="primary" type="submit" gate={generateGate}>
+                Generate smoke-test page
+              </GatedButton>
+            )}
           </div>
         </form>
         {generateError && <p className="text-sm text-signal-failed">{generateError}</p>}

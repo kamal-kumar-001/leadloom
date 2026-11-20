@@ -1,3 +1,4 @@
+import { buildConnectorCatalog, BYOKProviderEnum } from '@leadloom/contracts';
 import React from 'react';
 import { Database, FlaskConical, Key, ListChecks, Lock, Send, Table, CheckCircle } from 'lucide-react';
 import { Reveal } from './reveal';
@@ -15,11 +16,15 @@ import { StatusChip } from './status-chip';
  * capability beyond its status chip.
  */
 
+// The vault save path accepts BYOKProviderEnum providers (contracts); the public
+// key-storage count derives from that enum, never from a hand-typed number.
+const KEY_PROVIDER_COUNT = BYOKProviderEnum.options.length;
+
 const LIVE_SMALL = [
   {
     icon: Lock,
     title: 'Provider key vault',
-    body: 'Store keys for 10 data and AI providers, sealed with AES-256-GCM. Keys are never shown again after saving.',
+    body: `Store keys for ${KEY_PROVIDER_COUNT} data and AI providers, sealed with AES-256-GCM. Keys are never shown again after saving.`,
   },
   {
     icon: Database,

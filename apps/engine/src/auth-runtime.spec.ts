@@ -26,4 +26,21 @@ describe('Authenticated runtime route boundary',()=>{
    expect(outbound.enqueue.mock.calls[0][0].workspaceId).toBe(workspaceId);
   }finally{await app.close();}
  });
+
+ it('test-connection route: 401 unauthenticated, 503 fail-closed when live flag is off, never implies success',async()=>{
+  const credentials={save:vi.fn(),list:vi.fn(async()=>[]),delete:vi.fn(),findLatestByProvider:vi.fn(async()=>null),use:vi.fn(),markTestResult:vi.fn(async()=>{})};
+  const app=await createApplication({credentials,sessionKey:key});
+  try{
+   const server=app.getHttpAdapter().getInstance();
+   expect((await server.inject({method:'POST',url:'/vault/credentials/openai/test'})).statusCode).toBe(401);
+   expect((await server.inject({method:'POST',url:'/vault/credentials/not-a-provider/test',headers:{authorization:'Bearer '+token('admin')}})).statusCode).toBe(400);
+   // Non-admin writers are denied before any provider or flag logic (plan: session + admin).
+   const denied=await server.inject({method:'POST',url:'/vault/credentials/openai/test',headers:{authorization:'Bearer '+token('member')}});
+   expect(denied.statusCode).toBe(403);expect(credentials.markTestResult).not.toHaveBeenCalled();
+   // Live flag unset in this process: DISABLED, and crucially no test result is recorded.
+   const disabled=await server.inject({method:'POST',url:'/vault/credentials/openai/test',headers:{authorization:'Bearer '+token('admin')}});
+   expect(disabled.statusCode).toBe(503);expect(disabled.json().status).toBe('DISABLED');
+   expect(credentials.markTestResult).not.toHaveBeenCalled();
+  }finally{await app.close();}
+ });
 });

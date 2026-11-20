@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { engineBase } from '@/lib/engine-server';
+import { trustedClientIp, UNKNOWN_CLIENT_KEY } from '@/lib/client-ip';
 
 // In-memory sliding-window bucket for rate-limiting public waitlist submissions
 interface WindowEntry {
@@ -33,9 +34,9 @@ export async function POST(
 ) {
   const { slug } = await params;
 
-  // Extract client IP (handle proxies & dev loopback)
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : '127.0.0.1';
+  // Fail-closed: key the local limiter on a sanitizing-ingress IP only;
+  // raw client XFF is spoofable. Unknown clients share one honest bucket.
+  const ip = trustedClientIp(request.headers) ?? UNKNOWN_CLIENT_KEY;
 
   if (isRateLimited(ip)) {
     return NextResponse.json(
@@ -66,9 +67,8 @@ export async function POST(
     try {
       engineRes = await fetch(`${engineUrl}/validator/pages/${encodeURIComponent(slug)}/leads`, {
         method: 'POST',
-        // Forward the client IP so the engine's shared per-IP rate limit keys
-        // the real visitor, not this proxy's loopback address.
-        headers: { 'Content-Type': 'application/json', ...(forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {}) },
+        // Same fail-closed forwarding as the local limiter above.
+        headers: { 'Content-Type': 'application/json', ...(trustedClientIp(request.headers) ? { 'X-Forwarded-For': trustedClientIp(request.headers)! } : {}) },
         body: JSON.stringify({ email, name, company, surveyResponses: survey ?? {}, referrer }),
       });
     } catch {

@@ -3,7 +3,6 @@ import {
   SaveBYOKCredentialRequest,
   BYOKProvider,
   PreFlightEstimateResponse,
-  MOCK_PREFLIGHT_RESPONSE,
 } from '@leadloom/contracts';
 
 interface CachedToken {
@@ -115,6 +114,23 @@ export async function engineFetch<T>(
 /**
  * Verified WhoAmI check: queries GET /auth/me on engine to verify identity, workspace and role
  */
+/** Plan decision for one feature, from the engine's own entitlement route (GATING.md: the engine decides, the web only renders).
+ * unconfigured=true means the engine has no entitlement service mounted: enforcement is also off server-side, so the UI must NOT fake a lock. */
+export async function fetchEntitlementDecision(feature: string): Promise<{ data: import('@leadloom/contracts').EntitlementDecision | null; unconfigured?: boolean; error?: string }> {
+  try {
+    const res = await fetch(`/api/engine/entitlements/decision?feature=${encodeURIComponent(feature)}`, { cache: 'no-store' });
+    if (res.status === 404) return { data: null, unconfigured: true };
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      return { data: null, error: (j as { error?: string }).error || `Plan check failed (${res.status})` };
+    }
+    const j = (await res.json()) as { feature?: { decision?: import('@leadloom/contracts').EntitlementDecision } };
+    return { data: j.feature?.decision ?? null };
+  } catch {
+    return { data: null, error: 'Plan check could not be loaded.' };
+  }
+}
+
 export async function fetchAuthMe(): Promise<{ data: EngineAuthMe | null; error?: string; status?: number }> {
   const res = await engineFetch<EngineAuthMe>('/auth/me', { method: 'GET' });
   return { data: res.data, error: res.error, status: res.status };
@@ -249,33 +265,103 @@ export async function testConnectorPing(
   _config?: Record<string, unknown>
 ): Promise<{ success: boolean; latencyMs: number; message: string }> {
   const start = Date.now();
-  const result = await engineFetch<{ success: boolean; latencyMs?: number; message?: string }>(
-    `/connectors/${provider}/test`,
-    { method: 'POST' }
-  );
-
-  const latencyMs = result.data?.latencyMs || Math.max(Date.now() - start, 48);
-
-  if (result.data) {
+  // Engine mounts this at /vault/credentials/:provider/test (C3). Its honest
+  // failure states are 503 DISABLED (live flag off) and 403 FORBIDDEN with a
+  // status payload in the body, so engineFetch cannot be used here: it maps
+  // every 5xx to a generic "temporarily unavailable" and would swallow the
+  // engine's real reason. Parse the body on ANY status instead.
+  try {
+    const res = await fetch(`/api/engine/vault/credentials/${provider}/test`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const body = (await res.json().catch(() => null)) as {
+      status?: string;
+      latencyMs?: number | null;
+      message?: string;
+      error?: string;
+    } | null;
+    if (body && typeof body === 'object') {
+      // Never infer success: only an explicit SUCCESS status counts. A DISABLED
+      // or FORBIDDEN answer, or a missing status, renders as not verified.
+      return {
+        success: body.status === 'SUCCESS',
+        latencyMs: typeof body.latencyMs === 'number' ? body.latencyMs : Math.max(Date.now() - start, 0),
+        message: body.message || body.error || `No verification result returned (${provider})`,
+      };
+    }
+    return { success: false, latencyMs: 0, message: `Engine responded with status ${res.status}` };
+  } catch {
     return {
-      success: result.data.success ?? true,
-      latencyMs,
-      message: result.data.message || `Provider handshake verified (${provider})`,
+      success: false,
+      latencyMs: 0,
+      message: 'Engine service temporarily unavailable.',
     };
   }
-
-  // Fail closed: test connection requires live engine and permission
-  return {
-    success: false,
-    latencyMs: 0,
-    message: result.error || 'Test Connection is disabled (requires live engine and permission)',
-  };
 }
 
 export async function estimateWaterfallCost(
-  _selectedRowCount: number
-): Promise<PreFlightEstimateResponse> {
-  return MOCK_PREFLIGHT_RESPONSE;
+  columnId: string,
+  rowIds: string[]
+): Promise<{ data: PreFlightEstimateResponse | null; error?: string }> {
+  const result = await engineFetch<PreFlightEstimateResponse>('/waterfall/pre-flight', {
+    method: 'POST',
+    body: JSON.stringify({ columnId, rowIds }),
+  });
+  if (result.data) return { data: result.data };
+  return { data: null, error: result.error || 'Pre-flight estimate unavailable' };
+}
+
+export interface WaterfallDispatchOutcome {
+  queued: boolean;
+  jobId?: string;
+  totalQueued?: number;
+  estimatedCompletionAt?: string;
+  /** Honest reason when queued is false (e.g. durable persistence not implemented). */
+  message?: string;
+}
+
+/**
+ * D3: real dispatch against the engine. The engine answers 503
+ * {queued:false, message} while durable persistence is blocked; that body must
+ * survive intact, so engineFetch's generic 5xx mapping cannot be used here.
+ * Callers must never imply a job exists when queued is false.
+ */
+export async function dispatchWaterfall(
+  columnId: string,
+  rowIds: string[]
+): Promise<WaterfallDispatchOutcome> {
+  try {
+    const res = await fetch('/api/engine/waterfall/dispatch', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ columnId, rowIds }),
+    });
+    const body = (await res.json().catch(() => null)) as {
+      jobId?: string;
+      totalQueued?: number;
+      estimatedCompletionAt?: string;
+      queued?: boolean;
+      message?: string;
+      error?: string;
+    } | null;
+    if (res.ok && body?.jobId) {
+      return {
+        queued: true,
+        jobId: body.jobId,
+        totalQueued: body.totalQueued,
+        estimatedCompletionAt: body.estimatedCompletionAt,
+      };
+    }
+    return {
+      queued: false,
+      message: body?.message || body?.error || `Engine responded with status ${res.status}`,
+    };
+  } catch {
+    return { queued: false, message: 'Engine service temporarily unavailable.' };
+  }
 }
 
 /**
@@ -391,6 +477,26 @@ export interface CampaignJobRow {
 }
 export const fetchCampaignJobs = (campaignId: string) =>
   workspaceRead<{ campaign: { id: string; name: string; status: string }; jobs: CampaignJobRow[] }>(`/campaigns/${campaignId}/jobs`);
+
+/**
+ * Delivery-event timeline for one job. Every event maps to a recorded
+ * column server-side; transition times are not separately recorded, so the
+ * current status is a summary field and statusNote must stay visible.
+ */
+export interface JobTimelineEvent {
+  kind: 'queued' | 'scheduled' | 'dispatch_started' | 'status_recorded' | 'reply';
+  at: string;
+  note?: string;
+  classification?: string;
+}
+export interface JobTimelineResponse {
+  campaign: { id: string; name: string; status: string };
+  job: { id: string; recipientEmail: string; stepNumber: number; status: string; attempts: number };
+  statusNote: string;
+  events: JobTimelineEvent[];
+}
+export const fetchJobTimeline = (campaignId: string, jobId: string) =>
+  workspaceRead<JobTimelineResponse>(`/campaigns/${campaignId}/jobs/${jobId}/timeline`);
 
 export interface WorkspaceSuppressionRow {
   id: string;
@@ -708,6 +814,8 @@ export interface WaterfallConnectorRow {
   verified: boolean;
   lastVerifiedAt: string | null;
   updatedAt: string | null;
+  /** True only when the engine reports a real test-connection probe for this connector. */
+  testable?: boolean;
 }
 
 export async function fetchWaterfallConnectors(): Promise<{ data: { connectors: WaterfallConnectorRow[] } | null; error?: string }> {
@@ -914,4 +1022,46 @@ export async function setCampaignStatus(
   });
   if (result.data && !result.isMock) return { data: result.data };
   return { data: null, error: result.error || 'Campaign status could not be changed.' };
+}
+
+export type WaterfallJobStatusState =
+  | { state: 'ok'; jobId: string; status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'needs_review'; totalQueued: number; completedCount: number; uncertainCount: number; attempts: number; error: string | null }
+  | { state: 'unavailable'; message: string }
+  | { state: 'not_found' }
+  | { state: 'error'; message: string };
+
+/**
+ * D3: read the honest job status from the engine. The engine answers 503
+ * {queued:false, message} while durable persistence is not mounted and 404
+ * for a job outside the session workspace; both bodies must survive intact,
+ * so engineFetch's generic 5xx mapping cannot be used here. Callers must
+ * render needs_review explicitly and must never invent progress.
+ */
+export async function getWaterfallJobStatus(jobId: string): Promise<WaterfallJobStatusState> {
+  try {
+    const res = await fetch(`/api/engine/waterfall/jobs/${jobId}`, {
+      method: 'GET',
+      credentials: 'same-origin',
+    });
+    const body = (await res.json().catch(() => null)) as any;
+    if (res.status === 503) {
+      return { state: 'unavailable', message: body?.message || 'Job status is not available yet.' };
+    }
+    if (res.status === 404) return { state: 'not_found' };
+    if (res.ok && body && typeof body.jobId === 'string') {
+      return {
+        state: 'ok',
+        jobId: body.jobId,
+        status: body.status,
+        totalQueued: body.totalQueued ?? 0,
+        completedCount: body.completedCount ?? 0,
+        uncertainCount: body.uncertainCount ?? 0,
+        attempts: body.attempts ?? 0,
+        error: body.error ?? null,
+      };
+    }
+    return { state: 'error', message: body?.error || `Engine responded with status ${res.status}` };
+  } catch {
+    return { state: 'error', message: 'Engine service temporarily unavailable.' };
+  }
 }

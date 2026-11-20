@@ -154,13 +154,13 @@ describe('Waterfall Connector Credentials & AES-256-GCM Sealer', () => {
   });
 
   describe('Fails Closed on Missing / Invalid KEK', () => {
-    it('fails closed when LEADLOOM_CREDENTIAL_KEK is missing or empty', () => {
+    it('fails closed when LEADLOOM_CREDENTIAL_KEK is missing or empty', async () => {
       delete process.env.LEADLOOM_CREDENTIAL_KEK;
 
       expect(() => resolveKek()).toThrowError(/LEADLOOM_CREDENTIAL_KEK is not configured/);
 
       const store = new InMemoryConnectorCredentialStore();
-      expect(store.set('ws-1', 'apollo', 'key')).rejects.toThrowError(
+      await expect(store.set('ws-1', 'apollo', 'key')).rejects.toThrowError(
         /LEADLOOM_CREDENTIAL_KEK is not configured/
       );
     });

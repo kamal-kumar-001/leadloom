@@ -14,3 +14,12 @@ Method: public vendor API docs and open-source SDKs only. Each connector impleme
 | Notifications and hooks | Slack, generic signed webhooks (HMAC-SHA256) | OAuth2 / secret | Inbound HMAC endpoint not built yet |
 
 Not planned: scraping LinkedIn or any site whose terms forbid it; bypassing logins or captchas.
+
+## Status wording (2026-11-20)
+
+The Apollo, Hunter and Dropcontact adapters are LIVE-CAPABLE IMPLEMENTATIONS:
+real request/response code with synthetic fixture contract coverage. They are
+NOT currently live or verified integrations - no live provider call has been
+made, no provider key has been validated against the real service, and
+error/miss billing policies are UNVERIFIED (costs fail closed at the nominal
+rate, flagged costAssumed, never recorded as measured zero).

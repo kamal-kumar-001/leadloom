@@ -28,22 +28,18 @@ export class PreFlightEstimatorService {
     const totalRows = Math.max(1, request.rowIds.length);
     const tiers = customTiers ?? this.defaultTiers;
 
+    // Cost only. No time estimate is emitted: there is no measured latency
+    // model, and an invented one would read as a promise. Unit costs and hit
+    // rates are the configured assumptions above, not measured values - the
+    // response carries costBasis so consumers label it that way.
     let remainingRows = totalRows;
     let totalCostUSD = 0;
-    let totalEstimatedSeconds = 0;
-
-    // Concurrency on 4GB VPS: 20 rows parallel in BullMQ
-    const concurrency = 20;
 
     for (const tier of tiers) {
       // Rows executing in this tier
       const tierRows = remainingRows;
       const tierCost = tierRows * tier.unitCostUSD;
       totalCostUSD += tierCost;
-
-      // Estimated latency: ~200ms per batch
-      const batches = Math.ceil(tierRows / concurrency);
-      totalEstimatedSeconds += batches * 0.25;
 
       // Early exit short-circuiting: rows resolved do not continue to next tier
       const resolvedRows = tierRows * tier.estimatedHitRate;
@@ -52,7 +48,8 @@ export class PreFlightEstimatorService {
 
     return {
       estimatedCostUSD: Number(totalCostUSD.toFixed(4)),
-      estimatedSeconds: Math.ceil(totalEstimatedSeconds),
+      costBasis: 'configured-assumptions',
+      executionNote: 'Providers are tried in tier order; a resolved row is not sent to later tiers.',
       totalRows,
       tiers: tiers.map(t => ({
         tierIndex: t.tierIndex,
@@ -60,7 +57,6 @@ export class PreFlightEstimatorService {
         unitCostUSD: t.unitCostUSD,
         estimatedHitRate: t.estimatedHitRate,
       })),
-      guaranteeNotice: 'Zero unnecessary external API calls guaranteed via early-exit short-circuiting',
     };
   }
 }

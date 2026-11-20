@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { engineBase } from '@/lib/engine-server';
+import { trustedClientIp } from '@/lib/client-ip';
 
 // Public smoke-page content proxy. Fetching the page records one raw page
 // load in the engine (visitors counts loads, not unique people). No mock
@@ -14,9 +15,9 @@ export async function GET(
   }
   const engineUrl = engineBase();
   try {
-    // Forward the client IP so the engine's shared per-IP rate limit keys the
-    // real visitor, not this proxy's loopback address.
-    const fwd = request.headers.get('x-forwarded-for');
+    // Fail-closed: forward the visitor IP only from a sanitizing ingress;
+    // raw client XFF would let visitors spoof the engine's per-IP limit.
+    const fwd = trustedClientIp(request.headers);
     const engineRes = await fetch(`${engineUrl}/validator/pages/${encodeURIComponent(slug)}`, {
       cache: 'no-store',
       headers: fwd ? { 'X-Forwarded-For': fwd } : undefined,

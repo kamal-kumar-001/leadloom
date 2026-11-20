@@ -49,3 +49,38 @@ describe('server-side entitlement enforcement', () => {
     } finally { await app.close(); }
   });
 });
+
+describe('GET /entitlements/decision (the web learns plan decisions here only)', () => {
+  it('is default-off when entitlements are not configured', async () => {
+    const app = await createApplication(base({}) as never);
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      expect((await server.inject({ method: 'GET', url: '/entitlements/decision?feature=waterfall', headers: { authorization: tok(wsPro) } })).statusCode).toBe(404);
+    } finally { await app.close(); }
+  });
+
+  it('returns the workspace-scoped decision, never another workspace\'s, and validates keys', async () => {
+    const app = await createApplication(base({ entitlements }) as never);
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      expect((await server.inject({ method: 'GET', url: '/entitlements/decision?feature=waterfall' })).statusCode).toBe(401);
+      expect((await server.inject({ method: 'GET', url: '/entitlements/decision?feature=nope', headers: { authorization: tok(wsPro) } })).statusCode).toBe(400);
+      expect((await server.inject({ method: 'GET', url: '/entitlements/decision', headers: { authorization: tok(wsPro) } })).statusCode).toBe(400);
+
+      const freeOutbound = await server.inject({ method: 'GET', url: '/entitlements/decision?feature=outbound_sending', headers: { authorization: tok(wsFree) } });
+      expect(freeOutbound.statusCode).toBe(200);
+      expect(freeOutbound.json().feature).toEqual({ key: 'outbound_sending', decision: { allowed: false, reason: 'feature_not_in_plan' } });
+
+      const proOutbound = await server.inject({ method: 'GET', url: '/entitlements/decision?feature=outbound_sending', headers: { authorization: tok(wsPro) } });
+      expect(proOutbound.json().feature.decision).toEqual({ allowed: true, reason: 'ok' });
+
+      const noPlan = await server.inject({ method: 'GET', url: '/entitlements/decision?feature=waterfall', headers: { authorization: tok(wsNone) } });
+      expect(noPlan.json().feature.decision.reason).toBe('no_plan');
+
+      const limit = await server.inject({ method: 'GET', url: '/entitlements/decision?limit=tables', headers: { authorization: tok(wsFree) } });
+      expect(limit.json().limit).toEqual({ key: 'tables', decision: { allowed: true, reason: 'ok', limit: 3, used: 0, remaining: 2 } });
+      expect((await server.inject({ method: 'GET', url: '/entitlements/decision?limit=nope', headers: { authorization: tok(wsPro) } })).statusCode).toBe(400);
+      expect((await server.inject({ method: 'GET', url: '/entitlements/decision?limit=tables&requested=0', headers: { authorization: tok(wsPro) } })).statusCode).toBe(400);
+    } finally { await app.close(); }
+  });
+});

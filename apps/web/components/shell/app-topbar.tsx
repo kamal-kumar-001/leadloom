@@ -3,17 +3,10 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import { ThemeToggle } from './theme-toggle';
-import { Badge } from '@leadloom/ui';
 
 interface AppTopbarProps {
   onToggleMobileMenu?: () => void;
 }
-
-// Campaigns shows live queue/campaign data; only sections with their own fixture badge stay listed here.
-// Pages whose MAIN content is still fixture data say so here. The tables page
-// is excluded: its persisted tables are real engine data, and its demo canvas
-// carries its own "Sample preview" / "Demo data" labels.
-const SAMPLE_ROUTES = ['/app/validator'];
 
 export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
   const pathname = usePathname();
@@ -24,6 +17,7 @@ export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
     if (pathname.includes('/mailboxes')) return 'Outbound Mailbox Pool';
     if (pathname.includes('/campaigns')) return 'Multi-Step Sequences';
     if (pathname.includes('/validator')) return 'Idea Smoke-Test Validator';
+    if (pathname.includes('/signals')) return 'Signal Discovery Inbox';
     if (pathname.includes('/settings')) return 'Settings';
     return 'Dashboard';
   };
@@ -49,13 +43,6 @@ export function AppTopbar({ onToggleMobileMenu }: AppTopbarProps) {
       </div>
 
       <div className="flex items-center gap-2.5">
-        {/* Pages that still render fixture data say so. Real pages (overview, settings) show nothing. */}
-        {SAMPLE_ROUTES.some((r) => pathname.startsWith(r)) && (
-          <Badge variant="matrix" className="text-xs py-1 px-2.5 font-mono">
-            Sample data on this page
-          </Badge>
-        )}
-
         <div className="h-4 w-px bg-border-subtle mx-1 hidden sm:block" />
 
         <ThemeToggle />

@@ -131,7 +131,10 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
       return {
         success: true,
         latencyMs,
-        costMicrocents: 0, // Local model: $0 spend
+        // No per-request PROVIDER charge (local daemon). This is NOT proof of
+        // zero cost: hosting/compute for the local model is real and is not
+        // measured here.
+        costMicrocents: 0,
         data: {
           content,
           model: json.model ?? model,

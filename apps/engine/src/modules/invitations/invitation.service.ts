@@ -1,4 +1,5 @@
 import type { Role } from '../auth/rbac';
+import type { TransactionalEmail } from '../email/transactional';
 
 export const INVITE_ROLES: readonly Role[] = ['read_only', 'member', 'admin'];
 export const INVITE_TTL_DAYS = 7;
@@ -13,7 +14,7 @@ export type AcceptResult =
   | { ok: false; reason: 'not_found' | 'unverified' | 'already_member' | 'has_workspace_data' };
 
 export type InviteResult =
-  | { ok: true; invitation: InvitationRow }
+  | { ok: true; invitation: InvitationRow; emailSent: boolean | 'disabled' }
   | { ok: false; reason: 'invalid_email' | 'invalid_role' | 'account_exists' | 'already_invited' | 'limit_reached' | 'owner_only' };
 
 /** Persistence port. Every method is scoped by workspaceId; nothing accepts a workspace from the caller's body. */
@@ -36,11 +37,17 @@ export const normalizeInviteEmail = (e: string) => e.trim().toLowerCase();
 
 /**
  * Admin-only by the caller (route checks isAdmin); only the workspace owner may invite an admin.
- * The service cannot pick a workspace other than the session's, never sends mail, and an invitation
+ * The service cannot pick a workspace other than the session's, and an invitation
  * does nothing until the invited user explicitly accepts it while signed in with a verified identity.
+ * When constructed with a mailer it notifies the invited address (kind team_invite); a mail failure
+ * never fails the invitation - the result's emailSent says honestly what happened.
  */
 export class InvitationService {
-  constructor(private readonly store: InvitationStore, private readonly now: () => Date = () => new Date()) {}
+  constructor(
+    private readonly store: InvitationStore,
+    private readonly opts: { mailer?: TransactionalEmail; appBaseUrl?: string } = {},
+    private readonly now: () => Date = () => new Date(),
+  ) {}
 
   async invite(workspaceId: string, actorUserId: string, emailIn: string, role: string): Promise<InviteResult> {
     const email = normalizeInviteEmail(emailIn);
@@ -53,7 +60,27 @@ export class InvitationService {
     // An address that already has an account may be invited: nothing moves until that user accepts while
     // signed in with a verified identity, and accept refuses unless their own workspace is pristine.
     const made = await this.store.create({ workspaceId, email, role: role as Role, invitedBy: actorUserId, expiresAt: new Date(now.getTime() + INVITE_TTL_DAYS * 86_400_000) });
-    return made ? { ok: true, invitation: made } : { ok: false, reason: 'already_invited' };
+    if (!made) return { ok: false, reason: 'already_invited' };
+    let emailSent: boolean | 'disabled' = 'disabled';
+    if (this.opts.mailer) {
+      const base = (this.opts.appBaseUrl ?? '').replace(/\/+$/, '');
+      try {
+        const res = await this.opts.mailer.send({
+          kind: 'team_invite',
+          to: email,
+          subject: 'You have been invited to a Leadloom workspace',
+          text: [
+            `You have been invited to join a Leadloom workspace as ${role.replace('_', ' ')}.`,
+            '',
+            `Sign in or create your account at ${base}/login with this email address, then open Settings > Team to accept the invitation.`,
+            '',
+            `This invitation expires in ${INVITE_TTL_DAYS} days. If you did not expect it, ignore this email - nothing changes until you accept.`,
+          ].join('\n'),
+        });
+        emailSent = res.sent ? true : res.reason === 'disabled' ? 'disabled' : false;
+      } catch { emailSent = false; }
+    }
+    return { ok: true, invitation: made, emailSent };
   }
 
   mine(userId: string) { return this.store.listForUser(userId); }

@@ -1,0 +1,10 @@
+{
+  "person": {
+    "email": "j.blake@northstar.example",
+    "email_status": "extrapolated",
+    "first_name": "Jordan",
+    "last_name": "Blake",
+    "title": "VP Engineering",
+    "organization": { "name": "Northstar Analytics" }
+  }
+}

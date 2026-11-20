@@ -1,0 +1,8 @@
+{
+  "person": {
+    "first_name": "Jordan",
+    "last_name": "Blake",
+    "title": "VP Engineering",
+    "organization": { "name": "Northstar Analytics" }
+  }
+}

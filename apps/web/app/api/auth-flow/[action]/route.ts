@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { trustedClientIp } from '../../../../lib/client-ip';
 import { engineCall } from '../../../../lib/engine-server';
 
 // Public, unauthenticated steps of the emailed-code flow. The engine owns every rule
@@ -25,7 +26,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
   if (text.length > 4096) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const fwd = req.headers.get('x-forwarded-for');
+  // Fail-closed: forward a client IP only from a sanitizing ingress, never raw client XFF.
+  const fwd = trustedClientIp(req.headers);
   if (fwd) headers['X-Forwarded-For'] = fwd;
 
   try {

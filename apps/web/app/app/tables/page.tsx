@@ -5,9 +5,15 @@ import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
 import {
   fetchWorkspaceTables,
   fetchWorkspaceTableRows,
+  dispatchWaterfall,
+  getWaterfallJobStatus,
   type WorkspaceTableRow,
   type WorkspaceTableRows,
 } from '../../../lib/engine-client';
+import { mergeRefreshedCells } from '../../../lib/waterfall-cell-refresh';
+import { createJobLifecycle, type JobLifecycle } from '../../../lib/waterfall-job-lifecycle';
+import { type WaterfallJobView } from '../../../lib/waterfall-job-view-model';
+import { WaterfallJobStatusLine } from '../../../components/grid/waterfall-job-status-line';
 import { LoomVirtualGrid } from '../../../components/grid/loom-virtual-grid';
 import { PreFlightBar } from '../../../components/grid/pre-flight-bar';
 import { ThreadInspector } from '../../../components/grid/drawers/thread-inspector';
@@ -15,6 +21,7 @@ import { LoomViewDrawer } from '../../../components/sequencer/loom-view-drawer';
 import { CsvImporterModal } from '../../../components/grid/csv-importer-modal';
 import { AddWaterfallModal } from '../../../components/grid/add-waterfall-modal';
 import { useLoomStore } from '../../../store/loom-store';
+import { PersistedTableView } from '../../../components/grid/persisted-table-view';
 import {
   Filter,
   ArrowUpDown,
@@ -37,10 +44,79 @@ export default function TablesPage() {
   async function openPersistedTable(tableId: string) {
     setOpenTable(null);
     setOpenTableError(null);
+    setTableSelection(new Set());
+    setPersistedJobView(null);
+    setPersistedOutcome(null);
+    snapshotRef.current = { tableId: null, loadedAt: Date.now() };
     const res = await fetchWorkspaceTableRows(tableId);
-    if (res.data) setOpenTable(res.data);
-    else setOpenTableError(res.error || 'Failed to load table rows');
+    if (res.data) {
+      setOpenTable(res.data);
+      snapshotRef.current = { tableId: res.data.table.id, loadedAt: Date.now() };
+    } else setOpenTableError(res.error || 'Failed to load table rows');
   }
+
+  // D3 real dispatch from a persisted table: selection is bound at dispatch
+  // time, the returned job id drives polling, and on a terminal state ONLY
+  // the bound rows of THIS table are refetched and merged - never the live
+  // selection, never another table. queued:false is surfaced as the engine's
+  // own message; nothing is implied or mutated on failure.
+  const [tableSelection, setTableSelection] = useState<ReadonlySet<string>>(new Set());
+  const [persistedJobView, setPersistedJobView] = useState<WaterfallJobView | null>(null);
+  const [persistedOutcome, setPersistedOutcome] = useState<string | null>(null);
+  const [persistedDispatching, setPersistedDispatching] = useState(false);
+  // The open-table snapshot the lifecycle's apply guard reads. loadedAt is
+  // when the snapshot was FETCHED - a refresh read started before that never
+  // applies (lib/waterfall-job-lifecycle.ts, race-tested).
+  const snapshotRef = React.useRef<{ tableId: string | null; loadedAt: number }>({ tableId: null, loadedAt: 0 });
+  const lifecycleRef = React.useRef<JobLifecycle | null>(null);
+  if (!lifecycleRef.current) {
+    lifecycleRef.current = createJobLifecycle({
+      fetchStatus: getWaterfallJobStatus,
+      fetchRows: fetchWorkspaceTableRows,
+      getSnapshot: () => snapshotRef.current,
+      onView: setPersistedJobView,
+      onApply: (tableId, columnName, result) => {
+        setOpenTable((current) => {
+          if (!current || current.table.id !== tableId) return current;
+          return mergeRefreshedCells(current, columnName, result).data;
+        });
+      },
+      onNote: setPersistedOutcome,
+    });
+  }
+  useEffect(() => () => lifecycleRef.current?.stop(), []);
+
+  const waterfallColumn = openTable?.columns.find((c) => c.type === 'waterfall') ?? null;
+
+  function togglePersistedRow(rowId: string) {
+    setTableSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  }
+
+  async function runWaterfallOnPersisted() {
+    if (!openTable || !waterfallColumn || tableSelection.size === 0) return;
+    setPersistedDispatching(true);
+    setPersistedOutcome(null);
+    try {
+      const rowIds = Array.from(tableSelection);
+      const outcome = await dispatchWaterfall(waterfallColumn.id, rowIds);
+      if (outcome.queued && outcome.jobId) {
+        lifecycleRef.current?.startJob({ jobId: outcome.jobId, rowIds, tableId: openTable.table.id, columnName: waterfallColumn.name });
+        setPersistedOutcome(`Queued: ${outcome.totalQueued ?? rowIds.length} rows (job ${outcome.jobId}).`);
+      } else {
+        setPersistedOutcome(
+          `Dispatch not available yet: ${outcome.message ?? 'The engine did not accept the dispatch; nothing was queued.'} Your selection is unchanged.`
+        );
+      }
+    } finally {
+      setPersistedDispatching(false);
+    }
+  }
+
 
   const table = useLoomStore((state) => state.table);
   const toggleSequencer = useLoomStore((state) => state.toggleSequencer);
@@ -182,7 +258,7 @@ export default function TablesPage() {
             <h2 className="text-sm font-semibold text-text-primary">
               {openTable ? `Table: ${openTable.table.name}` : 'Table'}
             </h2>
-            <button className="text-xs text-text-muted underline" onClick={() => { setOpenTable(null); setOpenTableError(null); }}>
+            <button className="text-xs text-text-muted underline" onClick={() => { setOpenTable(null); setOpenTableError(null); snapshotRef.current = { tableId: null, loadedAt: Date.now() }; }}>
               Close
             </button>
           </div>
@@ -190,36 +266,36 @@ export default function TablesPage() {
             <Card className="p-4 border-signal-failed/30 bg-signal-failed/5 text-sm text-signal-failed">{openTableError}</Card>
           )}
           {openTable && (
-            <Card className="p-0 overflow-auto border border-border-subtle">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border-subtle bg-canvas-surface/90">
-                    {openTable.columns.map((c) => (
-                      <th key={c.id} className="text-left px-3 py-2 font-semibold text-text-primary whitespace-nowrap">{c.name}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {openTable.rows.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-4 text-text-muted" colSpan={openTable.columns.length}>
-                        0 rows saved yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    openTable.rows.map((r) => (
-                      <tr key={r.rowId} className="border-b border-border-subtle last:border-0">
-                        {openTable.columns.map((c) => (
-                          <td key={c.id} className="px-3 py-2 text-text-secondary align-top max-w-[280px] truncate" title={String(r.values[c.name] ?? '')}>
-                            {r.values[c.name] === true ? 'yes' : r.values[c.name] === false ? 'no' : String(r.values[c.name] ?? '')}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </Card>
+            <>
+              <PersistedTableView
+                data={openTable}
+                selection={waterfallColumn ? { selected: tableSelection, onToggle: togglePersistedRow } : undefined}
+              />
+              {waterfallColumn && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs gap-1.5"
+                    disabled={tableSelection.size === 0 || persistedDispatching}
+                    onClick={runWaterfallOnPersisted}
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    <span>
+                      {persistedDispatching
+                        ? 'Dispatching...'
+                        : tableSelection.size === 0
+                          ? `Select rows to run "${waterfallColumn.name}"`
+                          : `Run Waterfall on ${tableSelection.size} selected`}
+                    </span>
+                  </Button>
+                </div>
+              )}
+              {persistedJobView && <WaterfallJobStatusLine view={persistedJobView} />}
+              {persistedOutcome && (
+                <p className="text-xs text-text-muted leading-snug break-words">{persistedOutcome}</p>
+              )}
+            </>
           )}
         </div>
       )}

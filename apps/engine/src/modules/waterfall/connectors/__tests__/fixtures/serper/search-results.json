@@ -1,0 +1,13 @@
+{
+  "searchParameters": { "q": "northstar analytics pricing" },
+  "knowledgeGraph": {
+    "title": "Northstar Analytics",
+    "type": "Organization",
+    "description": "Analytics platform",
+    "website": "https://northstar.example"
+  },
+  "organic": [
+    { "title": "Northstar Analytics - Pricing", "link": "https://northstar.example/pricing", "snippet": "Plans start at...", "position": 1 },
+    { "title": "Northstar Analytics reviews", "link": "https://reviews.example/northstar", "snippet": "Rated 4.5 by...", "position": 2 }
+  ]
+}

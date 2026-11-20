@@ -1,0 +1,10 @@
+{
+  "data": {
+    "email": "team@northstar.example",
+    "score": 62,
+    "accept_all": true,
+    "position": null,
+    "company": "Northstar Analytics",
+    "verification": { "status": "accept_all" }
+  }
+}

@@ -13,6 +13,16 @@ export interface TestConnectionOptions {
 
 export type TestConnectionStatus = 'SUCCESS' | 'FAILED' | 'DISABLED' | 'FORBIDDEN';
 
+/**
+ * Connector ids that have a real probe in getProbeInput below - the ONLY
+ * source of truth for the `testable` flag surfaced on registry rows. A
+ * connector is never advertised as testable without a probe behind it.
+ */
+export const TESTABLE_CONNECTOR_IDS: ReadonlySet<string> = new Set([
+  'apollo', 'hunter', 'dropcontact', 'pdl', 'zerobounce', 'neverbounce',
+  'serper', 'openai', 'anthropic', 'ollama',
+]);
+
 export interface TestConnectionResult {
   status: TestConnectionStatus;
   connectorId: string;

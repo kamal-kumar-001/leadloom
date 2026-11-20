@@ -13,6 +13,7 @@ import {
   Send,
   FlaskConical,
   Globe,
+  Radar,
   Settings,
   LogOut,
 } from 'lucide-react';
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'Campaigns', href: '/app/campaigns', icon: Send },
   { name: 'Validator', href: '/app/validator', icon: FlaskConical },
   { name: 'Research', href: '/app/research', icon: Globe },
+  { name: 'Signals', href: '/app/signals', icon: Radar },
   { name: 'Settings & Plans', href: '/app/settings', icon: Settings },
 ];
 

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BrandMark } from '@leadloom/ui';
+import { buildConnectorCatalog, BYOKProviderEnum } from '@leadloom/contracts';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import { StatusChip } from './status-chip';
 
@@ -18,7 +19,7 @@ import { StatusChip } from './status-chip';
 type MenuItem = {
   label: string;
   note: string;
-  status: 'live' | 'soon';
+  status: 'live' | 'keys' | 'soon';
   href?: string;
 };
 
@@ -28,13 +29,19 @@ type Menu = {
   footerNote?: string;
 };
 
+// Key-backed provider count derived from the catalog (Ollama needs no key):
+// every public count of vault providers must agree with this number.
+// The vault save path accepts BYOKProviderEnum providers (contracts); the public
+// key-storage count derives from that enum, never from a hand-typed number.
+const KEY_PROVIDER_COUNT = BYOKProviderEnum.options.length;
+
 const MENUS: Menu[] = [
   {
     label: 'Product',
     items: [
       { label: 'Saved tables', note: 'Keep leads and notes across sessions', status: 'live', href: '#live' },
       { label: 'Idea validator', note: 'Smoke test pages for raw product ideas', status: 'soon' },
-      { label: 'Provider key vault', note: 'Encrypted storage for 10 providers', status: 'live', href: '#live' },
+      { label: 'Provider key vault', note: `Encrypted storage for ${KEY_PROVIDER_COUNT} providers`, status: 'live', href: '#live' },
       { label: 'Waterfall enrichment', note: 'Cascade across providers with your keys', status: 'soon' },
       { label: 'Approval queue', note: 'Review the exact message per recipient', status: 'soon' },
       { label: 'Sequences and sending', note: 'Nothing sends before your approval', status: 'soon' },
@@ -51,23 +58,28 @@ const MENUS: Menu[] = [
     ],
     footerNote: 'Each use case gets its own honest page once the workflow behind it works.',
   },
-  {
-    label: 'Integrations',
-    items: [
-      { label: 'Apollo', note: 'People and company data', status: 'live', href: '#faq' },
-      { label: 'Hunter', note: 'Email finding and verification', status: 'live', href: '#faq' },
-      { label: 'AnyMail Finder', note: 'Email finding', status: 'live', href: '#faq' },
-      { label: 'Dropcontact', note: 'Email enrichment', status: 'live', href: '#faq' },
-      { label: 'Prospeo', note: 'Email finding and verification', status: 'live', href: '#faq' },
-      { label: 'OpenAI', note: 'AI analysis with your key', status: 'live', href: '#faq' },
-      { label: 'Anthropic', note: 'AI analysis with your key', status: 'live', href: '#faq' },
-      { label: 'DeepSeek', note: 'AI analysis with your key', status: 'live', href: '#faq' },
-      { label: 'Groq', note: 'AI analysis with your key', status: 'live', href: '#faq' },
-      { label: 'Perplexity', note: 'AI analysis with your key', status: 'live', href: '#faq' },
-    ],
-    footerNote: 'Live means you can store keys today. Live enrichment runs are coming soon.',
-  },
 ];
+
+// Integrations menu is GENERATED from the canonical connector catalog in
+// packages/contracts (LANDING.md: status from the registry, never typed; one
+// entry per real connector - a connector we do not have must never appear).
+// 'live' here means the vault stores that provider's key today (see
+// footerNote); enrichment runs are a separate, later step. Ollama needs no
+// key: it runs on the user's machine, and is marked soon until verified.
+function integrationsMenu(): Menu {
+  const items: MenuItem[] = buildConnectorCatalog().map((c) => ({
+    label: c.label,
+    note: c.localOnly ? 'Runs on your machine' : c.description.replace(/\.$/, ''),
+    status: c.localOnly ? 'soon' : 'keys',
+    ...(c.localOnly ? {} : { href: '#faq' }),
+  }));
+  return {
+    label: 'Integrations',
+    items,
+    footerNote: 'Key storage means the vault stores that provider key today. Live enrichment runs are coming soon.',
+  };
+}
+MENUS.push(integrationsMenu());
 
 export function SiteNav() {
   const [openMenu, setOpenMenu] = useState<string | null>(null);

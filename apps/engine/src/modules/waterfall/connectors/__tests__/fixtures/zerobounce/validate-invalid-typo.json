@@ -1,0 +1,9 @@
+{
+  "status": "invalid",
+  "sub_status": "possible_typo",
+  "account": "jordn.blake",
+  "domain": "northstar.example",
+  "did_you_mean": "jordan.blake@northstar.example",
+  "free_email": false,
+  "mx_found": "true"
+}

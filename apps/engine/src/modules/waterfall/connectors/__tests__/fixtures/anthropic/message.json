@@ -1,0 +1,10 @@
+{
+  "id": "msg_synthetic0",
+  "model": "claude-sonnet-4-5",
+  "content": [
+    { "type": "thinking", "text": "internal" },
+    { "type": "text", "text": "Synthetic answer text." }
+  ],
+  "stop_reason": "end_turn",
+  "usage": { "input_tokens": 88, "output_tokens": 21 }
+}

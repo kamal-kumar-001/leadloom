@@ -50,6 +50,29 @@ describe('InvitationService', () => {
     expect(await svc.revoke(w2, a, r.invitation.id)).toBe(false);
     expect(await svc.revoke(w1, a, r.invitation.id)).toBe(true);
   });
+  it('reports emailSent=disabled when constructed without a mailer', async () => {
+    const st = new MemStore(); const svc = new InvitationService(st); const w = randomUUID(), a = randomUUID();
+    const r: any = await svc.invite(w, a, 'nomail@y.example', 'member');
+    expect(r.ok).toBe(true); expect(r.emailSent).toBe('disabled');
+  });
+  it('sends a team_invite mail through the mailer and never fails the invite on mail failure', async () => {
+    const st = new MemStore(); const w = randomUUID(), a = randomUUID();
+    const sent: any[] = [];
+    const good = new InvitationService(st, { mailer: { send: async (m: any) => { sent.push(m); return { sent: true as const, providerId: 'p1' }; } }, appBaseUrl: 'https://leadloom.example' });
+    const r1: any = await good.invite(w, a, 'one@y.example', 'read_only');
+    expect(r1.ok).toBe(true); expect(r1.emailSent).toBe(true);
+    expect(sent.length).toBe(1);
+    expect(sent[0].kind).toBe('team_invite');
+    expect(sent[0].to).toBe('one@y.example');
+    expect(sent[0].text).toContain('https://leadloom.example/login');
+    expect(sent[0].text).toContain('Settings > Team');
+    const failing = new InvitationService(st, { mailer: { send: async () => ({ sent: false as const, reason: 'provider_error' as const }) }, appBaseUrl: 'https://leadloom.example' });
+    const r2: any = await failing.invite(w, a, 'two@y.example', 'member');
+    expect(r2.ok).toBe(true); expect(r2.emailSent).toBe(false);
+    const throwing = new InvitationService(st, { mailer: { send: async () => { throw new Error('boom'); } }, appBaseUrl: 'https://leadloom.example' });
+    const r3: any = await throwing.invite(w, a, 'three@y.example', 'member');
+    expect(r3.ok).toBe(true); expect(r3.emailSent).toBe(false);
+  });
 });
 
 describe('invitation routes', () => {
@@ -82,7 +105,7 @@ describe('invitation routes', () => {
       const bad = await f.inject({ method: 'POST', url: '/workspace/invitations', headers: h, payload: { email: 'a@y.example', role: 'owner' } });
       expect(bad.statusCode).toBe(400);
       const made = await f.inject({ method: 'POST', url: '/workspace/invitations', headers: h, payload: { email: 'a@y.example', role: 'member' } });
-      expect(made.statusCode).toBe(201); expect(made.json().emailSent).toBe(false);
+      expect(made.statusCode).toBe(201); expect(made.json().emailSent).toBe('disabled'); // route app here has no mailer; honest value is 'disabled' (see title)
       expect(st.rows[0].workspaceId).toBe(wid);
       expect((await f.inject({ method: 'POST', url: '/workspace/invitations', headers: h, payload: { email: 'a@y.example', role: 'member' } })).statusCode).toBe(409);
       const id = made.json().invitation.id;

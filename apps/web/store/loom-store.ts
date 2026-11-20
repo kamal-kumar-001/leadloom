@@ -4,8 +4,6 @@ import {
   RowRecord,
   WaterfallCellPayload,
   MOCK_TABLE_METADATA,
-  MOCK_PREFLIGHT_RESPONSE,
-  PreFlightEstimateResponse,
 } from '@leadloom/contracts';
 
 export interface LoomState {
@@ -16,7 +14,6 @@ export interface LoomState {
   activeCell: { rowId: string; colId: string } | null;
   inspectorRowId: string | null;
   isSequencerOpen: boolean;
-  preFlightEstimate: PreFlightEstimateResponse | null;
   
   // Actions
   toggleRowSelection: (rowId: string) => void;
@@ -34,17 +31,21 @@ export interface LoomState {
 const INITIAL_ROWS_BY_ID: Record<string, RowRecord> = {};
 const INITIAL_ROW_ORDER: string[] = [];
 
+// Demo canvas fixtures. Company names are real for realism, but every email
+// is CLEARLY FICTIONAL on the reserved example.com domain (RFC 2606): nothing
+// here is a real person's address. The signal strings are invented demo
+// content shown only on this sample-labeled canvas.
 const MOCK_COMPANIES = [
-  { name: 'Vercel', domain: 'vercel.com', signal: '[GH] +140 stars/wk', email: 'alex@vercel.com', prov: 'hunter', latency: 142 },
-  { name: 'Supabase', domain: 'supabase.com', signal: '[Job] +3 Rust Eng', email: 'paul@supabase.co', prov: 'apollo', latency: 98 },
-  { name: 'Railway', domain: 'railway.app', signal: '[Web] Pricing change', email: 'tito@railway.app', prov: 'dropcontact', latency: 210 },
-  { name: 'Linear', domain: 'linear.app', signal: '[News] Series B', email: 'karri@linear.app', prov: 'hunter', latency: 120 },
-  { name: 'Modal', domain: 'modal.com', signal: '[Job] ML Infra Staff', email: null, prov: null, latency: null },
-  { name: 'Resend', domain: 'resend.com', signal: '[GH] v2 Released', email: 'zeno@resend.com', prov: 'hunter', latency: 115 },
-  { name: 'PostHog', domain: 'posthog.com', signal: '[Job] +4 DevRel', email: 'james@posthog.com', prov: 'apollo', latency: 89 },
-  { name: 'Fly.io', domain: 'fly.io', signal: '[Web] GPU cluster', email: 'kurt@fly.io', prov: 'hunter', latency: 130 },
-  { name: 'Turso', domain: 'turso.tech', signal: '[GH] libSQL v0.5', email: 'glauber@turso.tech', prov: 'apollo', latency: 95 },
-  { name: 'Render', domain: 'render.com', signal: '[News] Redis service', email: 'anurag@render.com', prov: 'dropcontact', latency: 180 },
+  { name: 'Vercel', domain: 'vercel.example.com', signal: '[GH] +140 stars/wk', email: 'alex@vercel.example.com', prov: 'hunter', latency: 142 },
+  { name: 'Supabase', domain: 'supabase.example.com', signal: '[Job] +3 Rust Eng', email: 'paul@supabase.example.com', prov: 'apollo', latency: 98 },
+  { name: 'Railway', domain: 'railway.example.com', signal: '[Web] Pricing change', email: 'tito@railway.example.com', prov: 'dropcontact', latency: 210 },
+  { name: 'Linear', domain: 'linear.example.com', signal: '[News] Series B', email: 'karri@linear.example.com', prov: 'hunter', latency: 120 },
+  { name: 'Modal', domain: 'modal.example.com', signal: '[Job] ML Infra Staff', email: null, prov: null, latency: null },
+  { name: 'Resend', domain: 'resend.example.com', signal: '[GH] v2 Released', email: 'zeno@resend.example.com', prov: 'hunter', latency: 115 },
+  { name: 'PostHog', domain: 'posthog.example.com', signal: '[Job] +4 DevRel', email: 'james@posthog.example.com', prov: 'apollo', latency: 89 },
+  { name: 'Fly.io', domain: 'flyio.example.com', signal: '[Web] GPU cluster', email: 'kurt@flyio.example.com', prov: 'hunter', latency: 130 },
+  { name: 'Turso', domain: 'turso.example.com', signal: '[GH] libSQL v0.5', email: 'glauber@turso.example.com', prov: 'apollo', latency: 95 },
+  { name: 'Render', domain: 'render.example.com', signal: '[News] Redis service', email: 'anurag@render.example.com', prov: 'dropcontact', latency: 180 },
 ];
 
 for (let i = 0; i < 50; i++) {
@@ -56,6 +57,8 @@ for (let i = 0; i < 50; i++) {
     value: sample.email,
     status: sample.email ? 'success' : 'running',
     confidence: sample.email ? 0.98 : 0.5,
+    // Sample canvas rows are SYNTHETIC: the cell must label them as demo data.
+    simulated: true,
     telemetry: sample.email
       ? {
           provider_attributed: sample.prov as any,
@@ -111,7 +114,6 @@ export const useLoomStore = create<LoomState>((set, get) => ({
   activeCell: { rowId: '00000000-0000-4000-8000-000000000001', colId: '00000000-0000-4000-8000-000000000104' },
   inspectorRowId: null,
   isSequencerOpen: false,
-  preFlightEstimate: MOCK_PREFLIGHT_RESPONSE,
 
   toggleRowSelection: (rowId: string) => {
     set((state) => {
@@ -169,14 +171,18 @@ export const useLoomStore = create<LoomState>((set, get) => ({
       // Simulate cascade success
       setTimeout(() => {
         get().updateCell(id, '00000000-0000-4000-8000-000000000104', {
-          value: 'verified@loom-outreach.dev',
+          value: 'verified@demo-rows.example.com',
           status: 'success',
           confidence: 0.99,
+          // Synthetic demo result: labeled at the cell, and its nominal cost is
+          // never presented as measured spend.
+          simulated: true,
           telemetry: {
             provider_attributed: 'hunter',
             tier: 2,
             latency_ms: 135,
             cost_microcents: 300,
+            cost_assumed: true,
           },
           trace: [
             { step: 1, provider: 'apollo', status: 'miss', latency_ms: 82, cost_microcents: 100 },

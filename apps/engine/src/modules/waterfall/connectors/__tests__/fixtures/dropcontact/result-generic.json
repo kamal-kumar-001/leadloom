@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "data": [
+    {
+      "first_name": "Jordan",
+      "last_name": "Blake",
+      "email": [{ "email": "contact@northstar.example", "qualification": "generic" }],
+      "company": "Northstar Analytics"
+    }
+  ]
+}

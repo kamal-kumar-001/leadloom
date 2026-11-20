@@ -92,22 +92,45 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     }
   });
 
-  it('keeps survey question and answer-option units consistent per branch', () => {
+  it('keeps distinct ideas distinct: public copy follows the hypothesis, not a keyword bucket', () => {
     const decomposer = new HypothesisDecomposerService();
-    const cases: Array<[string, RegExp, RegExp]> = [
-      // hypothesis, expected choice-question pattern, expected options pattern
-      ['Automated Kubernetes cost-cutter for Series A startups', /engineers/i, /engineers/i],
-      ['Outbound sales tooling for B2B teams', /budget/i, /\$|\/mo/i],
-      ['AI agent orchestration platform', /bottleneck/i, /hallucination|latency|rate limit/i],
-      ['Meal planning for busy parents', /hours per week/i, /hours\/week/i],
-    ];
-    for (const [h, qPattern, optPattern] of cases) {
-      const d = decomposer.decompose({ rawHypothesis: h });
-      const choice = d.smokePage.surveyQuestions.find((q) => q.type === 'choice');
-      expect(choice, h).toBeDefined();
-      expect(choice!.text, h).toMatch(qPattern);
-      for (const opt of choice!.options ?? []) expect(opt, `${h}: ${opt}`).toMatch(optPattern);
-    }
+    const orchestrator = decomposer.decompose({
+      rawHypothesis: 'An orchestrator for solo founders who already pay for coding agents. Positioning: Idea-to-revenue without another AI bill.',
+    });
+    const reliability = decomposer.decompose({
+      rawHypothesis: 'Structured output validation for production LLM agents. Positioning: Catch silent tool-call failures before users do.',
+    });
+
+    // Both hit the same AI/agent keyword bucket, yet each page sells its own idea.
+    expect(orchestrator.smokePage.headline).toContain('orchestrator for solo founders');
+    expect(orchestrator.smokePage.headline).not.toContain('LLM');
+    expect(orchestrator.smokePage.subheadline).toContain('Idea-to-revenue without another AI bill');
+    expect(reliability.smokePage.headline).toContain('Structured output validation');
+    expect(reliability.smokePage.headline).not.toContain('orchestrator');
+    expect(reliability.smokePage.subheadline).toContain('Catch silent tool-call failures');
+    expect(orchestrator.smokePage.headline).not.toBe(reliability.smokePage.headline);
+    expect(orchestrator.smokePage.subheadline).not.toBe(reliability.smokePage.subheadline);
+
+    // Survey questions are idea-agnostic and identical across hypotheses.
+    expect(orchestrator.smokePage.surveyQuestions).toEqual(reliability.smokePage.surveyQuestions);
+    const choice = orchestrator.smokePage.surveyQuestions.find((q) => q.type === 'choice');
+    expect(choice?.options?.length).toBeGreaterThanOrEqual(2);
+
+    // Copy stays within rendering-safe length caps.
+    expect(orchestrator.smokePage.headline.length).toBeLessThanOrEqual(110);
+    expect(orchestrator.smokePage.title.length).toBeLessThanOrEqual(60);
+    expect(orchestrator.smokePage.subheadline.length).toBeLessThanOrEqual(230);
+  });
+
+  it('derives sequence copy from the idea statement only, without the positioning segment', () => {
+    const decomposer = new HypothesisDecomposerService();
+    const d = decomposer.decompose({
+      rawHypothesis: 'An orchestrator for solo founders who already pay for coding agents. Positioning: Idea-to-revenue without another AI bill.',
+    });
+    expect(d.sequenceSubject).toContain('orchestrator for solo founders');
+    expect(d.sequenceSubject.toLowerCase()).not.toContain('positioning:');
+    expect(d.sequenceBody).toContain('orchestrator for solo founders');
+    expect(d.sequenceBody.toLowerCase()).not.toContain('positioning:');
   });
 
   it('should handle full workflow in ValidatorService from hypothesis to waitlist submission', async () => {

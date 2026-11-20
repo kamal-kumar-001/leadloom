@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "likelihood": 9,
+  "data": {
+    "full_name": "Jordan Blake",
+    "first_name": "Jordan",
+    "last_name": "Blake",
+    "work_email": "jordan.blake@northstar.example",
+    "personal_emails": ["jordan.blake.personal@mail.example"],
+    "job_title": "VP Engineering",
+    "job_company_name": "Northstar Analytics",
+    "linkedin_url": "linkedin.com/in/jordan-blake-example"
+  }
+}

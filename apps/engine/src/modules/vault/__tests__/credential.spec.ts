@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { randomBytes } from 'node:crypto';
+import { BYOKProviderEnum } from '@leadloom/contracts';
 import { CredentialService, type CredentialRepository, type StoredCredential } from '../credential.service';
 import { VaultService } from '../vault.service';
 class MemoryRepo implements CredentialRepository {
@@ -81,5 +82,32 @@ describe('Credential service repository and public-contract boundary', () => {
     await expect(service.save('tenant-a', { ...body, provider: 'unknown' })).rejects.toThrow();
     await expect(service.save('', body)).rejects.toThrow('Authenticated workspace');
     expect(repo.rows.size).toBe(0);
+  });
+});
+
+describe('Every BYOKProviderEnum provider stores and reads back (vault marketing-count grounding)', () => {
+  // The public "N providers with encrypted key storage" claim derives from
+  // BYOKProviderEnum.options.length; this spec proves enum membership is backed
+  // by the real validation/seal/persist/masked-read/decrypt path for EVERY
+  // option, with synthetic keys only (no provider calls).
+  it.each(BYOKProviderEnum.options)('provider %s: save, masked read, decrypt roundtrip', async (provider) => {
+    const { repo, service } = setup();
+    const apiKey = `synthetic-${provider}-key-0001`;
+    const saved = await service.save('tenant-a', { provider, apiKey, label: 'Synthetic only' });
+    expect(saved.provider).toBe(provider);
+    expect(saved.isValid).toBe(false); // unverified until a live test-connection
+    expect(JSON.stringify(saved)).not.toContain(apiKey);
+    const stored = repo.rows.get(saved.id)!;
+    expect(stored.payload.ciphertext.toString('utf8')).not.toBe(apiKey);
+    const roundtrip = await service.use('tenant-a', saved.id, (key) => key.toString('utf8'));
+    expect(roundtrip).toBe(apiKey);
+    const latest = await service.findLatestByProvider('tenant-a', provider);
+    expect(latest?.id).toBe(saved.id);
+    const listed = await service.list('tenant-a');
+    expect(JSON.stringify(listed)).not.toContain(apiKey);
+  });
+
+  it('provider count in the enum matches the tested set (guard against silent enum growth)', () => {
+    expect(BYOKProviderEnum.options.length).toBe(15);
   });
 });

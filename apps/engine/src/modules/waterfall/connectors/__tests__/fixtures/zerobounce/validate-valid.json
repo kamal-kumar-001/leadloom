@@ -1,0 +1,9 @@
+{
+  "status": "valid",
+  "sub_status": "alias_address",
+  "account": "jordan.blake",
+  "domain": "northstar.example",
+  "did_you_mean": null,
+  "free_email": false,
+  "mx_found": "true"
+}

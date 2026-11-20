@@ -5,7 +5,7 @@ import {
   WaterfallStepStatus,
 } from '@leadloom/contracts';
 import { createHash } from 'node:crypto';
-import { BaseProviderAdapter, ProviderExecutionInput, ProviderExecutionOutput } from './adapters/base-provider.adapter';
+import { BaseProviderAdapter, ProviderExecutionInput, ProviderExecutionOutput, ProviderOutcomeUnknownError } from './adapters/base-provider.adapter';
 import { DomainCacheService } from './domain-cache.service';
 
 export interface WaterfallNodeConfig {
@@ -123,6 +123,7 @@ export class DAGRunnerService {
     ])).digest('hex') : undefined;
     const trace: WaterfallStepTrace[] = [];
     let totalCostMicrocents = 0;
+    let anyCostAssumed = false;
     let totalLatencyMs = 0;
     let shortCircuited = false;
     let successfulOutput: ProviderExecutionOutput | null = null;
@@ -175,7 +176,11 @@ export class DAGRunnerService {
         const apiKey = apiKeys?.[node.provider];
         try {
           output = await adapter.execute(input, apiKey);
-        } catch {
+        } catch (err) {
+          // D2 billing-integrity: an UNKNOWN provider outcome (request possibly
+          // submitted and charged) must reach the worker - the row becomes
+          // needs_review, never a normalized known result, never blind-retried.
+          if (err instanceof ProviderOutcomeUnknownError) throw err;
           // Do not expose raw provider errors which may contain credentials.
           trace.push({ step: stepIndex, provider: node.provider, status: 'error', latency_ms: 0,
             cost_microcents: 0, reason: 'Provider execution failed' });
@@ -196,6 +201,7 @@ export class DAGRunnerService {
       }
 
       totalCostMicrocents += output.costMicrocents;
+      if (output.costAssumed) anyCostAssumed = true;
       totalLatencyMs += output.latencyMs;
 
       // Map output to trace item
@@ -234,6 +240,7 @@ export class DAGRunnerService {
           tier: attributedTier,
           latency_ms: totalLatencyMs,
           cost_microcents: totalCostMicrocents,
+        cost_assumed: anyCostAssumed || undefined,
         },
         trace,
       };
@@ -246,6 +253,11 @@ export class DAGRunnerService {
         value: null,
         status: 'error',
         trace,
+        telemetry: {
+          latency_ms: totalLatencyMs,
+          cost_microcents: totalCostMicrocents,
+          cost_assumed: anyCostAssumed || undefined,
+        },
         error_payload: {
           code: 'RATE_LIMIT_EXCEEDED',
           message: 'All configured providers hit rate limits',
@@ -261,6 +273,7 @@ export class DAGRunnerService {
       telemetry: {
         latency_ms: totalLatencyMs,
         cost_microcents: totalCostMicrocents,
+        cost_assumed: anyCostAssumed || undefined,
       },
       trace,
     };

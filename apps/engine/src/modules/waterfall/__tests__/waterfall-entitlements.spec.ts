@@ -24,9 +24,16 @@ describe('WaterfallService Entitlement Gating', () => {
     try {
       delete process.env.LEADLOOM_ENTITLEMENTS_ENFORCED;
       const service = new WaterfallService();
-      const res = await service.dispatchWaterfall(sampleRequest, randomUUID());
+      // D2: without a durable queue port, dispatch refuses honestly instead of
+      // fabricating a job id that implies queued work.
+      await expect(service.dispatchWaterfall(sampleRequest, randomUUID())).rejects.toMatchObject({
+        name: 'WaterfallDispatchUnavailableError',
+      });
+      // With a queue port, the returned job id is the queue's own, not fabricated.
+      const queued = new WaterfallService(undefined, undefined, { enqueue: async () => ({ jobId: 'queue-job-1' }) });
+      const res = await queued.dispatchWaterfall(sampleRequest, randomUUID());
       expect(res.totalQueued).toBe(3);
-      expect(res.jobId).toMatch(/^job-/);
+      expect(res.jobId).toBe('queue-job-1');
     } finally {
       if (saved !== undefined) process.env.LEADLOOM_ENTITLEMENTS_ENFORCED = saved;
     }
@@ -84,7 +91,7 @@ describe('WaterfallService Entitlement Gating', () => {
       checkFeature: vi.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
       checkLimit: vi.fn().mockResolvedValue({ allowed: true, reason: 'ok', limit: 100, used: 10, remaining: 90 }),
     };
-    const service = new WaterfallService(port);
+    const service = new WaterfallService(port, undefined, { enqueue: async () => ({ jobId: 'queue-job-entitled' }) });
     const workspaceId = randomUUID();
 
     const res = await service.dispatchWaterfall(sampleRequest, workspaceId);
@@ -92,6 +99,7 @@ describe('WaterfallService Entitlement Gating', () => {
     expect(port.checkFeature).toHaveBeenCalledWith(workspaceId, 'waterfall');
     expect(port.checkLimit).toHaveBeenCalledWith(workspaceId, 'enrichment_credits_per_month', 3);
     expect(res.totalQueued).toBe(3);
+    expect(res.jobId).toBe('queue-job-entitled');
   });
 
   it('rejects dispatch when feature is not permitted (e.g. no_plan, feature_not_in_plan, billing_inactive)', async () => {
@@ -156,18 +164,23 @@ describe('WaterfallService Entitlement Gating', () => {
       checkFeature: vi.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
       checkLimit: vi.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
     };
-    const service = new WaterfallService(port);
+    const enqueued: Array<{ workspaceId?: string }> = [];
+    const service = new WaterfallService(port, undefined, {
+      enqueue: async (input) => { enqueued.push(input); return { jobId: 'queue-job-ws' }; },
+    });
     const controller = new WaterfallController(service);
     const workspaceId = randomUUID();
 
     const res = await controller.dispatch(sampleRequest, workspaceId);
     expect(res.totalQueued).toBe(3);
+    // Tenant binding flows from the session through to the queue, never from the body.
+    expect(enqueued[0]?.workspaceId).toBe(workspaceId);
     expect(port.checkFeature).toHaveBeenCalledWith(workspaceId, 'waterfall');
     expect(port.checkLimit).toHaveBeenCalledWith(workspaceId, 'enrichment_credits_per_month', 3);
   });
 
   it('confirms raw payload never reaches API dispatch response or executeSingleRow response', async () => {
-    const service = new WaterfallService();
+    const service = new WaterfallService(undefined, undefined, { enqueue: async () => ({ jobId: 'queue-job-shape' }) });
     const workspaceId = randomUUID();
 
     // 1. Dispatch response must strictly match DispatchWaterfallResponseSchema with no raw field

@@ -138,9 +138,14 @@ export function InviteMemberDialog({
         return;
       }
 
-      // Success: Per rule, inform that no email was sent
+      // Success copy follows the server's actual emailSent value; never claim a send that did not happen.
+      const sent = res.data?.emailSent;
       setSuccessNotice(
-        'No email was sent. Tell them to sign in (or sign up) with this address, then open Settings and accept the invitation.'
+        sent === true
+          ? `An invitation email was sent to ${trimmedEmail}. They can also sign in and accept it from Settings.`
+          : sent === false
+            ? 'The invitation was created but the email could not be sent. Tell them to sign in (or sign up) with this address, then open Settings and accept the invitation.'
+            : 'No email was sent. Tell them to sign in (or sign up) with this address, then open Settings and accept the invitation.'
       );
       notify.success('Invitation created.');
       onInviteSuccess();

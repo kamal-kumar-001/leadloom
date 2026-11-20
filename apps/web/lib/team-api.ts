@@ -35,7 +35,8 @@ export interface MyInvitation {
 
 export interface InviteCreateResponse {
   invitation?: TeamInvitation;
-  emailSent: boolean;
+  /** true: mail sent; false: mail attempted and failed; 'disabled': no mailer wired (nothing sent). */
+  emailSent: boolean | 'disabled';
 }
 
 export interface AcceptInvitationResponse {

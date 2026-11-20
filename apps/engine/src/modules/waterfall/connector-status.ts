@@ -21,6 +21,8 @@ export interface RegisteredConnectorInfo {
   id: string;
   name: string;
   capabilities: ConnectorCapability[];
+  /** True only when the engine has a real test-connection probe for this connector. */
+  testable: boolean;
 }
 
 export interface ConnectorStatusRow {
@@ -34,6 +36,7 @@ export interface ConnectorStatusRow {
   verified: boolean;
   lastVerifiedAt: string | null;
   updatedAt: string | null;
+  testable: boolean;
 }
 
 export function reconcileConnectorStatus(
@@ -57,6 +60,7 @@ export function reconcileConnectorStatus(
       verified: Boolean(cred?.isValid),
       lastVerifiedAt: cred?.lastVerifiedAt ? cred.lastVerifiedAt.toISOString() : null,
       updatedAt: cred ? cred.updatedAt.toISOString() : null,
+      testable: c.testable,
     };
   });
 }

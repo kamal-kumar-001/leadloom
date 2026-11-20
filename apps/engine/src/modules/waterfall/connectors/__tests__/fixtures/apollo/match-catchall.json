@@ -1,0 +1,9 @@
+{
+  "person": {
+    "email": "info@northstar.example",
+    "email_status": "catchall",
+    "first_name": "Jordan",
+    "last_name": "Blake",
+    "organization": { "name": "Northstar Analytics" }
+  }
+}

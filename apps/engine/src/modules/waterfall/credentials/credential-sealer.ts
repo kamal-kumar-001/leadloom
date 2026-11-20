@@ -1,16 +1,26 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { CredentialSecurityError } from './credential-store.port';
+import { VaultService, type EncryptedPayload } from '../../vault/vault.service';
 
-const ALGORITHM = 'aes-256-gcm';
 const KEY_BYTES = 32;
-const IV_BYTES = 12;
-const TAG_BYTES = 16;
 
+/**
+ * C2: the waterfall connector sealer is a THIN FACADE over modules/vault.
+ * All encryption is the vault's ADR-001 envelope scheme (fresh DEK per record,
+ * DEK wrapped with the versioned KEK, GCM AAD binding) - there is no second
+ * key system. This file only adapts the connector-store API (base64 record
+ * shape, workspace+connector context) and keeps fail-closed KEK resolution.
+ * The only consumer is the in-memory store: no persisted ciphertext exists,
+ * so the format change migrates and rewrites nothing.
+ */
 export interface EncryptedRecord {
   ciphertext: string; // base64
   iv: string;         // base64
   authTag: string;    // base64
-  algorithm: typeof ALGORITHM;
+  wrappedDekCiphertext: string; // base64
+  wrappedDekIv: string;         // base64
+  wrappedDekAuthTag: string;    // base64
+  keyVersion: number;
+  algorithm: 'aes-256-gcm';
   workspaceId: string;
   connectorId: string;
   updatedAt: Date;
@@ -57,18 +67,52 @@ export function resolveKek(override?: Buffer | string): Buffer {
   );
 }
 
-/**
- * Derives Authenticated Additional Data (AAD) binding ciphertext to the workspace & connector context.
- */
-function buildAad(workspaceId: string, connectorId: string): Buffer {
+/** Single-version keyring over the resolved KEK; rotation arrives with the vault's versioned ring. */
+function vaultFor(kekOverride?: Buffer | string): VaultService {
+  return new VaultService({ currentVersion: 1, keys: new Map([[1, resolveKek(kekOverride)]]) });
+}
+
+/** Vault context for connector credentials: credentialId = connectorId, provider fixed. */
+function contextOf(workspaceId: string, connectorId: string) {
   if (!workspaceId || !connectorId) {
     throw new CredentialSecurityError('workspaceId and connectorId required for sealing context', 'INVALID_CONTEXT');
   }
-  return Buffer.from(JSON.stringify(['leadloom-connector-v1', workspaceId, connectorId]), 'utf8');
+  return { workspaceId, credentialId: connectorId, provider: 'waterfall-connector' };
+}
+
+function toRecord(payload: EncryptedPayload, workspaceId: string, connectorId: string): EncryptedRecord {
+  return {
+    ciphertext: payload.ciphertext.toString('base64'),
+    iv: payload.iv.toString('base64'),
+    authTag: payload.authTag.toString('base64'),
+    wrappedDekCiphertext: payload.wrappedDek.ciphertext.toString('base64'),
+    wrappedDekIv: payload.wrappedDek.iv.toString('base64'),
+    wrappedDekAuthTag: payload.wrappedDek.authTag.toString('base64'),
+    keyVersion: payload.keyVersion,
+    algorithm: 'aes-256-gcm',
+    workspaceId,
+    connectorId,
+    updatedAt: new Date(),
+  };
+}
+
+function toPayload(record: EncryptedRecord): EncryptedPayload {
+  return {
+    ciphertext: Buffer.from(record.ciphertext, 'base64'),
+    iv: Buffer.from(record.iv, 'base64'),
+    authTag: Buffer.from(record.authTag, 'base64'),
+    wrappedDek: {
+      ciphertext: Buffer.from(record.wrappedDekCiphertext, 'base64'),
+      iv: Buffer.from(record.wrappedDekIv, 'base64'),
+      authTag: Buffer.from(record.wrappedDekAuthTag, 'base64'),
+    },
+    keyVersion: record.keyVersion,
+    algorithm: 'aes-256-gcm',
+  };
 }
 
 /**
- * Seals an API key using AES-256-GCM with per-workspace context authentication.
+ * Seals an API key via the vault envelope, context-bound to workspace & connector.
  */
 export function sealCredential(
   plaintext: string,
@@ -79,31 +123,18 @@ export function sealCredential(
   if (!plaintext || typeof plaintext !== 'string') {
     throw new CredentialSecurityError('Plaintext credential string must be non-empty', 'INVALID_PLAINTEXT');
   }
-
-  const kek = resolveKek(kekOverride);
-  const iv = randomBytes(IV_BYTES);
-  const aad = buildAad(workspaceId, connectorId);
-
-  const cipher = createCipheriv(ALGORITHM, kek, iv, { authTagLength: TAG_BYTES });
-  cipher.setAAD(aad);
-
-  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-
-  return {
-    ciphertext: ciphertext.toString('base64'),
-    iv: iv.toString('base64'),
-    authTag: authTag.toString('base64'),
-    algorithm: ALGORITHM,
-    workspaceId,
-    connectorId,
-    updatedAt: new Date(),
-  };
+  const context = contextOf(workspaceId, connectorId);
+  const buffer = Buffer.from(plaintext, 'utf8');
+  try {
+    return toRecord(vaultFor(kekOverride).encrypt(buffer, context), workspaceId, connectorId);
+  } finally {
+    buffer.fill(0);
+  }
 }
 
 /**
- * Unseals an API key using AES-256-GCM, verifying workspace-bound authentication tag.
- * Throws CredentialSecurityError on tampering, corruption, or cross-workspace context mismatch.
+ * Unseals an API key via the vault, verifying workspace-bound authentication.
+ * Throws CredentialSecurityError on tampering, corruption, or cross-workspace mismatch.
  */
 export function unsealCredential(
   record: EncryptedRecord,
@@ -111,29 +142,22 @@ export function unsealCredential(
   connectorId: string,
   kekOverride?: Buffer | string
 ): string {
-  const kek = resolveKek(kekOverride);
-
-  // Cross-workspace or connector mismatch check
+  resolveKek(kekOverride); // fail closed before touching ciphertext
   if (record.workspaceId !== workspaceId || record.connectorId !== connectorId) {
     throw new CredentialSecurityError(
       'Credential context mismatch: stored record does not match requested workspace or connector',
       'CONTEXT_MISMATCH'
     );
   }
-
   try {
-    const iv = Buffer.from(record.iv, 'base64');
-    const authTag = Buffer.from(record.authTag, 'base64');
-    const ciphertext = Buffer.from(record.ciphertext, 'base64');
-    const aad = buildAad(workspaceId, connectorId);
-
-    const decipher = createDecipheriv(ALGORITHM, kek, iv, { authTagLength: TAG_BYTES });
-    decipher.setAAD(aad);
-    decipher.setAuthTag(authTag);
-
-    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    return plaintext.toString('utf8');
+    const buf = vaultFor(kekOverride).decrypt(toPayload(record), contextOf(workspaceId, connectorId));
+    try {
+      return buf.toString('utf8');
+    } finally {
+      buf.fill(0);
+    }
   } catch (err) {
+    if (err instanceof CredentialSecurityError) throw err;
     throw new CredentialSecurityError(
       `Credential unseal failed: ${err instanceof Error ? err.message : 'tampered or invalid ciphertext'}`,
       'DECRYPTION_FAILED'

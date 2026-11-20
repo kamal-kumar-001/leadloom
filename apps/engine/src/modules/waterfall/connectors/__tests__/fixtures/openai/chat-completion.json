@@ -1,0 +1,8 @@
+{
+  "id": "chatcmpl-synthetic0",
+  "model": "gpt-4o-mini",
+  "choices": [
+    { "message": { "role": "assistant", "content": "{\"summary\":\"synthetic\"}" }, "finish_reason": "stop" }
+  ],
+  "usage": { "prompt_tokens": 120, "completion_tokens": 40, "total_tokens": 160 }
+}

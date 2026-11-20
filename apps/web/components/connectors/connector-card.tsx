@@ -60,11 +60,15 @@ export function ConnectorCard({
     setTestResult(null);
     try {
       const res = await testConnectorPing(meta.id);
-      setTestResult({ latencyMs: res.latencyMs, success: res.success });
+      // Latency belongs to a real completed handshake only; a failed or disabled
+      // test must not wear a "0ms" readout that looks like a measured success.
+      setTestResult(res.success ? { latencyMs: res.latencyMs, success: true } : null);
       if (res.success) {
         notify.success(`[${meta.name}] Handshake verified (${res.latencyMs}ms)`);
       } else {
-        notify.error(`[${meta.name}] Verification did not complete.`);
+        // Surface the engine's own reason (DISABLED, admin role required, no saved key),
+        // never a generic message that hides it.
+        notify.error(`[${meta.name}] ${res.message}`);
       }
     } catch (err: unknown) {
       notify.error(err);

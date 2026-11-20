@@ -1,0 +1,7 @@
+{
+  "status": "success",
+  "result": "disposable",
+  "flags": ["disposable_email", "free_email_host"],
+  "suggested_correction": "",
+  "execution_time": 180
+}

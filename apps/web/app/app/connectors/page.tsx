@@ -66,6 +66,7 @@ export default function ConnectorsPage() {
               icon: d.icon,
               docsUrl: d.docsUrl,
               isLocal: d.isLocal,
+              testable: row.testable === true,
               keyStorageAvailable: VAULT_PROVIDERS.has(row.id),
             };
           });

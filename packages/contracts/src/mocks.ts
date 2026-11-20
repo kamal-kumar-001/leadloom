@@ -59,14 +59,14 @@ export const MOCK_TABLE_METADATA: TableMetadata = {
 
 export const MOCK_PREFLIGHT_RESPONSE: PreFlightEstimateResponse = {
   estimatedCostUSD: 0.96,
-  estimatedSeconds: 45,
+  costBasis: 'configured-assumptions',
+  executionNote: 'Providers are tried in tier order; a resolved row is not sent to later tiers.',
   totalRows: 240,
   tiers: [
     { tierIndex: 1, provider: 'apollo', unitCostUSD: 0.001, estimatedHitRate: 0.58 },
     { tierIndex: 2, provider: 'hunter', unitCostUSD: 0.003, estimatedHitRate: 0.28 },
     { tierIndex: 3, provider: 'dropcontact', unitCostUSD: 0.02, estimatedHitRate: 0.10 },
   ],
-  guaranteeNotice: 'Zero unnecessary external API calls guaranteed via early-exit short-circuiting',
 };
 
 export const MOCK_VALIDATION_SCORECARD: ValidationScorecardResponse = {

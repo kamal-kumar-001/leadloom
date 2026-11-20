@@ -45,6 +45,11 @@ export const WaterfallCellPayloadSchema = z.object({
     tier: z.number().int().optional(),
     latency_ms: z.number().int().nonnegative(),
     cost_microcents: z.number().int().nonnegative(),
+    /** TRUE when any step's cost is ASSUMED (fail-closed overcount at the
+     *  nominal rate because the provider's error/miss billing policy is
+     *  unverified), never a measured zero. Consumers must not present such
+     *  totals as measured spend. */
+    cost_assumed: z.boolean().optional(),
   }).optional(),
   trace: z.array(WaterfallStepTraceSchema).default([]),
   error_payload: z.object({
@@ -52,8 +57,34 @@ export const WaterfallCellPayloadSchema = z.object({
     message: z.string(),
     retryable: z.boolean(),
   }).optional(),
+  /** TRUE marks client-generated DEMO data (the demo canvas's Simulate action
+   *  and seeded sample rows). Consumers MUST visibly label it as sample data
+   *  and MUST NOT show its telemetry as a real provider result or charge. */
+  simulated: z.boolean().optional(),
 });
 export type WaterfallCellPayload = z.infer<typeof WaterfallCellPayloadSchema>;
+
+export const WaterfallJobStatusResponseSchema = z.object({
+  jobId: z.string().uuid(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled', 'needs_review']),
+  totalQueued: z.number().int().nonnegative(),
+  completedCount: z.number().int().nonnegative(),
+  uncertainCount: z.number().int().nonnegative(),
+  attempts: z.number().int().nonnegative(),
+  error: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type WaterfallJobStatusResponse = z.infer<typeof WaterfallJobStatusResponseSchema>;
+
+/** D3 review surface: WHICH rows finished with an uncertain provider outcome.
+ *  Ids only - row content stays grid territory. */
+export const WaterfallJobUncertainRowsResponseSchema = z.object({
+  jobId: z.string().uuid(),
+  uncertainRowIds: z.array(z.string().uuid()),
+  uncertainCount: z.number().int().nonnegative(),
+});
+export type WaterfallJobUncertainRowsResponse = z.infer<typeof WaterfallJobUncertainRowsResponseSchema>;
 
 export const PreFlightEstimateRequestSchema = z.object({
   columnId: z.string().uuid(),
@@ -63,7 +94,12 @@ export type PreFlightEstimateRequest = z.infer<typeof PreFlightEstimateRequestSc
 
 export const PreFlightEstimateResponseSchema = z.object({
   estimatedCostUSD: z.number().nonnegative(),
-  estimatedSeconds: z.number().nonnegative(),
+  // Provenance marker: the estimate is computed from engine-configured tier
+  // unit costs and hit rates, not from measured provider prices or observed
+  // hit rates. Consumers must label it accordingly, never as measured spend.
+  costBasis: z.literal('configured-assumptions'),
+  // Actual dispatch behavior, stated without any guarantee about call counts.
+  executionNote: z.literal('Providers are tried in tier order; a resolved row is not sent to later tiers.'),
   totalRows: z.number().int().positive(),
   tiers: z.array(z.object({
     tierIndex: z.number().int(),
@@ -71,7 +107,6 @@ export const PreFlightEstimateResponseSchema = z.object({
     unitCostUSD: z.number().nonnegative(),
     estimatedHitRate: z.number().min(0).max(1),
   })),
-  guaranteeNotice: z.literal('Zero unnecessary external API calls guaranteed via early-exit short-circuiting'),
 });
 export type PreFlightEstimateResponse = z.infer<typeof PreFlightEstimateResponseSchema>;
 

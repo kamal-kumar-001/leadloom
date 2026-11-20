@@ -1,3 +1,4 @@
+import { buildConnectorCatalog, BYOKProviderEnum } from '@leadloom/contracts';
 import React from 'react';
 import { Reveal } from './reveal';
 
@@ -5,8 +6,12 @@ import { Reveal } from './reveal';
  * Fact strip: true product facts, not customer proof (there are no customers
  * yet) and not process claims. Every item is verifiable in the product today.
  */
+// The vault save path accepts BYOKProviderEnum providers (contracts); the public
+// key-storage count derives from that enum, never from a hand-typed number.
+const KEY_PROVIDER_COUNT = BYOKProviderEnum.options.length;
+
 const FACTS = [
-  { big: '10', small: 'providers with encrypted key storage' },
+  { big: String(KEY_PROVIDER_COUNT), small: 'providers with encrypted key storage' },
   { big: 'AES-256-GCM', small: 'envelope encryption for stored keys' },
   { big: '0', small: 'marked up credits, now or later' },
   { big: 'Free', small: 'while LeadLoom is in early access' },

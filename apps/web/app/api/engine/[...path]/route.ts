@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { auth } from '../../../../auth';
 import { engineCall, mintBridgeToken } from '../../../../lib/engine-server';
+import { trustedClientIp } from '../../../../lib/client-ip';
 
 // Authenticated same-origin proxy to the engine. The browser never sees or sends an engine token:
 // this route attaches it from the server-side session. Fail closed on every doubt.
@@ -51,7 +52,8 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   const ct = req.headers.get('content-type');
   if (ct) headers['Content-Type'] = ct;
-  const fwd = req.headers.get('x-forwarded-for');
+  // Fail-closed: forward a client IP only from a sanitizing ingress, never raw client XFF.
+  const fwd = trustedClientIp(req.headers);
   if (fwd) headers['X-Forwarded-For'] = fwd;
 
   const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text();
@@ -60,9 +62,15 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
   try {
     const res = await engineCall(`/${joined}${url.search}`, { method: req.method, headers, body });
     const out = await res.text();
+    const outHeaders: Record<string, string> = { 'Content-Type': res.headers.get('content-type') || 'application/json', 'Cache-Control': 'no-store' };
+    // Forward the engine's CSP and nosniff when present (e.g. landing-draft HTML); never invent them.
+    const csp = res.headers.get('content-security-policy');
+    if (csp) outHeaders['Content-Security-Policy'] = csp;
+    const nosniff = res.headers.get('x-content-type-options');
+    if (nosniff) outHeaders['X-Content-Type-Options'] = nosniff;
     return new NextResponse(out || null, {
       status: res.status,
-      headers: { 'Content-Type': res.headers.get('content-type') || 'application/json', 'Cache-Control': 'no-store' },
+      headers: outHeaders,
     });
   } catch {
     return NextResponse.json({ error: 'Engine unavailable' }, { status: 503 });

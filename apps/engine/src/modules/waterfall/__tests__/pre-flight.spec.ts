@@ -18,7 +18,12 @@ describe('PreFlightEstimatorService — Cost & Hit Rate Prediction', () => {
     expect(result.totalRows).toBe(240);
     expect(result.estimatedCostUSD).toBeGreaterThan(0);
     expect(result.estimatedCostUSD).toBeLessThan(2.0); // Cost preserved via short-circuit decay
-    expect(result.guaranteeNotice).toBe('Zero unnecessary external API calls guaranteed via early-exit short-circuiting');
+    expect(result.costBasis).toBe('configured-assumptions');
+    expect(result.executionNote).toContain('tier order');
+    // No unsupported claims may come back: no call-count guarantee, and no
+    // invented time estimate (withheld until a measured latency model exists).
+    expect(result).not.toHaveProperty('estimatedSeconds');
+    expect(JSON.stringify(result)).not.toContain('guaranteed');
     expect(result.tiers).toHaveLength(3);
   });
 });

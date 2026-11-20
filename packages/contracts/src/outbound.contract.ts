@@ -170,3 +170,32 @@ export const CampaignJobsResponseSchema = z.object({
   jobs: z.array(CampaignJobRowSchema),
 });
 export type CampaignJobsResponse = z.infer<typeof CampaignJobsResponseSchema>;
+
+/**
+ * Delivery-event timeline for one job (GET /campaigns/:campaignId/jobs/:jobId/timeline).
+ * Every event maps to a recorded column; nothing is inferred. Status transition
+ * times are NOT separately recorded, so the current status is a summary field,
+ * never a timestamped event, and statusNote says so. Reply events carry
+ * classification only - no subject or body.
+ */
+export const JobTimelineEventSchema = z.object({
+  kind: z.enum(['queued', 'scheduled', 'dispatch_started', 'status_recorded', 'reply']),
+  at: z.string(),
+  note: z.string().optional(),
+  classification: z.string().optional(),
+});
+export type JobTimelineEvent = z.infer<typeof JobTimelineEventSchema>;
+
+export const JobTimelineResponseSchema = z.object({
+  campaign: z.object({ id: z.string().uuid(), name: z.string(), status: z.string() }),
+  job: z.object({
+    id: z.string().uuid(),
+    recipientEmail: z.string().email(),
+    stepNumber: z.number().int(),
+    status: z.string(),
+    attempts: z.number().int(),
+  }),
+  statusNote: z.string(),
+  events: z.array(JobTimelineEventSchema),
+});
+export type JobTimelineResponse = z.infer<typeof JobTimelineResponseSchema>;

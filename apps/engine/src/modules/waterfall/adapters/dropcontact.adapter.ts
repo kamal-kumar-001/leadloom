@@ -1,5 +1,5 @@
 import { BYOKProvider } from '@leadloom/contracts';
-import { BaseProviderAdapter, ProviderExecutionInput, ProviderExecutionOutput } from './base-provider.adapter';
+import { BaseProviderAdapter, ProviderExecutionInput, ProviderExecutionOutput, ProviderOutcomeUnknownError } from './base-provider.adapter.js';
 
 export class DropcontactAdapter extends BaseProviderAdapter {
   readonly provider: BYOKProvider = 'dropcontact';
@@ -43,7 +43,11 @@ export class DropcontactAdapter extends BaseProviderAdapter {
           confidence: 0,
           status: 'rate_limited',
           latencyMs,
-          costMicrocents: 0,
+          // UNKNOWN BILLING, recorded explicitly: the provider ANSWERED; its
+          // error-response billing policy is unverified, so this is an
+          // ESTIMATE at the nominal rate - not measured, not a proven maximum.
+          costMicrocents: this.nominalCostMicrocents,
+          costAssumed: true,
           errorMessage: 'Dropcontact rate limit reached',
         };
       }
@@ -54,7 +58,8 @@ export class DropcontactAdapter extends BaseProviderAdapter {
           confidence: 0,
           status: 'error',
           latencyMs,
-          costMicrocents: 0,
+          costMicrocents: this.nominalCostMicrocents,
+          costAssumed: true,
           errorMessage: `Dropcontact error HTTP ${response.status}`,
         };
       }
@@ -74,7 +79,11 @@ export class DropcontactAdapter extends BaseProviderAdapter {
           status: 'hit',
           verification: isNominal ? 'deliverable' : 'risky',
           latencyMs,
+          // ESTIMATE at the nominal rate: no provider-reported usage is
+          // consumed yet (e.g. Hunter's documented X-Credits-Used header), so
+          // even a successful charge is unverified, never labeled measured.
           costMicrocents: this.nominalCostMicrocents,
+          costAssumed: true,
           rawResponse: data as Record<string, unknown>,
         };
       }
@@ -84,17 +93,19 @@ export class DropcontactAdapter extends BaseProviderAdapter {
         confidence: 0,
         status: 'miss',
         latencyMs,
+        // Provider answered with no match; whether a miss is billed is
+        // policy-dependent and UNVERIFIED - estimated at the nominal rate,
+        // not measured and not a ceiling.
         costMicrocents: this.nominalCostMicrocents,
+        costAssumed: true,
       };
     } catch (err) {
-      return {
-        email: null,
-        confidence: 0,
-        status: 'error',
-        latencyMs: Date.now() - startTime,
-        costMicrocents: 0,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      };
+      // D2 billing-integrity contract: a fetch-layer failure means the request
+      // may have been submitted and charged - outcome UNKNOWN. Throw so the
+      // worker classifies the row uncertain; never return a normalized
+      // error-with-cost-0 result. (Provider-ANSWERED HTTP errors above remain
+      // returned results, fail-closed at the nominal rate with costAssumed.)
+      throw new ProviderOutcomeUnknownError(err instanceof Error ? err.message : String(err));
     }
   }
 }

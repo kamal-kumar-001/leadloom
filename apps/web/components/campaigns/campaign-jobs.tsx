@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Card, Button, Badge } from '@leadloom/ui';
 import { notify } from '@/lib/notify';
 import { RefreshCw } from 'lucide-react';
-import { fetchCampaignJobs, type CampaignJobRow } from '../../lib/engine-client';
+import { fetchCampaignJobs, fetchJobTimeline, type CampaignJobRow, type JobTimelineResponse } from '../../lib/engine-client';
+import { JobTimeline } from './job-timeline';
 
 /**
  * Per-recipient job drill-down: the queue rows the scheduler holds for one
@@ -22,6 +23,28 @@ function fmt(iso: string | null): string {
 export function CampaignJobs({ campaignId, campaignName }: { campaignId: string; campaignName: string }) {
   const [jobs, setJobs] = useState<CampaignJobRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [timelineFor, setTimelineFor] = useState<string | null>(null);
+  const [timeline, setTimeline] = useState<JobTimelineResponse | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+
+  const toggleTimeline = useCallback(async (jobId: string) => {
+    if (timelineFor === jobId) {
+      setTimelineFor(null);
+      setTimeline(null);
+      return;
+    }
+    setTimelineFor(jobId);
+    setTimeline(null);
+    setTimelineLoading(true);
+    const res = await fetchJobTimeline(campaignId, jobId);
+    if (res.error) {
+      notify.error(res.error);
+      setTimelineFor(null);
+    } else if (res.data && res.data.job.id === jobId) {
+      setTimeline(res.data);
+    }
+    setTimelineLoading(false);
+  }, [campaignId, timelineFor]);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -64,17 +87,33 @@ export function CampaignJobs({ campaignId, campaignName }: { campaignId: string;
             <span>Updated</span>
           </div>
           {jobs.map((j) => (
-            <div key={j.id} className="grid grid-cols-[1.4fr_auto_auto_1fr_auto_1fr] gap-4 px-3 py-1.5 text-xs">
-              <span className="font-mono text-text-primary break-all">{j.recipientEmail}</span>
-              <span className="text-text-secondary">{j.stepNumber}</span>
-              <span>
-                <Badge variant={j.status === 'sent' ? 'verified' : j.status === 'failed' ? 'muted' : 'subtle'} className="text-[10px] font-mono">
-                  {j.status.toUpperCase()}
-                </Badge>
-              </span>
-              <span className="text-text-secondary">{fmt(j.scheduledAt)}</span>
-              <span className="text-text-secondary">{j.attempts}</span>
-              <span className="text-text-secondary">{fmt(j.updatedAt)}</span>
+            <div key={j.id}>
+              <button
+                type="button"
+                onClick={() => toggleTimeline(j.id)}
+                aria-expanded={timelineFor === j.id}
+                className="grid w-full grid-cols-[1.4fr_auto_auto_1fr_auto_1fr] gap-4 px-3 py-1.5 text-left text-xs hover:bg-surface-secondary"
+              >
+                <span className="font-mono text-text-primary break-all">{j.recipientEmail}</span>
+                <span className="text-text-secondary">{j.stepNumber}</span>
+                <span>
+                  <Badge variant={j.status === 'sent' ? 'verified' : j.status === 'failed' ? 'muted' : 'subtle'} className="text-[10px] font-mono">
+                    {j.status.toUpperCase()}
+                  </Badge>
+                </span>
+                <span className="text-text-secondary">{fmt(j.scheduledAt)}</span>
+                <span className="text-text-secondary">{j.attempts}</span>
+                <span className="text-text-secondary">{fmt(j.updatedAt)}</span>
+              </button>
+              {timelineFor === j.id && (
+                <div className="border-t border-border-subtle bg-surface-secondary px-4 py-3">
+                  {timelineLoading && !timeline ? (
+                    <span className="text-xs text-text-muted">Loading timeline...</span>
+                  ) : timeline ? (
+                    <JobTimeline timeline={timeline} />
+                  ) : null}
+                </div>
+              )}
             </div>
           ))}
         </div>

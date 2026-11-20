@@ -35,28 +35,42 @@ export class HypothesisDecomposerService {
   }
 
   /**
-   * Decomposes raw hypothesis into structured ICP, high-converting copy, and founder sequence.
+   * Splits a promoted hypothesis into the idea statement and the optional
+   * "Positioning:" segment the pipeline promotion appends. Both are the
+   * founder's own words; nothing here invents product claims.
    */
-  public decompose(request: GenerateValidationRequest): DecomposedHypothesisOutput {
-    const { rawHypothesis, preferredSlug } = request;
-    const slug = this.generateSlug(rawHypothesis, preferredSlug);
+  private splitPositioning(raw: string): { idea: string; positioning: string | null } {
+    const parts = raw.split(/\s+positioning:\s*/i);
+    const idea = (parts[0] || '').replace(/\s+/g, ' ').trim();
+    const positioning =
+      parts.length > 1 ? parts.slice(1).join(' ').replace(/\s+/g, ' ').trim() : null;
+    return { idea, positioning: positioning && positioning.length > 0 ? positioning : null };
+  }
 
-    // Heuristic extraction for domain keywords
-    const lower = rawHypothesis.toLowerCase();
+  private firstSentence(text: string): string {
+    const m = text.match(/^(.{10,160}?[.!?])(\s|$)/);
+    return (m ? m[1] : text).trim();
+  }
+
+  private trimAtWord(text: string, max: number): string {
+    const clean = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (clean.length <= max) return clean;
+    const cut = clean.slice(0, max);
+    const boundary = cut.lastIndexOf(' ');
+    return (boundary > 20 ? cut.slice(0, boundary) : cut).replace(/[.,;:!?-]+$/, '').trim();
+  }
+
+  /**
+   * ICP targeting hints remain keyword-bucket heuristics (PRD 5.2); they steer
+   * lead sourcing only and are never shown to page visitors.
+   */
+  private icpFor(lower: string): ValidationICPSpec {
     const isDevOpsOrCloud = lower.includes('kubernetes') || lower.includes('k8s') || lower.includes('cloud') || lower.includes('infra');
     const isSalesOrRevOps = lower.includes('sales') || lower.includes('gtm') || lower.includes('outbound') || lower.includes('lead');
     const isAiOrMl = lower.includes('ai') || lower.includes('llm') || lower.includes('agent');
 
-    let icp: ValidationICPSpec;
-    let title: string;
-    let headline: string;
-    let subheadline: string;
-    let surveyQuestion1: string;
-    let surveyQuestion2: string;
-    let surveyOptions2: string[];
-
     if (isDevOpsOrCloud) {
-      icp = {
+      return {
         targetTitles: ['VP of Engineering', 'Head of Infrastructure', 'DevOps Lead', 'Cloud Architect'],
         companyHeadcount: '25-150 employees (Series A / B)',
         buyingSignals: [
@@ -66,14 +80,9 @@ export class HypothesisDecomposerService {
         ],
         sampleKeywords: ['Kubernetes', 'EKS', 'GKE', 'FinOps', 'Terraform', 'Cloud Costs'],
       };
-      title = 'Kubernetes Cost Intelligence - Early Access';
-      headline = 'Kubernetes cost visibility for lean engineering teams';
-      subheadline = 'We are exploring whether continuous cluster right-sizing and spot allocation matter to teams without a dedicated FinOps lead. Join the early-access list and help shape what gets built.';
-      surveyQuestion1 = 'What was your biggest surprise in last month’s cloud infrastructure bill?';
-      surveyQuestion2 = 'How many engineers work on infrastructure at your company?';
-      surveyOptions2 = ['1-3 engineers', '4-10 engineers', '10+ engineers'];
-    } else if (isSalesOrRevOps) {
-      icp = {
+    }
+    if (isSalesOrRevOps) {
+      return {
         targetTitles: ['VP of Sales', 'Head of RevOps', 'Head of Growth', 'Founder & CEO'],
         companyHeadcount: '10-75 employees',
         buyingSignals: [
@@ -83,14 +92,9 @@ export class HypothesisDecomposerService {
         ],
         sampleKeywords: ['Outbound', 'Cold Email', 'Enrichment', 'Deliverability', 'RevOps'],
       };
-      title = 'Provider-Direct Data Enrichment - Early Access';
-      headline = 'Data enrichment with providers you pay directly';
-      subheadline = 'We are testing whether running enrichment with your own provider keys beats buying bundled credits. Join the early-access list and tell us how your team buys data today.';
-      surveyQuestion1 = 'How does your team buy B2B contact data today?';
-      surveyQuestion2 = 'What is your current monthly budget for B2B lead enrichment tools?';
-      surveyOptions2 = ['<$500/mo', '$500-$2,000/mo', '>$2,000/mo'];
-    } else if (isAiOrMl) {
-      icp = {
+    }
+    if (isAiOrMl) {
+      return {
         targetTitles: ['CTO', 'Head of AI', 'Lead ML Engineer', 'Principal AI Architect'],
         companyHeadcount: '15-100 employees',
         buyingSignals: [
@@ -100,31 +104,39 @@ export class HypothesisDecomposerService {
         ],
         sampleKeywords: ['LLM', 'RAG', 'Agentic Workflows', 'Vector DB', 'OpenAI'],
       };
-      title = 'LLM Reliability Tooling - Early Access';
-      headline = 'Structured outputs and fallbacks for production LLM workflows';
-      subheadline = 'We are exploring reliability tooling for agentic workflows. Join the early-access list and share your biggest production bottleneck.';
-      surveyQuestion1 = 'Tell us about a recent LLM failure your team hit in production.';
-      surveyQuestion2 = 'What is your primary bottleneck with LLM agents in production?';
-      surveyOptions2 = ['Hallucinations', 'Token latency', 'API rate limits'];
-    } else {
-      // General B2B SaaS template
-      icp = {
-        targetTitles: ['Founder & CEO', 'VP Product', 'Head of Operations'],
-        companyHeadcount: '10-50 employees',
-        buyingSignals: [
-          'Recent funding announcement',
-          'Scaling headcount',
-          'Actively seeking workflow automation',
-        ],
-        sampleKeywords: ['Automation', 'SaaS', 'Workflow', 'Productivity'],
-      };
-      title = `${rawHypothesis.slice(0, 50)} - Early Access`;
-      headline = rawHypothesis;
-      subheadline = 'We are validating whether this problem is worth solving. Join the early-access list and tell us how your team handles it today.';
-      surveyQuestion1 = 'What is the most frustrating manual task your team deals with weekly?';
-      surveyQuestion2 = 'How many hours per week does your team lose to it?';
-      surveyOptions2 = ['1-5 hours/week', '5-15 hours/week', '15+ hours/week'];
     }
+    return {
+      targetTitles: ['Founder & CEO', 'VP Product', 'Head of Operations'],
+      companyHeadcount: '10-50 employees',
+      buyingSignals: [
+        'Recent funding announcement',
+        'Scaling headcount',
+        'Actively seeking workflow automation',
+      ],
+      sampleKeywords: ['Automation', 'SaaS', 'Workflow', 'Productivity'],
+    };
+  }
+
+  /**
+   * Decomposes raw hypothesis into structured ICP, hypothesis-grounded copy, and founder sequence.
+   * Visitor-facing copy always reflects the founder's own hypothesis text so the
+   * experiment measures demand for the idea that was actually entered.
+   */
+  public decompose(request: GenerateValidationRequest): DecomposedHypothesisOutput {
+    const { rawHypothesis, preferredSlug } = request;
+    const slug = this.generateSlug(rawHypothesis, preferredSlug);
+    const { idea, positioning } = this.splitPositioning(rawHypothesis);
+    const icp = this.icpFor(idea.toLowerCase());
+
+    const core = this.firstSentence(idea).replace(/[.!?]+$/, '');
+    const headline = this.trimAtWord(core, 110);
+    const title = `${this.trimAtWord(core, 36)} - Early Access`;
+    const subheadline = positioning
+      ? `${this.trimAtWord(positioning, 170)} Join the early-access list and tell us whether this fits your team.`
+      : 'We are validating whether this idea is worth building. Join the early-access list and tell us how your team handles it today.';
+    const surveyQuestion1 = 'How does your team handle this problem today? Walk us through your current workflow.';
+    const surveyQuestion2 = 'How urgent is this problem for your team?';
+    const surveyOptions2 = ['Not urgent', 'Worth fixing this quarter', 'Blocker - need a solution now'];
 
     const smokePage: SmokePageConfig = {
       slug,
@@ -148,9 +160,9 @@ export class HypothesisDecomposerService {
     };
 
     // Peer-to-peer non-salesy founder validation sequence
-    const sequenceSubject = `Quick question about ${rawHypothesis.slice(0, 60)}`;
+    const sequenceSubject = `Quick question about ${this.trimAtWord(idea, 60)}`;
     const sequenceBody = `Hey {{first_name}},\n\n` +
-      `We're researching ${rawHypothesis.toLowerCase()} for teams like {{company}}'s and put up a short early-access page describing the idea: /v/${slug}\n\n` +
+      `We're researching this idea for teams like {{company}}'s: ${this.trimAtWord(idea, 200)} We put up a short early-access page describing it: /v/${slug}\n\n` +
       `Nothing for sale here - is this a real headache for your team, or off the mark? A one-line reply either way genuinely helps.\n\n` +
       `Thanks,\n{{sender_name}}`;
 

@@ -1,0 +1,6 @@
+{
+  "model": "llama3",
+  "message": { "role": "assistant", "content": "Synthetic local answer." },
+  "total_duration": 123456789,
+  "eval_count": 42
+}

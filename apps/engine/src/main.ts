@@ -10,7 +10,7 @@ import { BYOKProviderEnum, CreateWorkspaceCampaignSchema } from '@leadloom/contr
 import { SlidingWindowLimiter } from './modules/auth/rate-limiter';
 import type { ProvisioningService } from './modules/provisioning/provisioning.service';
 import type { EntitlementService } from './modules/entitlements/entitlements.service';
-import type { FeatureKey } from '@leadloom/contracts';
+import { FeatureKeySchema, LimitKeySchema, type FeatureKey, type LimitKey } from '@leadloom/contracts';
 import { verifyBridgeToken } from './modules/auth/nextauth-bridge';
 import { canWrite, isAdmin } from './modules/auth/rbac';
 import { issueSession } from './modules/auth/issuer';
@@ -61,17 +61,22 @@ export interface RuntimeServices {
  unsubscribeKey?: Buffer;
  /** Optional: mounted send worker (default off; LEADLOOM_WORKER_ENABLED). The app starts it after init and stops it on close. Sending itself stays separately gated on the repository's sendingEnabled flag. */
  outboundWorker?: { start(): void; stop(): void };
+ /** Optional: mounted durable waterfall dispatch loop (default off;
+  *  LEADLOOM_WATERFALL_DURABLE_DISPATCH + connected database). Already started
+  *  by the mount seam; the app stops it on close. Jobs stay inert until the
+  *  proposed D2 migration is applied on the host. */
+ waterfallDispatch?: { stop(): void };
  /** Honest report of the send gate actually applied to the outbound repository (LEADLOOM_OUTBOUND_SENDING_ENABLED). */
  outboundSendingEnabled?: boolean;
  /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
- reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listTableRows'|'listMailboxes'|'listCampaigns'|'listCampaignJobs'|'listSuppressions'|'listExperiments'>;
+ reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listTableRows'|'listMailboxes'|'listCampaigns'|'listCampaignJobs'|'listJobTimeline'|'listSuppressions'|'listExperiments'>;
  /** Optional: admin-only workspace invitations (default off; LEADLOOM_TEAM_INVITES_ENABLED). Sends no mail. */
  invitations?: Pick<InvitationService,'invite'|'list'|'revoke'|'mine'|'accept'>;
  members?: Pick<MemberService,'list'|'setRole'|'remove'>;
  /** Optional: admin-only mailbox connect by IMAP/SMTP password (default off; LEADLOOM_MAILBOX_CONNECT_ENABLED). Sends no mail. */
  mailboxConnect?: Pick<MailboxConnectService,'connect'|'test'|'remove'>;
  /** Optional: mounted only when provided (main gates them behind explicit env flags). */
- waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'>;
+ waterfall?: Pick<WaterfallController,'getPreFlightEstimate'|'dispatch'|'getJobStatus'|'getJobUncertainRows'>;
  /** Optional: read-only waterfall connector registry reconciled with stored BYOK credentials (masked only). */
  waterfallConnectors?: { list(workspaceId: string): Promise<unknown> };
  connectorTest?: import('./modules/waterfall/connectors/test-connection.service.js').TestConnectionService;
@@ -90,6 +95,18 @@ export interface RuntimeServices {
  entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'>;
 }
 export async function createApplication(services?:RuntimeServices) {
+ // Client IP for per-IP limiters: trust X-Forwarded-For only when the peer is
+ // loopback (our own web proxy); direct non-loopback callers cannot spoof it.
+ // Recorded deployment prerequisite: the ingress strips client-supplied XFF
+ // (PUMPGTM_GAP G13). Until then the global ceilings are the backstop.
+ const clientIp=(request:any):string=>{
+  const peer=String(request.ip??'unknown');
+  if(peer==='127.0.0.1'||peer==='::1'||peer==='::ffff:127.0.0.1'){
+   const fwd=String(request.headers?.['x-forwarded-for']??'').split(',')[0].trim();
+   if(fwd)return fwd;
+  }
+  return peer;
+ };
  const app=await NestFactory.create<NestFastifyApplication>(RuntimeModule,new FastifyAdapter({bodyLimit:65536}),{logger:['error','warn']});
  const fastify=app.getHttpAdapter().getInstance();
  if(services) {
@@ -128,7 +145,7 @@ export async function createApplication(services?:RuntimeServices) {
     try {
      email=verifyBridgeToken(String(request.headers.authorization??'').replace(/^Bearer /,''),services.nextAuthBridgeKey!).email;
     } catch {return reply.code(401).send({error:'Authentication required'});}
-    if(!provisionLimiter.take('ip:'+String(request.ip))||!provisionLimiter.take('global')) return reply.code(429).send({error:'Too many requests'});
+    if(!provisionLimiter.take('ip:'+clientIp(request))||!provisionLimiter.take('global')) return reply.code(429).send({error:'Too many requests'});
     const name=typeof request.body?.name==='string'?request.body.name:null;
     try {
      await services.passwordAccounts?.claimByProvider(email);
@@ -149,6 +166,31 @@ export async function createApplication(services?:RuntimeServices) {
    reply.code(403).send({error:'Not available on the current plan',reason:decision.reason,feature});
    return false;
   };
+  if(services.entitlements){
+   // The one place the web learns plan decisions (GATING.md: the engine
+   // decides, the web only renders). Session-bound; keys validated against
+   // the shared contract. Default-off: unmounted when entitlements are not
+   // configured, exactly like the enforcement it reports on.
+   fastify.get('/entitlements/decision',async(request:any,reply:any)=>{
+    const s=await authorize(request,reply);if(!s)return;
+    const q=(request.query??{}) as Record<string,unknown>;
+    const out:{feature?:{key:FeatureKey;decision:unknown};limit?:{key:LimitKey;decision:unknown}}={};
+    if(q.feature!==undefined){
+     const f=FeatureKeySchema.safeParse(q.feature);
+     if(!f.success)return reply.code(400).send({error:'Unknown feature key'});
+     out.feature={key:f.data,decision:await services.entitlements!.checkFeature(s.workspaceId,f.data)};
+    }
+    if(q.limit!==undefined){
+     const l=LimitKeySchema.safeParse(q.limit);
+     if(!l.success)return reply.code(400).send({error:'Unknown limit key'});
+     const requested=q.requested===undefined?1:Number(q.requested);
+     if(!Number.isInteger(requested)||requested<1||requested>1000000)return reply.code(400).send({error:'requested must be a positive integer'});
+     out.limit={key:l.data,decision:await services.entitlements!.checkLimit(s.workspaceId,l.data,requested)};
+    }
+    if(!out.feature&&!out.limit)return reply.code(400).send({error:'feature or limit query is required'});
+    return out;
+   });
+  }
   if(services.reads){
    const reads=services.reads;
    fastify.get('/workspace/summary',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.summary(s.workspaceId);});
@@ -181,6 +223,17 @@ export async function createApplication(services?:RuntimeServices) {
     if(!result)return reply.code(404).send({error:'Campaign not found'});
     return reply.code(200).send(result);
    });
+   // Delivery-event timeline for one job: tenant check inside the read service
+   // (null -> 404, no existence leak). Events map to recorded columns only.
+   fastify.get('/campaigns/:campaignId/jobs/:jobId/timeline',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false);if(!session)return;
+    const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
+    const jobId=z.string().uuid().safeParse((request.params as any)?.jobId);
+    if(!campaignId.success||!jobId.success)return reply.code(400).send({error:'Invalid campaign or job id'});
+    const result=await reads.listJobTimeline(session.workspaceId,campaignId.data,jobId.data);
+    if(!result)return reply.code(404).send({error:'Job not found'});
+    return reply.code(200).send(result);
+   });
   }
   if(services.invitations) {
    const inv=services.invitations;
@@ -205,7 +258,7 @@ export async function createApplication(services?:RuntimeServices) {
     if(!inviteLimiter.take(s.workspaceId))return reply.code(429).send({error:'Too many requests'});
     const p=InviteBody.safeParse(request.body);if(!p.success)return reply.code(400).send({error:'Invalid invitation request',code:'invalid_request'});
     const r=await inv.invite(s.workspaceId,s.sub,p.data.email,p.data.role);
-    if(r.ok)return reply.code(201).send({invitation:r.invitation,emailSent:false});
+    if(r.ok)return reply.code(201).send({invitation:r.invitation,emailSent:r.emailSent});
     const status=r.reason==='limit_reached'?429:r.reason==='owner_only'?403:r.reason==='account_exists'||r.reason==='already_invited'?409:400;
     return reply.code(status).send({error:'Invitation not created',code:r.reason});
    });
@@ -288,8 +341,11 @@ export async function createApplication(services?:RuntimeServices) {
   // the stored key is not even decrypted. On a completed live test the result
   // persists as isValid/lastVerifiedAt on the credential row.
   const TEST_COST_DISCLOSURE='A live test sends a real request to the provider and may consume quota, credits, or tokens.';
+  // Admin-gated per plan (C3: session + admin): a live test spends the
+  // workspace's provider quota, so non-admin writers must not trigger it.
   fastify.post('/vault/credentials/:provider/test',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
+   if(!isAdmin(session))return reply.code(403).send({error:'Admin role required',costDisclosure:TEST_COST_DISCLOSURE});
    const provider=BYOKProviderEnum.safeParse(request.params.provider);
    if(!provider.success)return reply.code(400).send({error:'Unknown provider'});
    if(process.env.LEADLOOM_CONNECTORS_LIVE_ENABLED!=='true')
@@ -499,8 +555,44 @@ export async function createApplication(services?:RuntimeServices) {
    fastify.post('/waterfall/dispatch',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
     if(!await allowed(reply,session.workspaceId,'waterfall'))return;
-    try{return await services.waterfall!.dispatch(request.body);}
-    catch{return reply.code(400).send({error:'Invalid waterfall dispatch request'});}
+    try{return await services.waterfall!.dispatch(request.body,session.workspaceId);}
+    catch(err:any){
+     if(err&&err.name==='WaterfallDispatchUnavailableError')
+      return reply.code(503).send({error:'Waterfall dispatch unavailable',message:'Durable job persistence is not implemented yet; nothing was queued.',queued:false});
+     return reply.code(400).send({error:'Invalid waterfall dispatch request'});
+    }
+   });
+   // D3 status read (local, default-off with the rest of this block; honest
+   // 503 without a durable store, tenant-fenced 404 for foreign jobs).
+   fastify.get('/waterfall/jobs/:id',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    if(!await allowed(reply,session.workspaceId,'waterfall'))return;
+    const id=(request.params as any)?.id;
+    if(typeof id!=='string'||!/^[0-9a-f-]{36}$/i.test(id))return reply.code(400).send({error:'Invalid job id'});
+    try{return await services.waterfall!.getJobStatus(id,session.workspaceId);}
+    catch(err:any){
+     if(err&&err.name==='WaterfallDispatchUnavailableError')
+      return reply.code(503).send({error:'Waterfall dispatch unavailable',message:'Durable job persistence is not implemented yet; no status can be read.',queued:false});
+     if(err&&err.name==='WaterfallJobNotFoundError')
+      return reply.code(404).send({error:'Waterfall job not found'});
+     return reply.code(400).send({error:'Invalid waterfall status request'});
+    }
+   });
+   // D3 review surface: WHICH rows of a job are uncertain. Same session +
+   // tenant fence as the status read; ids only, never row content.
+   fastify.get('/waterfall/jobs/:id/uncertain-rows',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    if(!await allowed(reply,session.workspaceId,'waterfall'))return;
+    const id=(request.params as any)?.id;
+    if(typeof id!=='string'||!/^[0-9a-f-]{36}$/i.test(id))return reply.code(400).send({error:'Invalid job id'});
+    try{return await services.waterfall!.getJobUncertainRows(id,session.workspaceId);}
+    catch(err:any){
+     if(err&&err.name==='WaterfallDispatchUnavailableError')
+      return reply.code(503).send({error:'Waterfall dispatch unavailable',message:'Durable job persistence is not implemented yet; no review surface can be read.',queued:false});
+     if(err&&err.name==='WaterfallJobNotFoundError')
+      return reply.code(404).send({error:'Waterfall job not found'});
+     return reply.code(400).send({error:'Invalid waterfall review request'});
+    }
    });
   }
   // G4 buyer discovery, first increment: heuristic website-signal analysis.
@@ -687,7 +779,7 @@ export async function createApplication(services?:RuntimeServices) {
    // Precomputed dummy keeps unknown-user timing close to wrong-password timing.
    const DUMMY_HASH='scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
    fastify.post('/auth/login',async(request:any,reply:any)=>{
-    const ip=String(request.ip??'unknown');
+    const ip=clientIp(request);
     const now=Date.now();
     const recent=(attempts.get(ip)??[]).filter((t:number)=>now-t<WINDOW_MS);
     if(recent.length>=MAX_ATTEMPTS) return reply.code(429).send({error:'Too many login attempts'});
@@ -716,7 +808,7 @@ export async function createApplication(services?:RuntimeServices) {
    const Forgot=z.object({email:z.string().email().max(320)}).strict();
    const Reset=z.object({email:z.string().email().max(320),code:z.string().min(1).max(12),password:z.string().min(1).max(256)}).strict();
    const codeLimiter=new SlidingWindowLimiter(10,15*60_000);   // per target email, code checks (on top of 5 per code)
-   const limited=(request:any,reply:any)=>{ if(!ipLimiter.take(String(request.ip??'unknown'))){reply.code(429).send({error:'Too many requests'});return true;} return false; };
+   const limited=(request:any,reply:any)=>{ if(!ipLimiter.take(clientIp(request))){reply.code(429).send({error:'Too many requests'});return true;} return false; };
    const fail=(reply:any,e:unknown)=>{
     if(e instanceof WeakPasswordError) return reply.code(400).send({error:e.message});
     if(e instanceof InvalidCodeError) return reply.code(400).send({error:'This code is invalid or has expired'});
@@ -787,7 +879,7 @@ export async function createApplication(services?:RuntimeServices) {
  });
  await app.init();
  services?.outboundWorker?.start();
- fastify.addHook('onClose',async()=>{services?.outboundWorker?.stop();});
+ fastify.addHook('onClose',async()=>{services?.outboundWorker?.stop();services?.waterfallDispatch?.stop();});
  return app;
 }
 
@@ -831,7 +923,15 @@ if(require.main===module) {
    if(process.env.LEADLOOM_TEAM_INVITES_ENABLED==='true') {
     const {InvitationService}=await import('./modules/invitations/invitation.service.js');
     const {PrismaInvitationStore}=await import('./modules/invitations/prisma-invitation-store.js');
-    services.invitations=new InvitationService(new PrismaInvitationStore(prisma));
+    const {createTransactionalEmail}=await import('./modules/email/transactional.js');
+    let inviteMailer=createTransactionalEmail(process.env,(u,i)=>fetch(u,i as any) as any);
+    const inviteSinkFile=process.env.LEADLOOM_DEV_MAIL_SINK_FILE;
+    if(inviteSinkFile) {
+     if(process.env.NODE_ENV==='production')throw new Error('LEADLOOM_DEV_MAIL_SINK_FILE is not allowed in production');
+     const {FileDevMailSink}=await import('./modules/email/dev-sink.js');
+     inviteMailer=new FileDevMailSink(inviteSinkFile);
+    }
+    services.invitations=new InvitationService(new PrismaInvitationStore(prisma),{mailer:inviteMailer,appBaseUrl:process.env.APP_BASE_URL??'http://localhost:3000'});
     const {MemberService}=await import('./modules/invitations/members.js');
     const {PrismaMemberStore}=await import('./modules/invitations/prisma-member-store.js');
     services.members=new MemberService(new PrismaMemberStore(prisma));
@@ -865,12 +965,12 @@ if(require.main===module) {
     const {createDefaultConnectorRegistry}=await import('./modules/waterfall/connectors/registry.js');
     const {reconcileConnectorStatus}=await import('./modules/waterfall/connector-status.js');
     const registry=createDefaultConnectorRegistry();
-    const {TestConnectionService}=await import('./modules/waterfall/connectors/test-connection.service.js');
+    const {TestConnectionService,TESTABLE_CONNECTOR_IDS}=await import('./modules/waterfall/connectors/test-connection.service.js');
     services.connectorTest=new TestConnectionService(registry,services.entitlements as never);
     services.waterfallConnectors={list:async(workspaceId:string)=>{
      const creds=await prisma!.byokCredential.findMany({where:{workspaceId}});
      return reconcileConnectorStatus(
-      registry.list().map((c:any)=>({id:c.id,name:c.name,capabilities:c.capabilities})),
+      registry.list().map((c:any)=>({id:c.id,name:c.name,capabilities:c.capabilities,testable:TESTABLE_CONNECTOR_IDS.has(c.id)})),
       creds.map((c:any)=>({provider:c.provider,maskedKey:c.maskedKey,label:c.label,isValid:c.isValid,lastVerifiedAt:c.lastVerifiedAt,updatedAt:c.updatedAt})),
      );
     }};
@@ -878,7 +978,23 @@ if(require.main===module) {
    if(process.env.LEADLOOM_WATERFALL_API_ENABLED==='true') {
     const {WaterfallController}=await import('./modules/waterfall/waterfall.controller.js');
     const {WaterfallService}=await import('./modules/waterfall/waterfall.service.js');
-    services.waterfall=new WaterfallController(new WaterfallService());
+    const {DomainCacheService}=await import('./modules/waterfall/domain-cache.service.js');
+    // D1: with prisma present the domain cache is DB-backed (enrichment_cache,
+    // 30-day TTL, hit persistence across restarts); the in-memory map remains
+    // only for tests where no database exists.
+    const waterfallCache=new DomainCacheService(prisma);
+    const waterfallSvc=new WaterfallService(undefined,waterfallCache);
+    let waterfallQueue;
+    if(process.env.LEADLOOM_WATERFALL_DURABLE_DISPATCH==='true') {
+     // D2 default-off mount: assembles the durable queue + single-worker poll
+     // loop ONLY with a connected database; without one it logs loudly and the
+     // honest 503 posture stands. Jobs stay inert until the proposed migration
+     // is applied on the host (enrichment_jobs does not exist before then).
+     const {mountDurableWaterfallDispatch}=await import('./modules/waterfall/durable-dispatch.js');
+     const mounted=await mountDurableWaterfallDispatch({env:process.env,prisma,runner:waterfallSvc.getRunner()});
+     if(mounted){waterfallQueue=mounted.queue;services.waterfallDispatch=mounted;}
+    }
+    services.waterfall=new WaterfallController(waterfallQueue?new WaterfallService(undefined,waterfallCache,waterfallQueue):waterfallSvc);
    }
    // G4 research API: heuristic website signals (no LLM, no egress for pasted
    // text). URL fetching is a separate opt-in with the private-host rule.
@@ -906,6 +1022,7 @@ if(require.main===module) {
     const pubPg=new PgSharedLimiter((text,params)=>db.$queryRawUnsafe(text,...params) as Promise<Array<Record<string,unknown>>>,600_000);
     services.publicRateLimit=(key,max)=>pubPg.take(key,max);
    }
+
   }
   // G3 worker mount (default off; LEADLOOM_WORKER_ENABLED). The loop only ticks
   // dispatch; jobs become send-reservable solely through the gated release step

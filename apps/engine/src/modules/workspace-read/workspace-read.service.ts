@@ -11,8 +11,8 @@ export interface WorkspaceReadDb {
   cell: { findMany(a: any): Promise<any[]> };
   mailbox: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   campaign: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]>; findFirst(a: any): Promise<any> };
-  outboundJob: { groupBy(a: any): Promise<any[]>; findMany(a: any): Promise<any[]> };
-  inboundReply: { groupBy(a: any): Promise<any[]> };
+  outboundJob: { groupBy(a: any): Promise<any[]>; findMany(a: any): Promise<any[]>; findFirst(a: any): Promise<any> };
+  inboundReply: { groupBy(a: any): Promise<any[]>; findMany(a: any): Promise<any[]> };
   suppressionList: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   validationExperiment: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]> };
   byokCredential: { count(a: any): Promise<number> };
@@ -180,6 +180,60 @@ export class WorkspaceReadService {
         createdAt: j.createdAt?.toISOString?.() ?? j.createdAt,
         updatedAt: j.updatedAt?.toISOString?.() ?? j.updatedAt,
       })),
+    };
+  }
+
+  /**
+   * Delivery-event timeline for one job. Tenant-fenced: null for a foreign or
+   * unknown job (404 at the route, no existence leak). Every event maps to a
+   * recorded column - queued(createdAt), scheduled(scheduledAt, the planned
+   * send time), dispatch_started(reservedAt), reply(inboundReply.receivedAt).
+   * Status transition times are NOT separately recorded: updatedAt only gives
+   * the last record write, so the current status is a summary field and a
+   * status_recorded event is emitted only when updatedAt is later than every
+   * other timestamp (i.e. it carries information), labeled as a record update,
+   * never as the transition time. Reply events carry classification only.
+   */
+  async listJobTimeline(workspaceId: string, campaignId: string, jobId: string) {
+    const job = await this.db.outboundJob.findFirst({
+      where: { id: jobId, workspaceId, campaignId },
+      select: {
+        id: true, recipientEmail: true, stepNumber: true, status: true,
+        scheduledAt: true, reservedAt: true, attempts: true, createdAt: true, updatedAt: true,
+        campaign: { select: { id: true, name: true, status: true } },
+      },
+    });
+    if (!job) return null;
+    const replies = await this.db.inboundReply.findMany({
+      where: { workspaceId, outboundJobId: jobId },
+      select: { classification: true, receivedAt: true },
+      orderBy: { receivedAt: 'asc' },
+    });
+    const iso = (d: any) => (d?.toISOString ? d.toISOString() : String(d));
+    const events: Array<{ kind: string; at: string; note?: string; classification?: string }> = [
+      { kind: 'queued', at: iso(job.createdAt), note: 'job created' },
+      { kind: 'scheduled', at: iso(job.scheduledAt), note: 'planned send time' },
+    ];
+    if (job.reservedAt) events.push({ kind: 'dispatch_started', at: iso(job.reservedAt), note: 'worker claimed the job for dispatch' });
+    const updatedAt = iso(job.updatedAt);
+    if (!events.some((e) => e.at === updatedAt)) {
+      events.push({ kind: 'status_recorded', at: updatedAt, note: 'last record update; status transition times are not separately recorded' });
+    }
+    for (const r of replies as any[]) {
+      events.push({ kind: 'reply', at: iso(r.receivedAt), classification: r.classification, note: 'reply received' });
+    }
+    events.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    return {
+      campaign: job.campaign,
+      job: {
+        id: job.id,
+        recipientEmail: job.recipientEmail,
+        stepNumber: job.stepNumber,
+        status: job.status,
+        attempts: job.attempts,
+      },
+      statusNote: 'Status transition times are not separately recorded; events show only recorded timestamps.',
+      events,
     };
   }
 

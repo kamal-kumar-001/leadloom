@@ -96,6 +96,77 @@ describe('listCampaignJobs', () => {
   });
 });
 
+describe('listJobTimeline', () => {
+  const timelineDb = (job: any, replies: any[]) => {
+    const calls: any[] = [];
+    const db: any = {
+      outboundJob: {
+        findFirst: async (a: any) => {
+          calls.push(['job', 'findFirst', a]);
+          return job && a.where.workspaceId === job.workspaceId && a.where.campaignId === job.campaignId && a.where.id === job.id ? job : null;
+        },
+      },
+      inboundReply: { findMany: async (a: any) => { calls.push(['reply', 'findMany', a]); return replies; } },
+    };
+    return { calls, db };
+  };
+  const baseJob = {
+    id: 'j1', workspaceId: 'ws-1', campaignId: 'c1',
+    recipientEmail: 'ada@acme.test', stepNumber: 1, status: 'accepted', attempts: 1,
+    scheduledAt: new Date('2026-11-10T09:00:00Z'), reservedAt: new Date('2026-11-10T09:00:05Z'),
+    createdAt: new Date('2026-11-09T09:00:00Z'), updatedAt: new Date('2026-11-10T09:01:00Z'),
+    campaign: { id: 'c1', name: 'Q4 Outreach', status: 'active' },
+  };
+
+  it('returns null for another tenant\'s job id and never queries replies', async () => {
+    const { calls, db } = timelineDb(baseJob, []);
+    const svc = new WorkspaceReadService(db);
+    expect(await svc.listJobTimeline('ws-2', 'c1', 'j1')).toBeNull();
+    expect(await svc.listJobTimeline('ws-1', 'c-other', 'j1')).toBeNull();
+    expect(calls.filter((c) => c[0] === 'reply').length).toBe(0);
+  });
+
+  it('derives events only from recorded timestamps, in chronological order', async () => {
+    const { db } = timelineDb(baseJob, [
+      { classification: 'interested', receivedAt: new Date('2026-11-12T10:00:00Z') },
+      { classification: 'question', receivedAt: new Date('2026-11-11T10:00:00Z') },
+    ]);
+    const out = await new WorkspaceReadService(db).listJobTimeline('ws-1', 'c1', 'j1');
+    expect(out).not.toBeNull();
+    expect(out!.campaign).toEqual({ id: 'c1', name: 'Q4 Outreach', status: 'active' });
+    expect(out!.job.status).toBe('accepted');
+    expect(out!.statusNote).toMatch(/not separately recorded/);
+    const kinds = out!.events.map((e) => e.kind);
+    expect(kinds).toEqual(['queued', 'scheduled', 'dispatch_started', 'status_recorded', 'reply', 'reply']);
+    const ats = out!.events.map((e) => e.at);
+    expect([...ats].sort()).toEqual(ats);
+    expect(out!.events[0].at).toBe('2026-11-09T09:00:00.000Z');
+    const replyEvents = out!.events.filter((e) => e.kind === 'reply');
+    expect(replyEvents[0].classification).toBe('question');
+    expect(replyEvents[1].classification).toBe('interested');
+    const statusEvent = out!.events.find((e) => e.kind === 'status_recorded');
+    expect(statusEvent!.note).toMatch(/not separately recorded/);
+  });
+
+  it('omits dispatch_started without reservedAt and status_recorded when updatedAt adds nothing', async () => {
+    const job = { ...baseJob, reservedAt: null, updatedAt: baseJob.createdAt };
+    const { db } = timelineDb(job, []);
+    const out = await new WorkspaceReadService(db).listJobTimeline('ws-1', 'c1', 'j1');
+    const kinds = out!.events.map((e) => e.kind);
+    expect(kinds).toEqual(['queued', 'scheduled']);
+  });
+
+  it('selects no provider ids, idempotency keys, hashes or reply content', async () => {
+    const { calls, db } = timelineDb(baseJob, []);
+    await new WorkspaceReadService(db).listJobTimeline('ws-1', 'c1', 'j1');
+    const jobSel = Object.keys(calls.find((c) => c[0] === 'job')[2].select).join(',');
+    expect(jobSel).not.toMatch(/provider|idempotency|Hash|body|template/i);
+    const replySel = Object.keys(calls.find((c) => c[0] === 'reply')[2].select).join(',');
+    expect(replySel).not.toMatch(/subject|body|messageId|fromEmail/i);
+    expect(calls.find((c) => c[0] === 'reply')[2].where).toEqual({ workspaceId: 'ws-1', outboundJobId: 'j1' });
+  });
+});
+
 describe('listTableRows', () => {
   const wsDb = (workspaceId: string) => {
     const table = { id: 't1', workspaceId, name: 'Website research leads', rowCount: 1 };

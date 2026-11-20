@@ -1,11 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { reconcileConnectorStatus, type StoredConnectorCredential } from '../connector-status';
 import { createDefaultConnectorRegistry } from '../connectors/registry';
+import { TESTABLE_CONNECTOR_IDS } from '../connectors/test-connection.service';
 
 const registry = createDefaultConnectorRegistry();
-const connectors = registry.list().map((c: any) => ({ id: c.id, name: c.name, capabilities: c.capabilities }));
+const connectors = registry.list().map((c: any) => ({ id: c.id, name: c.name, capabilities: c.capabilities, testable: TESTABLE_CONNECTOR_IDS.has(c.id) }));
 
 describe('G6 connector status reconcile', () => {
+  it('surfaces testable only for connectors with a real probe, and every default-registry connector has one', () => {
+    for (const c of registry.list()) expect(TESTABLE_CONNECTOR_IDS.has(c.id)).toBe(true);
+    const rows = reconcileConnectorStatus(connectors, []);
+    expect(rows.every((r) => r.testable)).toBe(true);
+  });
+
   it('marks only connectors with a stored credential as configured, masked key only', () => {
     const creds: StoredConnectorCredential[] = [
       { provider: 'apollo', maskedKey: '••••••••abcd', label: 'work key', isValid: false, lastVerifiedAt: null, updatedAt: new Date('2026-11-10T08:00:00Z') },

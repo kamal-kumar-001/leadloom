@@ -1,0 +1,7 @@
+{
+  "status": "success",
+  "result": "catchall",
+  "flags": ["accepts_all", "has_dns_mx"],
+  "suggested_correction": "",
+  "execution_time": 233
+}

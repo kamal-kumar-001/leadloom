@@ -3,6 +3,7 @@ import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { createApplication } from './main';
 import { WaterfallController } from './modules/waterfall/waterfall.controller';
 import { WaterfallService } from './modules/waterfall/waterfall.service';
+import { WaterfallJobStatusResponseSchema, WaterfallJobUncertainRowsResponseSchema } from '@leadloom/contracts';
 import { ValidatorController } from './modules/validator/validator.controller';
 import { ValidatorService } from './modules/validator/validator.service';
 
@@ -26,6 +27,7 @@ describe('waterfall/validator route integration', () => {
       const auth = { authorization: 'Bearer ' + token() };
       expect((await server.inject({ method: 'POST', url: '/waterfall/pre-flight', headers: auth, payload: {} })).statusCode).toBe(404);
       expect((await server.inject({ method: 'POST', url: '/waterfall/dispatch', headers: auth, payload: {} })).statusCode).toBe(404);
+      expect((await server.inject({ method: 'GET', url: `/waterfall/jobs/${randomUUID()}`, headers: auth })).statusCode).toBe(404);
       expect((await server.inject({ method: 'POST', url: '/validator/experiments', headers: auth, payload: {} })).statusCode).toBe(404);
       expect((await server.inject({ method: 'POST', url: '/validator/pages/x/leads', payload: {} })).statusCode).toBe(404);
       const health = await server.inject({ method: 'GET', url: '/health' });
@@ -54,12 +56,116 @@ describe('waterfall/validator route integration', () => {
       expect(preFlight.json().totalRows).toBe(2);
       expect(preFlight.json().estimatedCostUSD).toBeGreaterThanOrEqual(0);
 
+      // D2 honest posture: no durable queue is mounted, so dispatch is 503
+      // unavailable with queued:false - never a fabricated job id.
       const dispatch = await server.inject({ method: 'POST', url: '/waterfall/dispatch', headers: auth, payload: body });
-      expect(dispatch.statusCode).toBe(200);
-      expect(dispatch.json().jobId).toMatch(/^job-/);
-      expect(dispatch.json().totalQueued).toBe(2);
+      expect(dispatch.statusCode).toBe(503);
+      expect(dispatch.json().queued).toBe(false);
+      expect(dispatch.json().message).toContain('not implemented');
+      expect(JSON.stringify(dispatch.json())).not.toContain('job-');
+
+      // Tenant spoofing: a foreign workspaceId in the body is rejected, never preferred.
+      const spoof = await server.inject({ method: 'POST', url: '/waterfall/dispatch', headers: auth, payload: { ...body, workspaceId: randomUUID() } });
+      expect(spoof.statusCode).toBe(400);
     } finally {
       await app.close();
+    }
+  });
+
+  it('D3 status read: auth + id validation + honest 503/404 + schema-valid 200, tenant-fenced', async () => {
+    const seen: Array<{ workspaceId: string; jobId: string }> = [];
+    const jobId = randomUUID();
+    const now = new Date();
+    const record = {
+      id: jobId,
+      status: 'running' as const,
+      totalQueued: 5,
+      completedRowIds: [randomUUID(), randomUUID()],
+      uncertainRowIds: [randomUUID()],
+      attempts: 1,
+      error: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const queueWithJob = {
+      enqueue: async () => ({ jobId }),
+      getJob: async (workspaceIdQ: string, jobIdQ: string) => {
+        seen.push({ workspaceId: workspaceIdQ, jobId: jobIdQ });
+        return record;
+      },
+    };
+    const queueWithoutJob = {
+      enqueue: async () => ({ jobId }),
+      getJob: async () => null,
+    };
+    const mount = (queue?: unknown) =>
+      createApplication({
+        ...stubCore(),
+        waterfall: new WaterfallController(new WaterfallService(undefined, undefined, queue as never)),
+      } as never);
+
+    // No queue reader at all: the same honest unavailable posture as dispatch.
+    const noQueue = await mount();
+    try {
+      const server = noQueue.getHttpAdapter().getInstance();
+      const auth = { authorization: 'Bearer ' + token() };
+      const res = await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}`, headers: auth });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().queued).toBe(false);
+    } finally {
+      await noQueue.close();
+    }
+
+    const app = await mount(queueWithJob);
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      const auth = { authorization: 'Bearer ' + token() };
+      expect((await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}` })).statusCode).toBe(401);
+      expect((await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}`, headers: { authorization: 'Bearer ' + token('read_only') } })).statusCode).toBe(403);
+      expect((await server.inject({ method: 'GET', url: '/waterfall/jobs/not-a-uuid', headers: auth })).statusCode).toBe(400);
+
+      const ok = await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}`, headers: auth });
+      expect(ok.statusCode).toBe(200);
+      const parsed = WaterfallJobStatusResponseSchema.safeParse(ok.json());
+      expect(parsed.success).toBe(true);
+      expect(ok.json()).toMatchObject({ jobId, status: 'running', totalQueued: 5, completedCount: 2, uncertainCount: 1, attempts: 1, error: null });
+      // Tenant fence: the read went through with the SESSION workspace id only.
+      expect(seen).toEqual([{ workspaceId, jobId }]);
+
+      // D3 review surface: WHICH rows are uncertain - ids only, same fence.
+      const review = await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}/uncertain-rows`, headers: auth });
+      expect(review.statusCode).toBe(200);
+      expect(WaterfallJobUncertainRowsResponseSchema.safeParse(review.json()).success).toBe(true);
+      expect(review.json()).toEqual({ jobId, uncertainRowIds: record.uncertainRowIds, uncertainCount: 1 });
+      expect(JSON.stringify(review.json())).not.toContain('@'); // no row content leaks
+      expect((await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}/uncertain-rows` })).statusCode).toBe(401);
+      expect((await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}/uncertain-rows`, headers: { authorization: 'Bearer ' + token('read_only') } })).statusCode).toBe(403);
+      expect((await server.inject({ method: 'GET', url: '/waterfall/jobs/not-a-uuid/uncertain-rows', headers: auth })).statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+
+    // A job the store cannot find for this workspace is a 404, never a leak.
+    const missing = await mount(queueWithoutJob);
+    try {
+      const server = missing.getHttpAdapter().getInstance();
+      const auth = { authorization: 'Bearer ' + token() };
+      expect((await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}`, headers: auth })).statusCode).toBe(404);
+      expect((await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}/uncertain-rows`, headers: auth })).statusCode).toBe(404);
+    } finally {
+      await missing.close();
+    }
+
+    // No reader at all: the review surface shares the unavailable posture.
+    const noReader = await mount();
+    try {
+      const server = noReader.getHttpAdapter().getInstance();
+      const auth = { authorization: 'Bearer ' + token() };
+      const res = await server.inject({ method: 'GET', url: `/waterfall/jobs/${jobId}/uncertain-rows`, headers: auth });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().queued).toBe(false);
+    } finally {
+      await noReader.close();
     }
   });
 
