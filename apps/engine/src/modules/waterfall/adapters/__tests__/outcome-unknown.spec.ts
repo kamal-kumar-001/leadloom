@@ -14,15 +14,16 @@ import { DomainCacheService } from '../../domain-cache.service';
  * the worker marks the row uncertain (needs_review), never a blind retry.
  * Synthetic failure injection only; no live provider calls.
  */
-const INPUT = { domain: 'northstar.example', workspaceId: crypto.randomUUID() };
+const INPUT = { domain: 'northstar.example', firstName:'Jordan', lastName:'Fixture', workspaceId: crypto.randomUUID() };
+const transport = {fetch:((...args:any[])=>globalThis.fetch(...args as [any,any])) as typeof fetch};
 
 describe('ProviderOutcomeUnknownError contract', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   for (const [name, make] of [
-    ['apollo', () => new ApolloAdapter()],
-    ['hunter', () => new HunterAdapter()],
-    ['dropcontact', () => new DropcontactAdapter()],
+    ['apollo', () => new ApolloAdapter(transport)],
+    ['hunter', () => new HunterAdapter(transport)],
+    ['dropcontact', () => new DropcontactAdapter(transport)],
   ] as const) {
     it(`${name}: a fetch-layer failure throws ProviderOutcomeUnknownError (never a normalized cost-0 error)`, async () => {
       vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('socket hang up'); }));
@@ -32,7 +33,7 @@ describe('ProviderOutcomeUnknownError contract', () => {
 
   it('the runner propagates the uncertainty instead of recording a cost-0 error step and continuing', async () => {
     const runner = new DAGRunnerService(new DomainCacheService());
-    const failing = new ApolloAdapter();
+    const failing = new ApolloAdapter(transport);
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('timeout'); }));
     runner.registerAdapter(failing);
     await expect(
@@ -45,17 +46,17 @@ describe('fail-closed billing on provider-ANSWERED errors (no live calls)', () =
   afterEach(() => vi.unstubAllGlobals());
 
   it('a provider-answered HTTP error records the ASSUMED nominal cost, never a silent measured zero', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })) as any);
-    const out = await new ApolloAdapter().execute(INPUT, 'dummy-key');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}',{status:500})) as any);
+    const out = await new ApolloAdapter(transport).execute(INPUT, 'dummy-key');
     expect(out.status).toBe('error');
     expect(out.costAssumed).toBe(true);
     expect(out.costMicrocents).toBeGreaterThan(0); // assumed at nominal, never silently 0
   });
 
   it('a provider-answered rate limit is likewise assumed-charged, and telemetry surfaces cost_assumed through the runner', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 429, json: async () => ({}) })) as any);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}',{status:429})) as any);
     const runner = new DAGRunnerService(new DomainCacheService());
-    runner.registerAdapter(new ApolloAdapter());
+    runner.registerAdapter(new ApolloAdapter(transport));
     const payload = await runner.executeRow(INPUT, [{ id: 'n1', provider: 'apollo', tier: 1 }], { apollo: 'dummy-key' });
     expect(payload.telemetry?.cost_assumed).toBe(true);
     expect(payload.telemetry?.cost_microcents).toBeGreaterThan(0);

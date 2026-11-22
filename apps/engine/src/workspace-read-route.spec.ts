@@ -27,3 +27,9 @@ describe('workspace read routes',()=>{
   try{expect((await app.getHttpAdapter().getInstance().inject({method:'GET',url:'/workspace/summary',headers:{authorization:'Bearer '+token()}})).statusCode).toBe(404);}finally{await app.close();}
  });
 });
+
+
+it('validates saved-row page offsets and forwards only verified workspace identity',async()=>{
+ const tableId=randomUUID(),reads:any={listTableRows:vi.fn(async()=>({table:{id:tableId,name:'Paged',rowCount:205},columns:[],rows:[],offset:100,nextOffset:200}))};const app=await createApplication({sessionKey:key,reads} as any);
+ try{const server=app.getHttpAdapter().getInstance();for(const q of ['offset=-1','offset=1.5','offset=100001','workspaceId=foreign'])expect((await server.inject({method:'GET',url:'/workspace/tables/'+tableId+'/rows?'+q,headers:{authorization:'Bearer '+token()}})).statusCode).toBe(400);expect((await server.inject({method:'GET',url:'/workspace/tables/'+tableId+'/rows?offset=100',headers:{authorization:'Bearer '+token()}})).statusCode).toBe(200);expect(reads.listTableRows).toHaveBeenCalledWith(workspaceId,tableId,100);}finally{await app.close();}
+});

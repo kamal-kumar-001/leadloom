@@ -1,26 +1,28 @@
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../auth';
+import { currentWebAccess } from '../../../../lib/current-web-access';
 import { PRODUCT_PROFILES, type IncomingPost } from '@leadloom/engine/src/modules/signals-ingest';
 import { getDraftStoreForUser } from '../../../../lib/signals-drafts-store';
 import { checkRateLimit } from '../../../../lib/signals-rate-limit';
 
 const SOURCES = new Set(['hackernews', 'manual']);
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.email) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-  return NextResponse.json({ drafts: getDraftStoreForUser(session.user.email).list(), sessionOnly: true });
+export async function GET(req: Request) {
+  const access = await currentWebAccess(req);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status, headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ drafts: getDraftStoreForUser(access.email).list(), sessionOnly: true }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: Request) {
   const origin = req.headers.get('origin');
   const host = req.headers.get('host');
-  if (!origin || !host || new URL(origin).host !== host) {
+  let sameOrigin = false;
+  try { sameOrigin = Boolean(origin && host && new URL(origin).host === host); } catch {}
+  if (!sameOrigin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const session = await auth();
-  const email = session?.user?.email;
-  if (!email) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  const access = await currentWebAccess(req);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status, headers: { 'Cache-Control': 'no-store' } });
+  const email = access.email;
 
   const rl = checkRateLimit(`drafts:${email}`, 30, 60_000);
   if (!rl.allowed) {
@@ -62,7 +64,7 @@ export async function POST(req: Request) {
   };
   try {
     const draft = getDraftStoreForUser(email).create(post, profile);
-    return NextResponse.json({ draft });
+    return NextResponse.json({ draft }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Could not create draft' }, { status: 422 });
   }

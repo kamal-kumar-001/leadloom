@@ -1,4 +1,4 @@
-import { PlanDefinitionSchema, type EntitlementDecision, type FeatureKey, type LimitKey, type PlanDefinition } from '@leadloom/contracts';
+import { PlanDefinitionSchema,FeatureKeySchema,LimitKeySchema, type EntitlementDecision, type FeatureKey, type LimitKey, type PlanDefinition } from '@leadloom/contracts';
 
 export interface WorkspacePlanRef { planId: string | null; status: 'none' | 'trialing' | 'active' | 'past_due' | 'canceled' }
 export interface PlanLookup { planFor(workspaceId: string): Promise<WorkspacePlanRef> }
@@ -20,6 +20,14 @@ export class EntitlementService {
       if (this.plans.has(plan.id)) throw new Error(`Duplicate plan id ${plan.id}`);
       this.plans.set(plan.id, plan);
     }
+  }
+
+  async status(workspaceId:string){
+    const ref=await this.lookup.planFor(workspaceId),plan=ref.planId?this.plans.get(ref.planId):undefined;
+    const reason=!plan?'no_plan':!ACTIVE.has(ref.status)?'billing_inactive':'ok';
+    const features=FeatureKeySchema.options.map(key=>({key,allowed:reason==='ok'&&plan!.features[key]===true,reason:reason!=='ok'?reason:plan!.features[key]===true?'ok':'feature_not_in_plan'}));
+    const limits=await Promise.all(LimitKeySchema.options.map(async key=>{const used=await this.usage.used(workspaceId,key);if(!Number.isSafeInteger(used)||used<0)throw Error('Invalid usage measurement');const cap=plan?(plan.limits[key]===undefined?0:plan.limits[key]):undefined;return{key,used,cap:cap??null,capKnown:Boolean(plan),available:plan?(cap===null?null:Math.max(0,cap!-used)):null,allowsOneMore:reason==='ok'&&(cap===null||used+1<=cap!),reason:reason!=='ok'?reason:cap!==null&&used+1>cap!?'limit_reached':'ok',measurement:key==='tables'?'saved_rows':'recorded_counter',period:key.endsWith('_per_month')?new Date().toISOString().slice(0,7):'total'};}));
+    return{enforcement:'enabled' as const,asOf:new Date().toISOString(),plan:{id:ref.planId,known:Boolean(plan),billingStatus:ref.status},features,limits,notes:['Configured development policy, not approved commercial terms or a billing invoice. No prices or plan changes are offered here.','Only mounted guarded paths enforce these decisions. This is not a claim that every feature or quota is implemented.','Table usage counts current saved workspace tables, including explicit project tables. Other usage values are recorded counters and may be incomplete.','Available means cap minus measured usage now. Allows one more evaluates one additional unit, not a reservation.']};
   }
 
   private async resolve(workspaceId: string): Promise<{ plan?: PlanDefinition; deny?: EntitlementDecision }> {

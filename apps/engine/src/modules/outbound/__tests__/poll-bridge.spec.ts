@@ -81,11 +81,11 @@ describe('G10 poll bridge (fixture pipeline)', () => {
       { uid: 2, messageId: 'r2@x.invalid', fromEmail: 'nobody@example.invalid', subject: 'hello', bodyText: 'hi there', receivedAt: now },
     ];
     const poller = new ImapReplyPoller(fixtureClient(messages), new InMemorySeenMessageStore());
-    const events = await poller.pollOnce({ mailboxId, campaignId });
-    expect(events).toHaveLength(2);
-    expect(events[0].inReplyTo).toBe('<orig@smtp.invalid>');
-
-    const summary = await recordPollEvents(repo, workspaceId, mailboxId, events);
+    const summary = (await poller.pollAndConsume({ mailboxId, campaignId }, async events => {
+      expect(events).toHaveLength(2);
+      expect(events[0].inReplyTo).toBe('<orig@smtp.invalid>');
+      return recordPollEvents(repo, workspaceId, mailboxId, events);
+    }))!;
     expect(summary.fetched).toBe(2);
     expect(summary.recorded).toBe(2);
     expect(summary.haltedJobIds).toEqual([job]);
@@ -106,9 +106,9 @@ describe('G10 poll bridge (fixture pipeline)', () => {
       { uid: 1, messageId: 'r1@x.invalid', fromEmail: 'lead@example.invalid', subject: 'Re: s1', bodyText: 'not right now', receivedAt: now },
     ];
     const poller = new ImapReplyPoller(fixtureClient(messages), store);
-    const first = await recordPollEvents(repo, workspaceId, mailboxId, await poller.pollOnce({ mailboxId, campaignId }));
+    const first = (await pollMailboxReplies(repo, poller, workspaceId, mailboxId, campaignId, { LEADLOOM_IMAP_POLL_ENABLED: 'true' }))!;
     // Poller dedupe drops seen messages, so the second poll returns nothing new.
-    const second = await recordPollEvents(repo, workspaceId, mailboxId, await poller.pollOnce({ mailboxId, campaignId }));
+    const second = (await pollMailboxReplies(repo, poller, workspaceId, mailboxId, campaignId, { LEADLOOM_IMAP_POLL_ENABLED: 'true' }))!;
     expect(first.recorded).toBe(1);
     expect(second.fetched).toBe(0);
     expect(second.recorded).toBe(0);

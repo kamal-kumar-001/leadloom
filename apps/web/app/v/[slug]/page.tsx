@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@leadloom/ui';
 import { CheckCircle2, ArrowRight, Sparkles, Send } from 'lucide-react';
+import { captureSurveyResponses } from '../../../lib/capture-survey-responses';
 import { notify } from '@/lib/notify';
 
 interface SurveyQuestion {
@@ -88,14 +89,15 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
   const handleFinalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!page) return;
+    const survey = captureSurveyResponses(page.surveyQuestions, responses);
     const unanswered = page.surveyQuestions.some(
-      (q) => q.type !== 'choice' && !(responses[q.text] ?? '').trim()
+      (q) => q.type !== 'choice' && !survey[q.text].trim()
     );
     if (unanswered) {
       notify.error('Please answer every question before submitting.');
       return;
     }
-    await submitLead(responses);
+    await submitLead(survey);
   };
 
   if (notFound) {
@@ -124,16 +126,16 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
           <span className="w-6 h-6 rounded bg-brand-loom/20 border border-brand-loom/40 flex items-center justify-center text-xs text-brand-loom font-bold">
             ⚡
           </span>
-          <span className="font-bold text-sm tracking-tight text-text-primary">{page.title}</span>
+          <span className="font-bold text-sm tracking-tight text-text-primary [overflow-wrap:anywhere]">{page.title}</span>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-20 text-center flex-1 flex flex-col justify-center">
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-text-primary leading-[1.15]">
+      <main className="w-full min-w-0 max-w-3xl mx-auto px-4 py-20 text-center flex-1 flex flex-col justify-center">
+        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-text-primary leading-[1.15] [overflow-wrap:anywhere]">
           {page.headline}
         </h1>
 
-        <p className="mt-6 text-base sm:text-lg text-text-secondary leading-relaxed max-w-xl mx-auto">
+        <p className="mt-6 text-base sm:text-lg text-text-secondary leading-relaxed max-w-xl mx-auto [overflow-wrap:anywhere]">
           {page.subheadline}
         </p>
 
@@ -146,7 +148,7 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
               placeholder="Enter your work email..."
               className="flex-1 rounded-md border border-border-muted bg-canvas-elevated px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-loom focus:outline-none focus:ring-1 focus:ring-brand-loom"
             />
-            <Button size="md" variant="primary" type="submit" className="px-6 py-3" disabled={isSubmitting}>
+            <Button size="md" variant="primary" type="submit" className="px-6 py-3 whitespace-normal [overflow-wrap:anywhere]" disabled={isSubmitting}>
               <span>{page.heroCtaText}</span>
               <ArrowRight className="w-4 h-4" />
             </Button>
@@ -166,7 +168,7 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
 
       {showSurvey && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 backdrop-blur-md p-4 animate-fade-in">
-          <div className="w-full max-w-lg rounded-2xl border border-border-muted bg-canvas-surface p-6 shadow-2xl space-y-5">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border-muted bg-canvas-surface p-6 shadow-2xl space-y-5">
             <div className="border-b border-border-subtle pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-brand-loom" />
@@ -182,7 +184,8 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
                   </label>
                   {q.type === 'choice' && q.options ? (
                     <select
-                      value={responses[q.text] ?? q.options[0]}
+                      aria-label={q.text}
+                      value={Object.hasOwn(responses,q.text)?responses[q.text]:q.options[0]}
                       onChange={(e) => setResponses((r) => ({ ...r, [q.text]: e.target.value }))}
                       className="w-full rounded-lg border border-border-subtle bg-canvas-elevated p-2.5 text-xs text-text-primary focus:border-brand-loom focus:outline-none"
                     >
@@ -193,7 +196,8 @@ export default function SmokeTestPage({ params }: { params: Promise<{ slug: stri
                   ) : (
                     <textarea
                       rows={3}
-                      value={responses[q.text] ?? ''}
+                      aria-label={q.text}
+                      value={Object.hasOwn(responses,q.text)?responses[q.text]:''}
                       onChange={(e) => setResponses((r) => ({ ...r, [q.text]: e.target.value }))}
                       className="w-full rounded-lg border border-border-subtle bg-canvas-elevated p-3 text-xs text-text-primary focus:border-brand-loom focus:outline-none"
                     />

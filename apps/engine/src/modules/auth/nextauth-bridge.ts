@@ -24,11 +24,12 @@ const Claims = z.object({
   idp: z.enum(['google', 'github']),
   exp: z.number().int().positive(),
   iat: z.number().int().positive().optional(),
+  auth_time: z.number().int().positive().optional(),
 }).strict();
 
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
 
-export function verifyBridgeToken(token: string, key: Buffer, now = Date.now()): { email: string; exp: number } {
+export function verifyBridgeToken(token: string, key: Buffer, now = Date.now()): { email: string; exp: number; authTime?: number } {
   if (key.length < 32) throw new Error('Bridge key must have at least 32 bytes');
   const parts = token.split('.');
   if (parts.length !== 3 || parts.some((p) => p.length > 4096)) throw new Error('Invalid session');
@@ -40,7 +41,8 @@ export function verifyBridgeToken(token: string, key: Buffer, now = Date.now()):
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error('Invalid session');
   const c = Claims.parse(JSON.parse(Buffer.from(body, 'base64url').toString('utf8')));
   if (c.exp * 1000 <= now) throw new Error('Session expired');
-  return { email: c.email.trim().toLowerCase(), exp: c.exp };
+  if (c.auth_time && c.auth_time * 1000 > now + 30_000) throw new Error('Invalid session');
+  return { email: c.email.trim().toLowerCase(), exp: c.exp, authTime: c.auth_time };
 }
 
 /** Test and web-side reference minting; the production minter lives in apps/web. */

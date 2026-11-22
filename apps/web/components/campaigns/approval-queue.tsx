@@ -133,14 +133,19 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
     await loadQueue();
   };
 
-  const handleApproveOne = async (jobId: string) => {
+  const handleApproveOne = async (item: OutboundApprovalRow) => {
+    const jobId = item.id;
     setActionLoadingId(jobId);
     try {
-      const res = await approveOutboundJobs({ jobIds: [jobId] });
+      const res = await approveOutboundJobs({ jobIds: [jobId], expectedRevisions: { [jobId]: item.reviewRevision } });
       if (res.error) {
         notify.error(res.error);
       } else if ((res.approvedCount ?? 0) === 0 && (res.staleCount ?? 0) > 0) {
-        notify.info('Content changed since this message was queued - review the updated text, then approve again');
+        notify.info('This review is out of date. Read the refreshed recipient, copy and sender context before approving again');
+        await loadQueue();
+        onStatusChange?.();
+      } else if ((res.approvedCount ?? 0) === 0) {
+        notify.info('No messages were approved. Reload and review the current queue before trying again');
         await loadQueue();
         onStatusChange?.();
       } else {
@@ -323,6 +328,7 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
             return (
               <Card
                 key={item.id}
+                data-testid={'approval-'+item.id}
                 className="p-4 hover:border-border-muted transition-all shadow-sm space-y-3"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -415,7 +421,7 @@ export function ApprovalQueue({ campaignId, onStatusChange }: ApprovalQueueProps
                     <Button
                       size="sm"
                       variant="primary"
-                      onClick={() => handleApproveOne(item.id)}
+                      onClick={() => handleApproveOne(item)}
                       disabled={isActing || Boolean(bulkLoading) || (item.resolutionErrors?.length ?? 0) > 0}
                       title={(item.resolutionErrors?.length ?? 0) > 0 ? 'Held: fix the template or recipient so the message can be assembled' : undefined}
                       className="text-xs h-7 px-2.5 gap-1"

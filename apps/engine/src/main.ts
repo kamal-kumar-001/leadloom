@@ -1,12 +1,47 @@
+import {PlatformOverviewService,InvalidPlatformCursor} from './modules/platform-admin/platform-overview.service';
+import {PlatformOverviewQuerySchema} from '@leadloom/contracts';
+import {ProjectGrowthWatchService,ProjectGrowthWatchWorker,GrowthWatchConflict,GrowthWatchInvalid,GrowthWatchAccess,GrowthWatchUnavailable} from './modules/growth-watches/project-growth-watch.service';
+import {CreateProjectGrowthWatchSchema,UpdateProjectGrowthWatchSchema} from '@leadloom/contracts';
+import {ProjectExperimentResultsSchema} from '@leadloom/contracts';
+import {ProjectDiscoveryMatchSchema} from '@leadloom/contracts';
+import {ProjectDiscoveryService,DiscoveryProfileInvalid} from './modules/signals-ingest/project-discovery.service';
+import {ProjectResearchIndexQuerySchema,ProjectResearchDetailQuerySchema} from '@leadloom/contracts';
+import {ResearchCursorInvalid} from './modules/ai-researcher/project-research-archive';
+import {ProjectExperimentResultsService} from './modules/validator/project-experiment-results.service';
+import {ProjectHnResearchService,HN_SEARCH_SCOPE,HnResearchUnavailable,HnResearchLimited,HnResearchBusy} from './modules/signals-ingest/project-hn-research.service';
+import {RELEASE_BUILD_ID} from './release-identity.generated';
+import {ProjectExperimentDraftService,ExperimentDraftConflict,ExperimentDraftDenied} from './modules/validator/project-experiment-draft.service';
+import {CreateProjectExperimentDraftSchema,ApproveOutboundJobRequestSchema,ApprovalReviewRevisionSchema} from '@leadloom/contracts';
+import {MailboxDnsService,MailboxDnsInputSchema} from './modules/outbound/mailbox-dns.service';
+import {SavedWaterfallService,SavedWaterfallConflict,SavedWaterfallInvalid,ConfigureSavedWaterfallSchema,ReviseSavedWaterfallSchema} from './modules/waterfall/saved-waterfall.service';
+import {WaterfallRunInvalid,WaterfallRunConflict} from './modules/waterfall/durable-waterfall.service';
+import {PrivateCampaignService,PrivateCampaignConflict} from './modules/outbound/private-campaign.service';
+import {RevisePrivateCampaignSchema} from '@leadloom/contracts';
+import {ProjectInventoryService} from './modules/project-context/project-inventory.service';
+import {CampaignCreateConflict,CampaignPoolConflict} from './modules/outbound/campaign-recipients.repository';
+import {ProjectAssetService,AssetConflict} from './modules/project-context/project-asset.service';
+import {CreateProjectAssetSchema,ReviseProjectAssetSchema,ProjectAssetQuerySchema} from '@leadloom/contracts';
+import {DraftPageConflict,PagePublicationConflict,ExperimentNotFound} from './modules/validator/validator.service';
+import {EditDraftPageCopySchema,PublishReviewedPageSchema} from '@leadloom/contracts';
+import {ResearchTableConflict,ResearchProjectNotFound} from './modules/ai-researcher/research-row-store';
+import {TableExportService,TableExportLimit} from './modules/workspace-read/table-export.service';
+import {TableCellService,CellEditConflict,CellEditUnsupported} from './modules/workspace-read/table-cell.service';
+import {TableImportService,TableImportConflict,TableImportTargetDeleted,TableImportLimit,TableImportProjectMissing} from './modules/workspace-read/table-import.service';
+import {ImportTableSchema} from '@leadloom/contracts';
+import { ProjectEntryService, EntryCursorInvalid, EntryRequestConflict } from './modules/project-context/project-entry.service';
+import { CreateProjectEntrySchema, ProjectEntryQuerySchema } from '@leadloom/contracts';
+import { importCapturedLeadsToTable,CapturedTableMappingInvalid,CapturedTableMappingConflict } from './modules/validator/captured-table-import';
+import { changeExistingPassword } from './modules/auth/password-change.service';
 import {connectorStatuses} from './modules/connectors/connector-registry';
 import 'reflect-metadata';
 import { createHmac, createHash } from 'node:crypto';
-import { PrismaClient } from '@leadloom/database';
+import { PrismaClient, runDbSchemaPreflight } from '@leadloom/database';
 import { verifySession } from './modules/auth/session';
 import { PrismaAccessGuard } from './modules/auth/access-guard';
 import type { AccessGuard } from './modules/auth/access-guard';
 import { AccountSuspendedError, SignupLimitedError } from './modules/provisioning/provisioning.service';
-import { BYOKProviderEnum, CreateWorkspaceCampaignSchema } from '@leadloom/contracts';
+import { BYOKProviderEnum, CreateWorkspaceCampaignSchema,CreateProjectCampaignDraftSchema, IssueAgentTokenRequestSchema, PersistContextRequestSchema, CreateProjectRequestSchema, ImportCapturedLeadsRequestSchema } from '@leadloom/contracts';
+import { hasScope } from './modules/auth/agent-token.service';
 import { SlidingWindowLimiter } from './modules/auth/rate-limiter';
 import type { ProvisioningService } from './modules/provisioning/provisioning.service';
 import type { EntitlementService } from './modules/entitlements/entitlements.service';
@@ -27,6 +62,7 @@ import { CampaignRecipientsRepository } from './modules/outbound/campaign-recipi
 import { PrismaDispatchDatabase } from './modules/outbound/prisma-database';
 import type { WaterfallController } from './modules/waterfall/waterfall.controller';
 import type { ValidatorController } from './modules/validator/validator.controller';
+import { formatLeadsCsv } from './modules/validator/csv-export';
 import { WorkspaceReadService } from './modules/workspace-read/workspace-read.service';
 import type { MemberService } from './modules/invitations/members';
 import type { InvitationService } from './modules/invitations/invitation.service';
@@ -69,7 +105,7 @@ export interface RuntimeServices {
  /** Honest report of the send gate actually applied to the outbound repository (LEADLOOM_OUTBOUND_SENDING_ENABLED). */
  outboundSendingEnabled?: boolean;
  /** Optional: read-only tenant-scoped views of persisted data (mounted when provided). */
- reads?: Pick<WorkspaceReadService,'summary'|'listTables'|'listTableRows'|'listMailboxes'|'listCampaigns'|'listCampaignJobs'|'listJobTimeline'|'listSuppressions'|'listExperiments'>;
+ reads?: Pick<WorkspaceReadService,'summary'|'tableSchema'|'listJobTimeline'|'listTables'|'listTableRows'|'listMailboxes'|'listCampaigns'|'listCampaignJobs'|'listSuppressions'|'listExperiments'>;
  /** Optional: admin-only workspace invitations (default off; LEADLOOM_TEAM_INVITES_ENABLED). Sends no mail. */
  invitations?: Pick<InvitationService,'invite'|'list'|'revoke'|'mine'|'accept'>;
  members?: Pick<MemberService,'list'|'setRole'|'remove'>;
@@ -80,7 +116,7 @@ export interface RuntimeServices {
  /** Optional: read-only waterfall connector registry reconciled with stored BYOK credentials (masked only). */
  waterfallConnectors?: { list(workspaceId: string): Promise<unknown> };
  connectorTest?: import('./modules/waterfall/connectors/test-connection.service.js').TestConnectionService;
- validator?: Pick<ValidatorController,'generate'|'recordOutreach'|'getOwnerPage'|'setPublishStatus'|'getScorecard'|'submitLead'|'getPublicPage'>;
+ validator?: Pick<ValidatorController,'generate'|'recordOutreach'|'getOwnerPage'|'editDraftCopy'|'setPublishStatus'|'getScorecard'|'submitLead'|'getPublicPage'|'getLeads'>;
  /** Optional: shared-store rate limit for public routes (Postgres-backed, holds across replicas/restarts). Wired by main when the validator runs on a real DB; absent in tests, which keep a per-process fallback. 'error' means the store failed - callers fail closed (503), never open. */
  publicRateLimit?: (key: string, max: number) => Promise<import('./modules/auth/rate-limiter.js').LimitVerdict>;
  /** Optional: G4 website research (default off; LEADLOOM_RESEARCH_API_ENABLED). Heuristic keyword analysis only - no LLM call, no fabricated claims. */
@@ -92,7 +128,27 @@ export interface RuntimeServices {
  /** Optional: G5 intent signals, fixture-first increment (same flag as G4). Pasted/bundled hiring-board-shaped JSON only - zero egress, every row labeled fixture. Live ATS/board ingestion is a separately gated step. */
  intentFixture?: import('./modules/ai-researcher/intent-fixture.service.js').IntentFixtureService;
  /** Optional: when provided, plan/feature gates are enforced server-side (main gates it behind LEADLOOM_ENTITLEMENTS_ENFORCED). */
- entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'>;
+ entitlements?: Pick<EntitlementService,'checkFeature'|'checkLimit'> & Partial<Pick<EntitlementService,'status'>>;
+ /** Optional: scoped, revocable agent API tokens (Slice A). */
+ agentTokens?: import('./modules/auth/agent-token.service.js').AgentTokenService;
+ /** Optional: project-scoped agent context persist & restore (Slice B). */
+ projectContext?: import('./modules/project-context/project-context.service.js').ProjectContextService;
+ /** Optional: canonical workspace-owned projects registry (Slice B). */
+ projectRegistry?: import('./modules/project-context/project-registry.service.js').ProjectRegistryService;
+ /** Opt-in public HN queries, no storage. Requires an explicit search scope and shared rate store. */
+ projectHnResearch?:ProjectHnResearchService;
+ projectAssets?: ProjectAssetService;
+ projectInventory?:ProjectInventoryService;
+ growthWatches?:ProjectGrowthWatchService;
+ growthWatchWorker?:ProjectGrowthWatchWorker;
+ projectEntries?: ProjectEntryService;
+ tableExports?: TableExportService;
+ mailboxDns?:MailboxDnsService;
+ savedWaterfalls?:SavedWaterfallService;
+ privateCampaigns?:PrivateCampaignService;
+ tableCells?: TableCellService;
+ tableImports?: TableImportService;
+ prisma?: any;
 }
 export async function createApplication(services?:RuntimeServices) {
  // Client IP for per-IP limiters: trust X-Forwarded-For only when the peer is
@@ -107,23 +163,51 @@ export async function createApplication(services?:RuntimeServices) {
   }
   return peer;
  };
- const app=await NestFactory.create<NestFastifyApplication>(RuntimeModule,new FastifyAdapter({bodyLimit:65536}),{logger:['error','warn']});
+ const app=await NestFactory.create<NestFastifyApplication>(RuntimeModule,new FastifyAdapter({bodyLimit:524288}),{logger:['error','warn']});
  const fastify=app.getHttpAdapter().getInstance();
+ let authorize:any=null;
  if(services) {
-  const authorize=async(request:any,reply:any,write=false)=>{
+  authorize=async(request:any,reply:any,write=false,requiredScope?:string)=>{
    try {
     const token=String(request.headers.authorization??'').replace(/^Bearer /,'');
-    let claims;let engineSession=false;
-    try {claims=verifySession(token,services.sessionKey);engineSession=true;}
-    catch(e) {
-     if(!services.nextAuthBridgeKey||!services.userDirectory) throw e;
-     const proven=verifyBridgeToken(token,services.nextAuthBridgeKey);
-     await services.passwordAccounts?.claimByProvider(proven.email);
-     const member=await services.userDirectory.findByEmail(proven.email);
-     if(!member) throw new Error('No membership');
-     claims={sub:member.id,workspaceId:member.workspaceId,role:member.role,exp:proven.exp};
+    let claims: any;let engineSession=false;let providerAuthTime: number | undefined;let providerSession=false;
+    if(token.startsWith('lld_agt_')) {
+     if(!services.agentTokens) throw new Error('Agent token service unavailable');
+     const verified=await services.agentTokens.verify(token);
+     if(!verified) throw new Error('Invalid, expired or revoked agent token');
+     claims={sub:verified.userId,workspaceId:verified.workspaceId,projectId:verified.projectId,role:verified.role,exp:verified.expiresAt?Math.floor(verified.expiresAt.getTime()/1000):2147483647,isAgentToken:true,scopes:verified.scopes,tokenId:verified.id};
+     if(!requiredScope) {
+      reply.code(403).send({error:'Route not accessible by agent token (unannotated route)'});
+      return null;
+     }
+     if(claims.projectId) {
+      const isProjectScoped = requiredScope.startsWith('context:') || requiredScope.startsWith('project:context:') || (requiredScope==='project:experiments:read'||requiredScope==='project:experiments:draft'||requiredScope==='project:experiments:results') || requiredScope==='project:campaigns:read' || requiredScope==='project:tables:read' || requiredScope==='project:tables:write' || requiredScope==='project:campaigns:edit' || requiredScope==='project:campaigns:draft' || requiredScope==='project:assets:read' || requiredScope==='project:assets:write' || requiredScope==='project:research:read' || requiredScope===HN_SEARCH_SCOPE || requiredScope==='project:inventory:read';
+      if(!isProjectScoped) {
+       reply.code(403).send({error:'Project-scoped agent token cannot access workspace-wide routes'});
+       return null;
+      }
+     }
+     if(!hasScope(verified.scopes, requiredScope, write)) {
+      reply.code(403).send({error:'Insufficient scope', required: requiredScope});
+      return null;
+     }
+     if(write && !hasScope(verified.scopes, requiredScope ?? '*', true)) {
+      reply.code(403).send({error:'Insufficient scope for write action'});
+      return null;
+     }
+    } else {
+     try {claims=verifySession(token,services.sessionKey);engineSession=true;}
+     catch(e) {
+      if(!services.nextAuthBridgeKey||!services.userDirectory) throw e;
+      const proven=verifyBridgeToken(token,services.nextAuthBridgeKey);
+      providerSession=true;providerAuthTime=proven.authTime;
+      await services.passwordAccounts?.claimByProvider(proven.email);
+      const member=await services.userDirectory.findByEmail(proven.email);
+      if(!member) throw new Error('No membership');
+      claims={sub:member.id,workspaceId:member.workspaceId,role:member.role,exp:proven.exp};
+     }
     }
-    if(services.accessGuard&&!await services.accessGuard.isActive(claims.sub,claims.workspaceId,engineSession?{ver:(claims as any).ver}:undefined)) {reply.code(401).send({error:'Authentication required'});return null;}
+    if(services.accessGuard&&!await services.accessGuard.isActive(claims.sub,claims.workspaceId,engineSession?{kind:'engine',ver:(claims as any).ver}:providerSession?{kind:'provider',authTime:providerAuthTime}:undefined)) {reply.code(401).send({error:'Authentication required'});return null;}
     if(write && !canWrite(claims)) {reply.code(403).send({error:'Read-only workspace role'});return null;}
     return claims;
    } catch {reply.code(401).send({error:'Authentication required'});return null;}
@@ -132,7 +216,59 @@ export async function createApplication(services?:RuntimeServices) {
   // Identity, workspace and role come only from the engine's tables. Never accepts input.
   fastify.get('/auth/me',async(request:any,reply:any)=>{
    const session=await authorize(request,reply);if(!session)return;
-   return {userId:session.sub,workspaceId:session.workspaceId,role:session.role};
+   let name: string | null = null;
+   if(services.prisma) {
+    try { name=(await services.prisma.user.findUnique({where:{id:session.sub},select:{name:true}}))?.name ?? null; }
+    catch { return reply.code(503).send({error:'Profile service unavailable'}); }
+   }
+   return {userId:session.sub,workspaceId:session.workspaceId,role:session.role,name};
+  });
+  fastify.patch('/auth/profile',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply);if(!session)return;
+   const name=typeof request.body?.name==='string'?request.body.name.trim():'';
+   if(!name||name.length>255) return reply.code(400).send({error:'Display name must be between 1 and 255 characters'});
+   if(!services.prisma)return reply.code(503).send({error:'Profile service unavailable'});
+   try {
+    const changed=await services.prisma.$queryRawUnsafe('UPDATE users SET name=$3, updated_at=clock_timestamp() WHERE id=$1::uuid AND workspace_id=$2::uuid AND disabled_at IS NULL RETURNING name',session.sub,session.workspaceId,name);
+    if(changed.length!==1)return reply.code(409).send({error:'Profile was not updated. Reload before retrying.'});
+    return {ok:true,name:changed[0].name};
+   } catch {return reply.code(503).send({error:'Could not confirm profile update. Reload before retrying.'});}
+  });
+  fastify.post('/auth/password/update',async(request:any,reply:any)=>{
+   const session=await authorize(request,reply);if(!session)return;
+   const currentPassword=typeof request.body?.currentPassword==='string'?request.body.currentPassword:'';
+   const newPassword=typeof request.body?.newPassword==='string'?request.body.newPassword:'';
+   try {
+    const result=await changeExistingPassword(services.prisma,session.sub,currentPassword,newPassword);
+    if(!result.ok)return reply.code(result.status).send({error:result.error});
+    return {ok:true,message:'Password updated. Sign in again.'};
+   } catch {
+    return reply.code(503).send({error:'Could not confirm password update. Sign in again to check before retrying.'});
+   }
+  });
+  const platformOperator=async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true);if(!session)return null;
+   const configured=process.env.LEADLOOM_PLATFORM_ADMIN_EMAIL?.trim().toLowerCase();
+   if(!configured){reply.code(403).send({error:'Platform admin not configured (fail-closed)'});return null;}
+   if(!services.prisma){reply.code(503).send({error:'Platform operator identity storage unavailable'});return null;}
+   try{
+    const user=await services.prisma.user.findUnique({where:{id:session.sub},select:{email:true,disabledAt:true,emailVerifiedAt:true}});
+    if(!user||user.disabledAt!==null||(user.emailVerifiedAt===null&&!session.email_verified)||user.email?.toLowerCase()!==configured){reply.code(403).send({error:'Active verified platform administrator required'});return null;}
+    return{session,email:user.email.toLowerCase()};
+   }catch{reply.code(503).send({error:'Platform operator identity storage unavailable'});return null;}
+  };
+  fastify.get('/admin/verify',async(request:any,reply:any)=>{
+   reply.header('Cache-Control','no-store');
+   const operator=await platformOperator(request,reply);if(!operator)return;
+   return {ok:true,admin:true,email:operator.email,verified:true,active:true};
+  });
+  fastify.get('/admin/overview',async(request:any,reply:any)=>{
+   reply.header('Cache-Control','no-store');
+   const operator=await platformOperator(request,reply);if(!operator)return;
+   const query=PlatformOverviewQuerySchema.safeParse(request.query);
+   if(!query.success)return reply.code(400).send({error:'Invalid platform overview query'});
+   try{return await new PlatformOverviewService(services.prisma).get(query.data);}
+   catch(e){if(e instanceof InvalidPlatformCursor)return reply.code(400).send({error:e.message});return reply.code(503).send({error:'Platform overview unavailable. No snapshot was confirmed.'});}
   });
   // First sign-in provisioning. Authenticated ONLY by a bridge token (verified
   // email). The body can supply a display name and nothing else: workspace and
@@ -159,6 +295,7 @@ export async function createApplication(services?:RuntimeServices) {
    });
   }
   /** Server-side plan gate; no-op unless entitlements are configured. Deny-by-default when enforced. */
+  fastify.get('/workspace/plan-status',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Workspace comes only from the session'});reply.header('Cache-Control','no-store');if(!services.entitlements)return{enforcement:'disabled',asOf:new Date().toISOString(),plan:null,features:[],limits:[],notes:['Plan enforcement is disabled in this runtime. No plan, usage or available quota is inferred. Hard safety, validation and rate limits still apply.']};if(!services.entitlements.status)return reply.code(503).send({error:'Current plan policy unavailable'});try{return await services.entitlements.status(s.workspaceId);}catch{return reply.code(503).send({error:'Current plan policy unavailable'});}});
   const allowed=async(reply:any,workspaceId:string,feature:FeatureKey)=>{
    if(!services.entitlements)return true;
    const decision=await services.entitlements.checkFeature(workspaceId,feature);
@@ -191,14 +328,75 @@ export async function createApplication(services?:RuntimeServices) {
     return out;
    });
   }
+  // Explicit project-owned text tables. Workspace routes remain broad for humans/workspace credentials.
+  {
+   const importLimit=new SlidingWindowLimiter(10,60_000),editLimit=new SlidingWindowLimiter(60,60_000);
+   const bound=async(request:any,reply:any,write=false)=>{const s=await authorize(request,reply,write,write?'project:tables:write':'project:tables:read');if(!s)return null;if(!s.isAgentToken||!s.projectId){reply.code(403).send({error:'Project-bound agent credential required'});return null;}if(!services.projectRegistry){reply.code(503).send({error:'Project registry unavailable'});return null;}try{if(!await services.projectRegistry.findByIdOrSlug(s.workspaceId,s.projectId)){reply.code(404).send({error:'Project not found'});return null;}}catch{reply.code(503).send({error:'Project registry unavailable'});return null;}return s;};
+   fastify.get('/agent/project/tables',async(request:any,reply:any)=>{const s=await bound(request,reply);if(!s)return;if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Project comes only from the credential'});if(!services.reads)return reply.code(503).send({error:'Table reads unavailable'});try{return await services.reads.listTables(s.workspaceId,s.projectId);}catch{return reply.code(503).send({error:'Table reads unavailable'});}});
+   fastify.get('/agent/project/tables/:tableId/rows',async(request:any,reply:any)=>{const s=await bound(request,reply);if(!s)return;const id=z.string().uuid().safeParse(request.params.tableId),q=z.object({offset:z.coerce.number().int().min(0).max(100000).default(0)}).strict().safeParse(request.query??{});if(!id.success||!q.success)return reply.code(400).send({error:'Invalid table page'});if(!services.reads)return reply.code(503).send({error:'Table reads unavailable'});try{const r=await services.reads.listTableRows(s.workspaceId,id.data,q.data.offset,s.projectId);return r??reply.code(404).send({error:'Table not found'});}catch{return reply.code(503).send({error:'Table reads unavailable'});}});
+   fastify.post('/agent/project/tables/import',{bodyLimit:262144},async(request:any,reply:any)=>{const s=await bound(request,reply,true);if(!s)return;if(!services.tableImports)return reply.code(503).send({error:'Table imports unavailable'});if(!importLimit.take(s.workspaceId))return reply.code(429).send({error:'Too many table imports'});const p=ImportTableSchema.safeParse(request.body);if(!p.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Invalid table import. Project comes only from the credential.'});try{const r=await services.tableImports.import(s.workspaceId,p.data,s.projectId);return reply.code(r.created?201:200).send(r);}catch(e){if(e instanceof TableImportProjectMissing)return reply.code(404).send({error:'Project not found'});if(e instanceof TableImportTargetDeleted)return reply.code(409).send({error:'The original imported table was deleted. This request cannot recreate it. A deliberate new import needs a new request ID.'});if(e instanceof TableImportConflict)return reply.code(409).send({error:'Request ID already used for different table data or project'});if(e instanceof TableImportLimit)return reply.code(403).send({error:'Table creation unavailable on this plan'});return reply.code(503).send({error:'Import not confirmed. Retry unchanged input and request ID.'});}});
+   fastify.patch('/agent/project/tables/:tableId/cells',async(request:any,reply:any)=>{const s=await bound(request,reply,true);if(!s)return;if(!services.tableCells)return reply.code(503).send({error:'Cell editing unavailable'});if(!editLimit.take(s.workspaceId))return reply.code(429).send({error:'Too many cell edits'});const id=z.string().uuid().safeParse(request.params.tableId),p=z.object({rowId:z.string().uuid(),columnId:z.string().uuid(),expectedValue:z.string().max(10000).nullable(),value:z.string().max(10000)}).strict().safeParse(request.body);if(!id.success||!p.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Invalid project text-cell edit'});try{const r=await services.tableCells.edit(s.workspaceId,id.data,p.data,s.projectId);return r??reply.code(404).send({error:'Table cell not found'});}catch(e){if(e instanceof CellEditConflict)return reply.code(409).send({error:'Cell changed since restore. Reload saved rows before editing.'});if(e instanceof CellEditUnsupported)return reply.code(400).send({error:'Only plain text cells in text columns can be edited'});return reply.code(503).send({error:'Cell save not confirmed. Keep local input and reload before retrying.'});}});
+  }
+  if(services.tableExports){
+   const exportLimiter=new SlidingWindowLimiter(5,60_000);
+   fastify.get('/workspace/tables/:tableId/export',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply);if(!session)return;
+    if(!exportLimiter.take(session.workspaceId))return reply.code(429).send({error:'Too many exports. Try again in a minute.'});
+    const id=z.string().uuid().safeParse(request.params.tableId);if(!id.success)return reply.code(400).send({error:'Invalid table ID'});
+    try{
+     const result=await services.tableExports!.export(session.workspaceId,id.data);if(!result)return reply.code(404).send({error:'Table not found'});
+     return reply.header('Content-Type','text/csv; charset=utf-8').header('Content-Disposition',`attachment; filename="leadloom-table-${id.data}.csv"`).header('Cache-Control','no-store').header('X-Content-Type-Options','nosniff').header('X-Export-Row-Count',String(result.rowCount)).send(result.csv);
+    }catch(e){if(e instanceof TableExportLimit)return reply.code(413).send({error:'Table export exceeds 5,000 rows, 100 columns, 100,000 cells or the 2 MB value budget. No partial export was created.'});return reply.code(503).send({error:'Table export could not be completed. No partial export was created.'});}
+   });
+  }
+  if(services.mailboxDns){const dnsLimit=new SlidingWindowLimiter(10,60_000);fastify.post('/workspace/mailboxes/:mailboxId/dns-diagnostics',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;if(!dnsLimit.take(s.workspaceId))return reply.code(429).send({error:'Too many DNS diagnostics. Wait a minute.'});const id=z.string().uuid().safeParse(request.params.mailboxId),input=MailboxDnsInputSchema.safeParse(request.body);if(!id.success||!input.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Use a saved mailbox ID and up to five provider-supplied DKIM selectors only'});reply.header('Cache-Control','no-store');try{const result=await services.mailboxDns!.inspect(s.workspaceId,id.data,input.data.dkimSelectors);return result??reply.code(404).send({error:'Mailbox not found'});}catch{return reply.code(503).send({error:'DNS diagnostics unavailable. No mailbox health or sending state was changed.'});}});}
+  if(services.savedWaterfalls){
+   const limit=new SlidingWindowLimiter(20,60_000);
+   const savedIdentity=async(request:any,reply:any,write:boolean)=>{const s=await authorize(request,reply,write);if(!s)return null;if(Object.keys(request.query??{}).length){reply.code(400).send({error:'Workspace comes only from the session'});return null;}const id=z.string().uuid().safeParse(request.params.tableId);if(!id.success){reply.code(400).send({error:'Invalid table ID'});return null;}if(!limit.take(s.workspaceId)){reply.code(429).send({error:'Too many saved waterfall requests'});return null;}reply.header('Cache-Control','no-store');return{...s,tableId:id.data};};
+   fastify.post('/workspace/tables/:tableId/waterfall-columns',async(request:any,reply:any)=>{const s=await savedIdentity(request,reply,true);if(!s)return;const p=ConfigureSavedWaterfallSchema.safeParse(request.body);if(!p.success)return reply.code(400).send({error:'Supply a column ID, unique name and distinct domain/firstName/lastName input-column mappings'});try{const r=await services.savedWaterfalls!.configure(s.workspaceId,s.tableId,p.data);return r?reply.code(r.created?201:200).send(r):reply.code(404).send({error:'Table not found'});}catch(e){if(e instanceof SavedWaterfallConflict)return reply.code(409).send({error:e.message});if(e instanceof SavedWaterfallInvalid)return reply.code(400).send({error:e.message});return reply.code(503).send({error:'Configuration save unconfirmed. Keep the same column ID and input to retry.'});}});
+   fastify.get('/workspace/tables/:tableId/waterfall-columns/:columnId',async(request:any,reply:any)=>{const s=await savedIdentity(request,reply,false);if(!s)return;const id=z.string().uuid().safeParse(request.params.columnId);if(!id.success)return reply.code(400).send({error:'Invalid column ID'});try{const r=await services.savedWaterfalls!.read(s.workspaceId,s.tableId,id.data);return r??reply.code(404).send({error:'Saved waterfall not found'});}catch(e){if(e instanceof SavedWaterfallInvalid)return reply.code(400).send({error:e.message});return reply.code(503).send({error:'Saved mapping unavailable. No configuration changed.'});}});
+   fastify.put('/workspace/tables/:tableId/waterfall-columns/:columnId',async(request:any,reply:any)=>{const s=await savedIdentity(request,reply,true);if(!s)return;const id=z.string().uuid().safeParse(request.params.columnId),p=ReviseSavedWaterfallSchema.safeParse(request.body);if(!id.success||!p.success)return reply.code(400).send({error:'Supply a valid saved column, current revision, unique name and distinct mappings'});try{const r=await services.savedWaterfalls!.revise(s.workspaceId,s.tableId,id.data,p.data);return r??reply.code(404).send({error:'Saved waterfall not found'});}catch(e){if(e instanceof SavedWaterfallConflict)return reply.code(409).send({error:e.message});if(e instanceof SavedWaterfallInvalid)return reply.code(400).send({error:e.message});return reply.code(503).send({error:'Mapping revision unconfirmed. Retry the unchanged edit or reload current mapping.'});}});
+   fastify.post('/workspace/tables/:tableId/waterfall-preview',async(request:any,reply:any)=>{const s=await savedIdentity(request,reply,false);if(!s)return;const p=z.object({columnId:z.string().uuid(),rowIds:z.array(z.string().uuid()).min(1).max(100).refine(v=>new Set(v).size===v.length)}).strict().safeParse(request.body);if(!p.success)return reply.code(400).send({error:'Select one saved waterfall column and1to100distinct row IDs'});try{const r=await services.savedWaterfalls!.preview(s.workspaceId,s.tableId,p.data.columnId,p.data.rowIds);return r??reply.code(404).send({error:'Table not found'});}catch(e){if(e instanceof WaterfallRunInvalid||e instanceof WaterfallRunConflict)return reply.code(400).send({error:e.message});return reply.code(503).send({error:'Input validation unavailable. No work queued or provider called.'});}});
+  }
+  if(services.tableCells){
+   const editLimiter=new SlidingWindowLimiter(60,60_000);
+   fastify.patch('/workspace/tables/:tableId/cells',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true,'tables:write');if(!session)return;
+    if(!editLimiter.take(session.workspaceId))return reply.code(429).send({error:'Too many cell edits. Try again in a minute.'});
+    const tableId=z.string().uuid().safeParse(request.params.tableId);
+    const input=z.object({rowId:z.string().uuid(),columnId:z.string().uuid(),expectedValue:z.string().max(10000).nullable(),value:z.string().max(10000)}).strict().safeParse(request.body);
+    if(!tableId.success||!input.success)return reply.code(400).send({error:'Invalid text cell edit'});
+    try{
+     const result=await services.tableCells!.edit(session.workspaceId,tableId.data,input.data);
+     if(!result)return reply.code(404).send({error:'Table cell not found'});
+     return result;
+    }catch(e){
+     if(e instanceof CellEditConflict)return reply.code(409).send({error:'This cell changed since you opened it. Reload the saved rows before editing again.'});
+     if(e instanceof CellEditUnsupported)return reply.code(400).send({error:'Only plain text cells in text columns can be edited here.'});
+     return reply.code(503).send({error:'Cell save was not confirmed. Keep your edit and reload before retrying.'});
+    }
+   });
+  }
+  if(services.tableImports){
+   const importLimiter=new SlidingWindowLimiter(10,60_000);
+   fastify.post('/workspace/tables/import',{bodyLimit:1048576},async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true,'tables:write');if(!session)return;
+    if(!importLimiter.take(session.workspaceId))return reply.code(429).send({error:'Too many table imports. Try again in a minute.'});
+    const parsed=ImportTableSchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:'Invalid table import. Use unique headers, matching row widths and the documented limits.'});
+    try{const result=await services.tableImports!.import(session.workspaceId,parsed.data);return reply.code(result.created?201:200).send(result);}
+    catch(e){if(e instanceof TableImportTargetDeleted)return reply.code(409).send({error:'The original imported table was deleted. This request cannot recreate it. A deliberate new import needs a new request ID.'});if(e instanceof TableImportConflict)return reply.code(409).send({error:'This request ID was already used for different table data'});if(e instanceof TableImportLimit)return reply.code(403).send({error:'Table limit reached or table creation is unavailable on this plan'});return reply.code(503).send({error:'Import was not confirmed. Keep the same request and reload before retrying.'});}
+   });
+  }
   if(services.reads){
    const reads=services.reads;
    fastify.get('/workspace/summary',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.summary(s.workspaceId);});
-   fastify.get('/workspace/tables',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listTables(s.workspaceId);});
+   fastify.get('/workspace/tables',async(request:any,reply:any)=>{const s=await authorize(request,reply,false,'tables:read');if(!s)return;return reads.listTables(s.workspaceId);});
+   fastify.get('/workspace/tables/:tableId/schema',async(request:any,reply:any)=>{const s=await authorize(request,reply,false,'tables:read');if(!s)return;const id=z.string().uuid().safeParse(request.params.tableId);if(!id.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Invalid table schema request'});try{const result=await reads.tableSchema(s.workspaceId,id.data);return result??reply.code(404).send({error:'Table not found'});}catch{return reply.code(503).send({error:'Table schema unavailable. No rows changed.'});}});
    fastify.get('/workspace/tables/:tableId/rows',async(request:any,reply:any)=>{
-    const s=await authorize(request,reply);if(!s)return;
+    const s=await authorize(request,reply,false,'tables:read');if(!s)return;
     const id=z.string().uuid().safeParse(request.params.tableId);if(!id.success)return reply.code(400).send({error:'Invalid table ID'});
-    const result=await reads.listTableRows(s.workspaceId,id.data);
+    const query=z.object({offset:z.coerce.number().int().min(0).max(100000).default(0)}).strict().safeParse(request.query);if(!query.success)return reply.code(400).send({error:'Invalid table page'});
+    const result=await reads.listTableRows(s.workspaceId,id.data,query.data.offset);
     if(!result)return reply.code(404).send({error:'Table not found'});
     return result;
    });
@@ -211,12 +409,28 @@ export async function createApplication(services?:RuntimeServices) {
     });
    }
    fastify.get('/workspace/suppressions',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listSuppressions(s.workspaceId);});
-   fastify.get('/workspace/experiments',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listExperiments(s.workspaceId);});
-   fastify.get('/workspace/campaigns',async(request:any,reply:any)=>{const s=await authorize(request,reply);if(!s)return;return reads.listCampaigns(s.workspaceId);});
+   const listExperiments=async(request:any,reply:any)=>{
+    const s=await authorize(request,reply,false,'experiments:read');if(!s)return;
+    const parsed=z.object({projectId:z.union([z.string().uuid(),z.literal('unassigned')]).optional()}).strict().safeParse(request.query??{});
+    if(!parsed.success)return reply.code(400).send({error:'Invalid experiment filter'});
+    const projectId=parsed.data.projectId;
+    if(projectId&&projectId!=='unassigned'&&(!services.projectRegistry||!await services.projectRegistry.findByIdOrSlug(s.workspaceId,projectId)))return reply.code(404).send({error:'Project not found'});
+    return reads.listExperiments(s.workspaceId,projectId==='unassigned'?null:projectId);
+   };
+   fastify.get('/workspace/experiments',listExperiments);
+   fastify.get('/validator/experiments',listExperiments);
+   fastify.get('/workspace/campaigns',async(request:any,reply:any)=>{
+    const s=await authorize(request,reply,false,'campaigns:read');if(!s)return;
+    const parsed=z.object({projectId:z.union([z.string().uuid(),z.literal('unassigned')]).optional()}).strict().safeParse(request.query??{});
+    if(!parsed.success)return reply.code(400).send({error:'Invalid campaign filter'});
+    const projectId=parsed.data.projectId;
+    if(projectId&&projectId!=='unassigned'&&(!services.projectRegistry||!await services.projectRegistry.findByIdOrSlug(s.workspaceId,projectId)))return reply.code(404).send({error:'Project not found'});
+    return reads.listCampaigns(s.workspaceId,projectId==='unassigned'?null:projectId);
+   });
    // Per-recipient job drill-down: tenant check inside the read service (null -> 404,
    // no existence leak). Job metadata only - no step bodies or provider ids.
    fastify.get('/campaigns/:campaignId/jobs',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply,false);if(!session)return;
+    const session=await authorize(request,reply,false,'campaigns:read');if(!session)return;
     const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
     if(!campaignId.success)return reply.code(400).send({error:'Invalid campaign id'});
     const result=await reads.listCampaignJobs(session.workspaceId,campaignId.data);
@@ -319,6 +533,329 @@ export async function createApplication(services?:RuntimeServices) {
     return (await mc.remove(s.workspaceId,id.data))?{removed:true}:reply.code(404).send({error:'Mailbox not found'});
    });
   }
+  if(services.agentTokens) {
+   const at=services.agentTokens;
+   const issueTokenHandler=async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    if((session as any).isAgentToken) return reply.code(403).send({error:'Agent tokens cannot issue agent tokens'});
+    const p=IssueAgentTokenRequestSchema.safeParse(request.body);
+    if(!p.success) return reply.code(400).send({error:'Invalid agent token request'});
+    if(p.data.scopes.some(scope=>['project:tables:read','project:tables:write','project:experiments:read','project:experiments:draft','project:experiments:results','project:campaigns:read','project:campaigns:edit','project:campaigns:draft','project:assets:read','project:assets:write','project:research:read',HN_SEARCH_SCOPE,'project:inventory:read'].includes(scope))&&!p.data.projectId)return reply.code(400).send({error:'Project-specific scopes require an explicit project binding'});
+    let resolvedProjectId: string | undefined = undefined;
+    if(p.data.projectId) {
+     if(!services.projectRegistry) {
+      return reply.code(503).send({error:'Project registry service unavailable for project validation'});
+     }
+     const project=await services.projectRegistry.findByIdOrSlug(session.workspaceId, p.data.projectId);
+     if(!project) return reply.code(400).send({error:'Project does not exist or does not belong to this workspace'});
+     resolvedProjectId=project.id;
+    }
+    const res=await at.issue(session.workspaceId,session.sub,{...p.data, projectId: resolvedProjectId});
+    return reply.code(201).send(res);
+   };
+   const listTokensHandler=async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false);if(!session)return;
+    const list=await at.list(session.workspaceId);
+    return reply.code(200).send(list);
+   };
+   const revokeTokenHandler=async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    const id=z.string().uuid().safeParse(request.params?.id);
+    if(!id.success) return reply.code(400).send({error:'Invalid token ID'});
+    const ok=await at.revoke(session.workspaceId,id.data,session.sub);
+    if(!ok) return reply.code(404).send({error:'Agent token not found'});
+    return reply.code(200).send({id:id.data,revoked:true});
+   };
+   fastify.post('/agent-tokens',issueTokenHandler);
+   fastify.get('/agent-tokens',listTokensHandler);
+   fastify.post('/agent-tokens/:id/revoke',revokeTokenHandler);
+   fastify.post('/workspace/agent-tokens',issueTokenHandler);
+   fastify.get('/workspace/agent-tokens',listTokensHandler);
+   fastify.post('/workspace/agent-tokens/:id/revoke',revokeTokenHandler);
+  }
+  if(services.projectRegistry) {
+   const pr=services.projectRegistry;
+   const listProjectsHandler=async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false);if(!session)return;
+    if((session as any).isAgentToken) return reply.code(403).send({error:'Agent tokens cannot list projects (human sessions only)'});
+    const list=await pr.list(session.workspaceId);
+    return reply.code(200).send(list);
+   };
+   const createProjectHandler=async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;
+    if((session as any).isAgentToken) return reply.code(403).send({error:'Agent tokens cannot create projects (human sessions only)'});
+    const p=CreateProjectRequestSchema.safeParse(request.body);
+    if(!p.success) return reply.code(400).send({error:p.error.issues[0]?.message??'Invalid project request',details:p.error.issues});
+    try {
+     const res=await pr.create(session.workspaceId,session.sub,p.data);
+     return reply.code(201).send(res);
+    } catch(err:any) {
+     if(err?.statusCode===409||err?.name==='DuplicateProjectSlugError') {
+      return reply.code(409).send({error:'A project with this slug already exists in this workspace'});
+     }
+     if(err?.statusCode===400||err?.name==='InvalidProjectSlugError') {
+      return reply.code(400).send({error:err?.message??'Project slug cannot be formatted as a UUID'});
+     }
+     throw err;
+    }
+   };
+   fastify.get('/projects',listProjectsHandler);
+   fastify.post('/projects',createProjectHandler);
+   fastify.get('/workspace/projects',listProjectsHandler);
+   fastify.post('/workspace/projects',createProjectHandler);
+  }
+  if(services.projectRegistry&&services.reads){
+   const campaignObserver=async(request:any,reply:any)=>{
+    const s=await authorize(request,reply,false,'project:campaigns:read');if(!s)return null;
+    if(!s.isAgentToken||!s.projectId){reply.code(403).send({error:'Project-bound observation token required'});return null;}
+    if(Object.keys(request.query??{}).length){reply.code(400).send({error:'Project identity comes from token only'});return null;}
+    if(!await services.projectRegistry!.findByIdOrSlug(s.workspaceId,s.projectId)){reply.code(404).send({error:'Project not found'});return null;}return s;
+   };
+   fastify.get('/agent/project/campaigns',async(request:any,reply:any)=>{const s=await campaignObserver(request,reply);if(!s)return;return services.reads!.listCampaigns(s.workspaceId,s.projectId!);});
+   fastify.get('/agent/project/campaigns/:id/jobs',async(request:any,reply:any)=>{
+    const s=await campaignObserver(request,reply);if(!s)return;
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid campaign id'});
+    const result=await services.reads!.listCampaignJobs(s.workspaceId,id.data,s.projectId!);if(!result)return reply.code(404).send({error:'Campaign not found'});return result;
+   });
+  }
+  if(services.growthWatches){
+   const limiter=new SlidingWindowLimiter(60,60_000);
+   const access=async(request:any,reply:any,write=false)=>{const s=await authorize(request,reply,write);if(!s)return null;reply.header('Cache-Control','no-store');const project=z.string().uuid().safeParse(request.params.projectId);if(!project.success||Object.keys(request.query??{}).length){reply.code(400).send({error:'Exact project UUID and no query parameters required'});return null;}if(!limiter.take(s.workspaceId)){reply.code(429).send({error:'Too many growth watch requests'});return null;}return{...s,projectId:project.data};};
+   const failure=(reply:any,e:unknown)=>{if(e instanceof GrowthWatchAccess)return reply.code(403).send({error:'Current workspace write access required'});if(e instanceof GrowthWatchConflict)return reply.code(409).send({error:'Watch request/configuration changed. Reload the existing watch; do not start another request to retry.'});if(e instanceof GrowthWatchInvalid)return reply.code(400).send({error:'Watch exceeds its supported project/data bounds'});if(e instanceof GrowthWatchUnavailable)return reply.code(503).send({error:'Local growth observation worker is unavailable. No new active schedule is confirmed.'});return reply.code(503).send({error:'Growth watch storage unavailable. Inspect existing watches/history before retrying; no outcome is confirmed.'});};
+   fastify.get('/projects/:projectId/growth-watches',async(request:any,reply:any)=>{const s=await access(request,reply);if(!s)return;try{const items=await services.growthWatches!.list(s.workspaceId,s.projectId);return items?{items,workerAvailable:services.growthWatchWorker?.available===true}:reply.code(404).send({error:'Project not found'});}catch(e){return failure(reply,e);}});
+   fastify.post('/projects/:projectId/growth-watches',async(request:any,reply:any)=>{const s=await access(request,reply,true);if(!s)return;const input=CreateProjectGrowthWatchSchema.safeParse(request.body);if(!input.success)return reply.code(400).send({error:'Exact request/experiment UUIDs and integer interval60..10080 minutes required'});try{const result=await services.growthWatches!.create(s.workspaceId,s.projectId,s.sub,input.data,services.growthWatchWorker?.available===true);if(!result)return reply.code(404).send({error:'Owned project/experiment not found'});return reply.code(result.created?201:200).send(result.watch);}catch(e){return failure(reply,e);}});
+   fastify.patch('/projects/:projectId/growth-watches/:id',async(request:any,reply:any)=>{const s=await access(request,reply,true);if(!s)return;const id=z.string().uuid().safeParse(request.params.id),input=UpdateProjectGrowthWatchSchema.safeParse(request.body);if(!id.success||!input.success)return reply.code(400).send({error:'Exact watch UUID, expected revision and active/paused state required'});try{const result=await services.growthWatches!.update(s.workspaceId,s.projectId,s.sub,id.data,input.data,services.growthWatchWorker?.available===true);return result??reply.code(404).send({error:'Owned watch/experiment not found'});}catch(e){return failure(reply,e);}});
+  }
+  if(services.prisma&&services.projectRegistry){
+   const results=new ProjectExperimentResultsService(services.prisma),limiter=new SlidingWindowLimiter(60,60_000);
+   fastify.get('/projects/:projectId/experiments/:id/results',async(request:any,reply:any)=>{
+    const s=await authorize(request,reply,false,'experiments:read');if(!s)return;reply.header('Cache-Control','no-store');
+    if(s.isAgentToken)return reply.code(403).send({error:'Human session required; use the separately scoped bound-project results route'});
+    const project=z.string().uuid().safeParse(request.params.projectId),id=z.string().uuid().safeParse(request.params.id);
+    if(!project.success||!id.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Valid exact project/experiment IDs and no query parameters required'});
+    if(!limiter.take(s.workspaceId))return reply.code(429).send({error:'Too many aggregate results reads'});
+    try{const result=await results.read(s.workspaceId,project.data,id.data);if(!result)return reply.code(404).send({error:'Experiment not found'});const parsed=ProjectExperimentResultsSchema.safeParse(result);if(!parsed.success)throw Error('Invalid stored aggregate');return parsed.data;}catch{return reply.code(503).send({error:'Stored aggregate results are unavailable. No result or action is confirmed.'});}
+   });
+   fastify.get('/agent/project/experiments/:id/results',async(request:any,reply:any)=>{
+    const s=await authorize(request,reply,false,'project:experiments:results');if(!s)return;
+    reply.header('Cache-Control','no-store');
+    if(!s.isAgentToken||!s.projectId)return reply.code(403).send({error:'Project-bound results credential required'});
+    if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Project comes only from the credential; results accept no query parameters'});
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid experiment ID'});
+    if(!limiter.take(s.workspaceId))return reply.code(429).send({error:'Too many aggregate results reads'});
+    try{const result=await results.read(s.workspaceId,s.projectId,id.data);return result??reply.code(404).send({error:'Experiment not found'});}catch{return reply.code(503).send({error:'Stored aggregate results are unavailable. No result or action is confirmed.'});}
+   });
+  }
+  if(services.prisma&&services.projectRegistry){
+   const drafts=new ProjectExperimentDraftService(services.prisma),limiter=new SlidingWindowLimiter(20,60_000);
+   fastify.post('/agent/project/experiment-drafts',{bodyLimit:262144},async(request:any,reply:any)=>{
+    const s=await authorize(request,reply,true,'project:experiments:draft');if(!s)return;
+    reply.header('Cache-Control','no-store');
+    if(!s.isAgentToken||!s.projectId)return reply.code(403).send({error:'Project-bound draft credential required'});
+    if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Project comes only from the credential'});
+    const parsed=CreateProjectExperimentDraftSchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:'Supply requestId, rawHypothesis, preferredSlug, complete pageCopy and surveyQuestions only'});
+    if(!limiter.take(s.workspaceId))return reply.code(429).send({error:'Too many private experiment saves. Retry later with the same request ID/input.'});
+    if(!await allowed(reply,s.workspaceId,'validator'))return;
+    try{const result=await drafts.create(s.workspaceId,s.projectId,s.sub,parsed.data);if(!result)return reply.code(404).send({error:'Project not found'});return reply.code(result.replayed?200:201).send({...result,note:'Private page storage only. Replay returns current saved state, never resets or publishes it. No visitor, lead, campaign or job was created.'});}
+    catch(e){if(e instanceof ExperimentDraftConflict)return reply.code(409).send({error:e.message});if(e instanceof ExperimentDraftDenied)return reply.code(403).send({error:e.message});return reply.code(503).send({error:'Draft save not confirmed. Keep the request ID and input unchanged, then retry.'});}
+   });
+  }
+  if(services.projectRegistry&&services.reads&&services.validator&&services.prisma){
+   fastify.get('/agent/project/experiments',async(request:any,reply:any)=>{
+    const s=await authorize(request,reply,false,'project:experiments:read');if(!s)return;
+    if(!s.isAgentToken||!s.projectId)return reply.code(403).send({error:'Project-bound observation token required'});
+    if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Project identity comes from token only'});
+    if(!await services.projectRegistry!.findByIdOrSlug(s.workspaceId,s.projectId))return reply.code(404).send({error:'Project not found'});
+    return services.reads!.listExperiments(s.workspaceId,s.projectId);
+   });
+   fastify.get('/agent/project/experiments/:id/page',async(request:any,reply:any)=>{
+    const s=await authorize(request,reply,false,'project:experiments:read');if(!s)return;
+    if(!s.isAgentToken||!s.projectId)return reply.code(403).send({error:'Project-bound observation token required'});
+    if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Project identity comes from token only'});
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid experiment id'});
+    const exp=await services.prisma.validationExperiment.findFirst({where:{id:id.data,workspaceId:s.workspaceId,projectId:s.projectId},select:{id:true}});
+    if(!exp)return reply.code(404).send({error:'Experiment not found'});
+    const page=await services.validator!.getOwnerPage(id.data,s.workspaceId);if(!page)return reply.code(404).send({error:'Experiment not found'});return page;
+   });
+  }
+  if(services.projectRegistry&&services.projectInventory){
+   const inventory=async(request:any,reply:any,agent:boolean)=>{
+    const session=await authorize(request,reply,false,agent?'project:inventory:read':undefined);if(!session)return;
+    if(agent&&(!session.isAgentToken||!session.projectId))return reply.code(403).send({error:'Project-bound inventory credential required'});
+    if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Inventory has no query overrides'});
+    try{const project=await services.projectRegistry!.findByIdOrSlug(session.workspaceId,agent?session.projectId:String(request.params.projectId));if(!project)return reply.code(404).send({error:'Project not found'});const result=await services.projectInventory!.get(session.workspaceId,project.id);if(!result)return reply.code(404).send({error:'Project not found'});return result;}catch{return reply.code(503).send({error:'Project inventory unavailable. No readiness claim can be made from this failed read.'});}
+   };
+   fastify.get('/projects/:projectId/inventory',(request:any,reply:any)=>inventory(request,reply,false));fastify.get('/agent/project/inventory',(request:any,reply:any)=>inventory(request,reply,true));
+  }
+  if(services.projectRegistry&&services.projectAssets){
+   const mountAssets=(prefix:string,agentMode:boolean)=>{
+    const resolve=async(request:any,reply:any,write=false)=>{
+     const s=await authorize(request,reply,write,agentMode?(write?'project:assets:write':'project:assets:read'):undefined);if(!s)return null;
+     if(agentMode&&(!s.isAgentToken||!s.projectId)){reply.code(403).send({error:'Project-bound asset credential required'});return null;}
+     const project=await services.projectRegistry!.findByIdOrSlug(s.workspaceId,agentMode?s.projectId:String(request.params.projectId));
+     if(!project){reply.code(404).send({error:'Project not found'});return null;}return{s,project};
+    };
+    const failed=(reply:any,error:unknown)=>error instanceof AssetConflict?reply.code(409).send({error:error.message}):reply.code(503).send({error:'Project asset operation was not confirmed. Keep the same request ID and input when retrying.'});
+    fastify.post(agentMode?'/agent/project/discovery/match':'/projects/:projectId/discovery/match',{bodyLimit:262144},async(request:any,reply:any)=>{
+     const r=await resolve(request,reply);if(!r)return;reply.header('Cache-Control','no-store');const body=ProjectDiscoveryMatchSchema.safeParse(request.body);
+     if(!body.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Supply one saved profile asset/version and up to20 distinct selected posts only'});
+     try{const result=await new ProjectDiscoveryService(services.projectAssets!).match(r.s.workspaceId,r.project.id,body.data);return result??reply.code(404).send({error:'Profile asset/version not found'});}catch(e){if(e instanceof DiscoveryProfileInvalid)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Project discovery unavailable. No match or draft was confirmed.'});}
+    });
+    fastify.get(prefix,async(request:any,reply:any)=>{
+     const r=await resolve(request,reply);if(!r)return;const q=ProjectAssetQuerySchema.safeParse(request.query??{});if(!q.success)return reply.code(400).send({error:'Invalid asset query'});
+     try{return await services.projectAssets!.list(r.s.workspaceId,r.project.id,q.data);}catch(e){return failed(reply,e);}
+    });
+    fastify.get(prefix+'/:assetId',async(request:any,reply:any)=>{
+     const r=await resolve(request,reply);if(!r)return;const id=z.string().uuid().safeParse(request.params.assetId),q=z.object({version:z.coerce.number().int().min(1).max(1000000).optional()}).strict().safeParse(request.query??{});if(!id.success||!q.success)return reply.code(400).send({error:'Invalid asset detail query'});
+     try{const asset=await services.projectAssets!.get(r.s.workspaceId,r.project.id,id.data,q.data.version);if(!asset)return reply.code(404).send({error:'Asset not found'});return asset;}catch(e){return failed(reply,e);}
+    });
+    fastify.post(prefix,{bodyLimit:262144},async(request:any,reply:any)=>{
+     const r=await resolve(request,reply,true);if(!r)return;const body=CreateProjectAssetSchema.safeParse(request.body);if(!body.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Invalid project asset'});
+     try{const asset=await services.projectAssets!.create(r.s.workspaceId,r.project.id,r.s.sub,body.data);if(!asset)return reply.code(404).send({error:'Project not found'});return reply.code(asset.replayed?200:201).send(asset);}catch(e){return failed(reply,e);}
+    });
+    fastify.put(prefix+'/:assetId',{bodyLimit:262144},async(request:any,reply:any)=>{
+     const r=await resolve(request,reply,true);if(!r)return;const id=z.string().uuid().safeParse(request.params.assetId),body=ReviseProjectAssetSchema.safeParse(request.body);if(!id.success||!body.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Invalid asset revision'});
+     try{const asset=await services.projectAssets!.revise(r.s.workspaceId,r.project.id,r.s.sub,id.data,body.data);if(!asset)return reply.code(404).send({error:'Asset not found'});return asset;}catch(e){return failed(reply,e);}
+    });
+   };
+   mountAssets('/projects/:projectId/assets',false);mountAssets('/agent/project/assets',true);
+  }
+  if(services.projectRegistry&&services.projectEntries){
+   const mountEntries=(prefix:string,agentMode:boolean)=>{
+    const entryProject=async(request:any,reply:any,write=false)=>{
+     const session=await authorize(request,reply,write,agentMode?(write?'context:write':'context:read'):undefined);if(!session)return null;
+     if(agentMode&&(!session.isAgentToken||!session.projectId)){reply.code(403).send({error:'A project-bound context token is required'});return null;}
+     try{
+      const project=await services.projectRegistry!.findByIdOrSlug(session.workspaceId,agentMode?session.projectId:String(request.params.projectId));
+      if(!project){reply.code(404).send({error:'Project not found'});return null;}
+      return{session,project};
+     }catch{reply.code(503).send({error:'Project history unavailable'});return null;}
+    };
+    fastify.get(prefix,async(request:any,reply:any)=>{
+     const resolved=await entryProject(request,reply);if(!resolved)return;
+     const parsed=ProjectEntryQuerySchema.safeParse(request.query);if(!parsed.success)return reply.code(400).send({error:'Invalid entry query'});
+     try{return await services.projectEntries!.list(resolved.session.workspaceId,resolved.project.id,parsed.data);}
+     catch(e){if(e instanceof EntryCursorInvalid)return reply.code(400).send({error:'Invalid entry cursor'});return reply.code(503).send({error:'Project history unavailable'});}
+    });
+    fastify.get(prefix+'/brief',async(request:any,reply:any)=>{
+     const resolved=await entryProject(request,reply);if(!resolved)return;
+     if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Brief does not accept query parameters'});
+     try{return await services.projectEntries!.brief(resolved.session.workspaceId,resolved.project.id);}
+     catch{return reply.code(503).send({error:'Project brief unavailable'});}
+    });
+    fastify.get(prefix+'/:entryId',async(request:any,reply:any)=>{
+     const resolved=await entryProject(request,reply);if(!resolved)return;
+     if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Detail route does not accept query parameters'});
+     const id=z.string().uuid().safeParse(request.params.entryId);if(!id.success)return reply.code(400).send({error:'Invalid entry ID'});
+     try{const entry=await services.projectEntries!.get(resolved.session.workspaceId,resolved.project.id,id.data);if(!entry)return reply.code(404).send({error:'Entry not found'});return entry;}
+     catch{return reply.code(503).send({error:'Project history unavailable'});}
+    });
+    fastify.post(prefix,{bodyLimit:32768},async(request:any,reply:any)=>{
+     const resolved=await entryProject(request,reply,true);if(!resolved)return;
+     if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Write route does not accept query parameters'});
+     const parsed=CreateProjectEntrySchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:'Invalid project entry'});
+     try{const result=await services.projectEntries!.create(resolved.session.workspaceId,resolved.project.id,resolved.session.sub,parsed.data);if(!result)return reply.code(404).send({error:'Project not found'});return reply.code(result.created?201:200).send(result.entry);}
+     catch(e){if(e instanceof EntryRequestConflict)return reply.code(409).send({error:'This request ID was already used for another entry'});return reply.code(503).send({error:'Entry save was not confirmed. Reload before retrying.'});}
+    });
+   };
+   mountEntries('/projects/:projectId/entries',false);
+   mountEntries('/agent/context/entries',true);
+  }
+  if(services.projectContext) {
+   const pc=services.projectContext;
+   const restoreAgentContextHandler=async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false,'context:read');if(!session)return;
+    const sess=session as any;
+    if(!sess.isAgentToken||!sess.projectId) {
+     return reply.code(403).send({error:'Token is not project-bound. Context endpoints require a project-scoped agent token.'});
+    }
+    const queryProjectId=(request.query as any)?.projectId;
+    if(queryProjectId&&queryProjectId!==sess.projectId) {
+     return reply.code(403).send({error:'Project mismatch with bound token'});
+    }
+    try {
+     const res=await pc.restore(sess.workspaceId,sess.projectId);
+     if(!res) return reply.code(404).send({error:`No context found for project ${sess.projectId}`});
+     return reply.code(200).send(res);
+    } catch(err:any) {
+     if(err?.statusCode===413||err?.name==='PayloadTooLargeError') return reply.code(413).send({error:'Stored context exceeds 256KB limit'});
+     throw err;
+    }
+   };
+   const persistAgentContextHandler=async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true,'context:write');if(!session)return;
+    const sess=session as any;
+    if(!sess.isAgentToken||!sess.projectId) {
+     return reply.code(403).send({error:'Token is not project-bound. Context endpoints require a project-scoped agent token.'});
+    }
+    const queryProjectId=(request.query as any)?.projectId??(request.body as any)?.projectId;
+    if(queryProjectId&&queryProjectId!==sess.projectId) {
+     return reply.code(403).send({error:'Project mismatch with bound token'});
+    }
+    const rawLen=Buffer.byteLength(JSON.stringify(request.body??{}));
+    if(rawLen>262_144) {
+     return reply.code(413).send({error:'Context payload exceeds 256KB limit'});
+    }
+    const parsed=PersistContextRequestSchema.safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:'Invalid context payload',details:parsed.error.issues});
+    try {
+     const res=await pc.persist(sess.workspaceId,sess.projectId,parsed.data,sess.sub);
+     return reply.code(200).send(res);
+    } catch(err:any) {
+     if(err?.statusCode===413||err?.name==='PayloadTooLargeError') return reply.code(413).send({error:'Context payload exceeds 256KB limit'});
+     if(err?.statusCode===409)return reply.code(409).send({error:err.message});
+     return reply.code(503).send({error:'Context save was not confirmed. Restore current state before reconciling; do not retry an unconditional replacement blindly.'});
+    }
+   };
+   fastify.get('/agent/context',restoreAgentContextHandler);
+   fastify.post('/agent/context',{bodyLimit:262_144},persistAgentContextHandler);
+   fastify.put('/agent/context',{bodyLimit:262_144},persistAgentContextHandler);
+
+   fastify.get('/projects/:projectId/context',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false);if(!session)return;reply.header('Cache-Control','no-store');if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Project comes only from the route and workspace from session'});
+    if((session as any).isAgentToken) return reply.code(403).send({error:'Agent tokens cannot access /projects/:projectId/context (human sessions only)'});
+    const paramProjectId=String(request.params?.projectId??'');
+    if(!services.projectRegistry) {
+     return reply.code(503).send({error:'Project registry service unavailable for project validation'});
+    }
+    const project=await services.projectRegistry.findByIdOrSlug(session.workspaceId,paramProjectId);
+    if(!project) return reply.code(404).send({error:`Project ${paramProjectId} not found in this workspace`});
+    const canonicalProjectId=project.id;
+    try {
+     const res=await pc.restore(session.workspaceId,canonicalProjectId);
+     if(!res) return reply.code(404).send({error:`No context found for project ${paramProjectId}`});
+     return reply.code(200).send(res);
+    } catch(err:any) {
+     if(err?.statusCode===413||err?.name==='PayloadTooLargeError') return reply.code(413).send({error:'Stored context exceeds 256KB limit'});
+     return reply.code(503).send({error:'Saved snapshot unavailable. No replacement was created.'});
+    }
+   });
+   fastify.post('/projects/:projectId/context',{bodyLimit:262_144},async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true);if(!session)return;reply.header('Cache-Control','no-store');if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Project comes only from the route and workspace from session'});
+    if((session as any).isAgentToken) return reply.code(403).send({error:'Agent tokens cannot access /projects/:projectId/context (human sessions only)'});
+    const paramProjectId=String(request.params?.projectId??'');
+    if(!services.projectRegistry) {
+     return reply.code(503).send({error:'Project registry service unavailable for project validation'});
+    }
+    const project=await services.projectRegistry.findByIdOrSlug(session.workspaceId,paramProjectId);
+    if(!project) return reply.code(404).send({error:`Project ${paramProjectId} not found in this workspace`});
+    const canonicalProjectId=project.id;
+    const rawLen=Buffer.byteLength(JSON.stringify(request.body??{}));
+    if(rawLen>262_144) {
+     return reply.code(413).send({error:'Context payload exceeds 256KB limit'});
+    }
+    const parsed=PersistContextRequestSchema.safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:'Invalid context payload',details:parsed.error.issues});
+    try {
+     const res=await pc.persist(session.workspaceId,canonicalProjectId,parsed.data,session.sub);
+     return reply.code(200).send(res);
+    } catch(err:any) {
+     if(err?.statusCode===413||err?.name==='PayloadTooLargeError') return reply.code(413).send({error:'Context payload exceeds 256KB limit'});
+     if(err?.statusCode===409)return reply.code(409).send({error:err.message});
+     return reply.code(503).send({error:'Context save was not confirmed. Restore current state before reconciling; do not retry an unconditional replacement blindly.'});
+    }
+   });
+  }
   fastify.get('/vault/credentials',async(request:any,reply:any)=>{
    const session=await authorize(request,reply);if(!session)return;
    return services.credentials.list(session.workspaceId);
@@ -373,15 +910,42 @@ export async function createApplication(services?:RuntimeServices) {
   // Campaign create (G-gap: campaign-create UI): tenant-scoped, role-checked, plan-gated.
   // Table and mailbox pool references are verified inside this workspace; unknown ids 404
   // without leaking existence. New campaigns start as 'draft' - nothing becomes sendable here.
+  const projectDraftLimiter=new SlidingWindowLimiter(20,60_000);
+  fastify.post('/agent/project/campaign-drafts',{bodyLimit:262144},async(request:any,reply:any)=>{
+   const session=await authorize(request,reply,true,'project:campaigns:draft');if(!session)return;
+   if(!session.isAgentToken||!session.projectId)return reply.code(403).send({error:'Project-bound agent credential required'});
+   if(!services.recipients||!services.projectRegistry)return reply.code(503).send({error:'Campaign draft storage unavailable'});
+   if(!projectDraftLimiter.take(session.workspaceId))return reply.code(429).send({error:'Too many campaign draft saves. Retry later with unchanged request ID/input.'});
+   if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
+   const parsed=CreateProjectCampaignDraftSchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:'Invalid campaign draft. Supply requestId/name/steps and optional draft schedule settings only. No recipients, senders or lifecycle controls.'});
+   if(Object.keys(request.query??{}).length)return reply.code(400).send({error:'Campaign draft project comes only from the credential'});
+   try{
+    if(!await services.projectRegistry.findByIdOrSlug(session.workspaceId,session.projectId))return reply.code(404).send({error:'Project not found'});
+    const saved=await services.recipients.createCampaign(session.workspaceId,{...parsed.data,projectId:session.projectId,mailboxPoolIds:[]});
+    if(!saved)return reply.code(404).send({error:'Project not found'});
+    return reply.code(saved.replayed?200:201).send({...saved,note:'Private campaign content saved only. No recipient, sender, approval, activation, job, release or send was created. Replay returns current campaign state and never resets it.'});
+   }catch(e){if(e instanceof CampaignCreateConflict)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Campaign draft save was not confirmed. Retry the same request ID and unchanged input.'});}
+  });
+  if(services.privateCampaigns){
+   const limiter=new SlidingWindowLimiter(30,60_000);
+   const draftIdentity=async(request:any,reply:any,write=false)=>{const s=await authorize(request,reply,write,write?'project:campaigns:edit':'project:campaigns:read');if(!s)return null;if(!s.isAgentToken||!s.projectId){reply.code(403).send({error:'Project-bound agent credential required'});return null;}if(Object.keys(request.query??{}).length){reply.code(400).send({error:'Project comes only from the credential'});return null;}const id=z.string().uuid().safeParse(request.params.campaignId);if(!id.success){reply.code(400).send({error:'Invalid campaign ID'});return null;}return{...s,campaignId:id.data};};
+   const humanDraftIdentity=async(request:any,reply:any,write=false)=>{const s=await authorize(request,reply,write);if(!s)return null;const id=z.string().uuid().safeParse(request.params.campaignId);if(!id.success||Object.keys(request.query??{}).length){reply.code(400).send({error:'Use a saved campaign ID only; workspace comes from session'});return null;}if(!limiter.take(s.workspaceId)){reply.code(429).send({error:'Too many private draft requests'});return null;}reply.header('Cache-Control','no-store');return{...s,campaignId:id.data};};
+   fastify.get('/workspace/campaigns/:campaignId/private-copy',async(request:any,reply:any)=>{const s=await humanDraftIdentity(request,reply);if(!s)return;try{const r=await services.privateCampaigns!.get(s.workspaceId,undefined,s.campaignId);return r??reply.code(404).send({error:'Campaign draft not found'});}catch(e){if(e instanceof PrivateCampaignConflict)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Private campaign copy unavailable'});}});
+   fastify.put('/workspace/campaigns/:campaignId/private-copy',{bodyLimit:262144},async(request:any,reply:any)=>{const s=await humanDraftIdentity(request,reply,true);if(!s)return;if(!await allowed(reply,s.workspaceId,'outbound_sending'))return;const p=RevisePrivateCampaignSchema.safeParse(request.body);if(!p.success)return reply.code(400).send({error:'Supply current revision and complete private draft copy only'});try{const r=await services.privateCampaigns!.revise(s.workspaceId,undefined,s.campaignId,p.data);return r??reply.code(404).send({error:'Campaign draft not found'});}catch(e){if(e instanceof PrivateCampaignConflict)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Draft edit unconfirmed. Keep local words and retry unchanged or load current copy.'});}});
+   fastify.get('/agent/project/campaign-drafts/:campaignId',async(request:any,reply:any)=>{const s=await draftIdentity(request,reply);if(!s)return;reply.header('Cache-Control','no-store');try{const r=await services.privateCampaigns!.get(s.workspaceId,s.projectId,s.campaignId);return r??reply.code(404).send({error:'Campaign draft not found'});}catch(e){if(e instanceof PrivateCampaignConflict)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Private draft unavailable'});}});
+   fastify.put('/agent/project/campaign-drafts/:campaignId',{bodyLimit:262144},async(request:any,reply:any)=>{const s=await draftIdentity(request,reply,true);if(!s)return;if(!limiter.take(s.workspaceId))return reply.code(429).send({error:'Too many private draft revisions'});if(!await allowed(reply,s.workspaceId,'outbound_sending'))return;const p=RevisePrivateCampaignSchema.safeParse(request.body);if(!p.success)return reply.code(400).send({error:'Invalid private draft revision. Supply exact current expectedRevision and complete draft copy only.'});try{const r=await services.privateCampaigns!.revise(s.workspaceId,s.projectId,s.campaignId,p.data);return r??reply.code(404).send({error:'Campaign draft not found'});}catch(e){if(e instanceof PrivateCampaignConflict)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Draft revision not confirmed. Keep local words and read saved draft before retrying.'});}});
+  }
   fastify.post('/workspace/campaigns',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
    if(!services.recipients)return reply.code(503).send({error:'Campaign store unavailable'});
    const parsed=CreateWorkspaceCampaignSchema.safeParse(request.body);
    if(!parsed.success)return reply.code(400).send({error:'Invalid campaign request'});
-   const created=await services.recipients.createCampaign(session.workspaceId,parsed.data);
-   if(!created)return reply.code(404).send({error:'Table or mailbox not found'});
-   return reply.code(201).send(created);
+   try{
+    const created=await services.recipients.createCampaign(session.workspaceId,parsed.data);
+    if(!created)return reply.code(404).send({error:'Project, table or mailbox not found'});
+    return reply.code(created.replayed?200:201).send(created);
+   }catch(e){if(e instanceof CampaignCreateConflict)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Campaign save was not confirmed. Retry the same request ID and unchanged input. Without a request ID, inspect saved campaigns before retrying.'});}
   });
   fastify.post('/campaigns/:campaignId/recipients',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
@@ -409,11 +973,11 @@ export async function createApplication(services?:RuntimeServices) {
    if(!await allowed(reply,session.workspaceId,'outbound_sending'))return;
    if(!services.recipients)return reply.code(503).send({error:'Campaign store unavailable'});
    const campaignId=z.string().uuid().safeParse((request.params as any)?.campaignId);
-   const parsed=z.object({mailboxIds:z.array(z.string().uuid()).max(50)}).strict().safeParse(request.body);
+   const parsed=z.object({mailboxIds:z.array(z.string().uuid()).max(50),expectedMailboxIds:z.array(z.string().uuid()).max(50).optional()}).strict().safeParse(request.body);
    if(!campaignId.success||!parsed.success)return reply.code(400).send({error:'Invalid pool request'});
-   const result=await services.recipients.setMailboxPool(session.workspaceId,campaignId.data,[...new Set(parsed.data.mailboxIds)]);
+   try{const result=await services.recipients.setMailboxPool(session.workspaceId,campaignId.data,parsed.data.mailboxIds,parsed.data.expectedMailboxIds);
    if(!result)return reply.code(404).send({error:'Campaign or mailbox not found'});
-   return reply.code(200).send(result);
+   return reply.code(200).send(result);}catch(e){if(e instanceof CampaignPoolConflict)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Sender-pool save was not confirmed. Keep your selection and reload the saved pool before reconciling.'});}
   });
   // Campaign lifecycle: the user-facing draft -> active -> paused transitions.
   // Validation lives in the repository (steps + sender pool required to activate);
@@ -474,7 +1038,7 @@ export async function createApplication(services?:RuntimeServices) {
   });
   fastify.post('/outbound/approvals/approve',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
-   const b=z.object({jobIds:z.array(z.string().uuid()).optional(),all:z.boolean().optional(),campaignId:z.string().uuid().optional()}).strict().safeParse(request.body);
+   const b=ApproveOutboundJobRequestSchema.safeParse(request.body);
    if(!b.success)return reply.code(400).send({error:'Invalid approval request'});
    const result=await services.outbound.approve(session.workspaceId,b.data);
    return {...result,sendingEnabled:services.outboundSendingEnabled===true};
@@ -488,7 +1052,9 @@ export async function createApplication(services?:RuntimeServices) {
   fastify.post('/outbound/approvals/:id/approve',async(request:any,reply:any)=>{
    const session=await authorize(request,reply,true);if(!session)return;
    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid job ID'});
-   const result=await services.outbound.approve(session.workspaceId,{jobIds:[id.data]});
+   const b=z.object({expectedRevision:ApprovalReviewRevisionSchema}).strict().safeParse(request.body);
+   if(!b.success)return reply.code(400).send({error:'Supply the exact displayed approval revision. Reload and review this message before approval.'});
+   const result=await services.outbound.approve(session.workspaceId,{jobIds:[id.data],expectedRevisions:{[id.data]:b.data.expectedRevision}});
    return {...result,sendingEnabled:services.outboundSendingEnabled===true};
   });
   // Per-job sender pin: narrow a held message to one mailbox from the campaign's pool (or clear back to rotation).
@@ -550,16 +1116,18 @@ export async function createApplication(services?:RuntimeServices) {
     const session=await authorize(request,reply);if(!session)return;
     if(!await allowed(reply,session.workspaceId,'waterfall'))return;
     try{return await services.waterfall!.getPreFlightEstimate(request.body);}
-    catch{return reply.code(400).send({error:'Invalid pre-flight request'});}
+    catch(e:any){if(e?.statusCode===503)return reply.code(503).send({error:e.message});if(e?.name==='ZodError')return reply.code(400).send({error:'Invalid pre-flight request'});return reply.code(503).send({error:'Waterfall estimate unavailable. No provider quote is established.'});}
    });
    fastify.post('/waterfall/dispatch',async(request:any,reply:any)=>{
     const session=await authorize(request,reply,true);if(!session)return;
     if(!await allowed(reply,session.workspaceId,'waterfall'))return;
     try{return await services.waterfall!.dispatch(request.body,session.workspaceId);}
     catch(err:any){
-     if(err&&err.name==='WaterfallDispatchUnavailableError')
-      return reply.code(503).send({error:'Waterfall dispatch unavailable',message:'Durable job persistence is not implemented yet; nothing was queued.',queued:false});
-     return reply.code(400).send({error:'Invalid waterfall dispatch request'});
+     if(err?.name==='WaterfallDispatchUnavailableError'||err?.statusCode===503)
+      return reply.code(503).send({error:'Waterfall execution is unavailable. No job was queued and no provider was called.',message:'Durable job persistence is not implemented or unavailable; nothing was queued.',queued:false});
+     if(err?.statusCode===403)return reply.code(403).send({error:'Waterfall is not permitted on this workspace plan'});
+     if(err?.name==='ZodError'||err?.name==='WaterfallDispatchTenantMismatchError')return reply.code(400).send({error:'Invalid waterfall dispatch request'});
+     return reply.code(503).send({error:'Waterfall dispatch was not confirmed. No queued job is established.',queued:false});
     }
    });
    // D3 status read (local, default-off with the rest of this block; honest
@@ -606,7 +1174,7 @@ export async function createApplication(services?:RuntimeServices) {
     z.object({url:z.string().url().max(2048)}).strict(),
    ]);
    fastify.post('/research/website-signals',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply);if(!session)return;
+    const session=await authorize(request,reply,false,'research:read');if(!session)return;
     const parsed=ResearchBody.safeParse(request.body);
     if(!parsed.success)return reply.code(400).send({error:'Invalid research request'});
     if('url' in parsed.data) {
@@ -627,18 +1195,20 @@ export async function createApplication(services?:RuntimeServices) {
     return {status:'OK',input:'pasted_text',signals,icpHints,relevanceReasons:deriveRelevanceReasons(signals,icpHints)};
    });
   }
+  const researchFailure=(reply:any,error:unknown)=>error instanceof ResearchProjectNotFound?reply.code(404).send({error:'Project not found'}):error instanceof ResearchTableConflict?reply.code(409).send({error:error.message}):reply.code(503).send({error:'Research storage unavailable. Reload saved analyses before retrying any unconfirmed save.'});
   if(services.researchLeads) {
-   const SaveBody=z.object({domain:z.string().min(1).max(255).regex(/^[a-z0-9.-]+\.[a-z]{2,}$/i,'Invalid domain'),pageText:z.string().min(1).max(200_000)}).strict();
+   const SaveBody=z.object({projectId:z.string().uuid().optional(),requestId:z.string().uuid().optional(),domain:z.string().min(1).max(255).regex(/^[a-z0-9.-]+\.[a-z]{2,}$/i,'Invalid domain'),pageText:z.string().min(1).max(200_000)}).strict();
    fastify.post('/research/website-signals/save',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply,true);if(!session)return;
+    const session=await authorize(request,reply,true,'research:write');if(!session)return;
     const parsed=SaveBody.safeParse(request.body);
     if(!parsed.success)return reply.code(400).send({error:'Invalid research save request'});
-    const saved=await services.researchLeads!.saveAnalysis(session.workspaceId,parsed.data.domain,parsed.data.pageText,'pasted_text');
-    return {status:'SAVED',...saved};
+    try{const saved=await services.researchLeads!.saveAnalysis(session.workspaceId,parsed.data.domain,parsed.data.pageText,'pasted_text',parsed.data.requestId,parsed.data.projectId);
+    return {status:'SAVED',...saved};}catch(error){return researchFailure(reply,error);}
    });
    fastify.get('/research/leads',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply);if(!session)return;
-    return {items:await services.researchLeads!.listAnalyses(session.workspaceId)};
+    const session=await authorize(request,reply,false,'research:read');if(!session)return;
+    const query=z.object({projectId:z.string().uuid().optional()}).strict().safeParse(request.query??{});if(!query.success)return reply.code(400).send({error:'Invalid research query'});
+    try{if(query.data.projectId&&(!services.projectRegistry||!await services.projectRegistry.findByIdOrSlug(session.workspaceId,query.data.projectId)))return reply.code(404).send({error:'Project not found'});return {items:await services.researchLeads!.listAnalyses(session.workspaceId,query.data.projectId)};}catch(error){return researchFailure(reply,error);}
    });
   }
   // G5 intent signals, fixture-first: analyze/save/list hiring-board-shaped
@@ -647,7 +1217,7 @@ export async function createApplication(services?:RuntimeServices) {
   if(services.intentFixture) {
    const IntentBody=z.object({fixture:z.unknown()}).strict();
    fastify.post('/research/intent-fixture',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply);if(!session)return;
+    const session=await authorize(request,reply,false,'research:read');if(!session)return;
     const parsed=IntentBody.safeParse(request.body);
     if(!parsed.success)return reply.code(400).send({error:'Invalid intent fixture request'});
     const result=services.intentFixture!.analyze(parsed.data.fixture);
@@ -655,53 +1225,200 @@ export async function createApplication(services?:RuntimeServices) {
     return {status:'OK',input:'pasted_fixture',analysis:result.analysis};
    });
    fastify.post('/research/intent-fixture/save',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply,true);if(!session)return;
-    const parsed=IntentBody.safeParse(request.body);
+    const session=await authorize(request,reply,true,'research:write');if(!session)return;
+    const parsed=z.object({fixture:z.unknown(),requestId:z.string().uuid().optional(),projectId:z.string().uuid().optional()}).strict().safeParse(request.body);
     if(!parsed.success)return reply.code(400).send({error:'Invalid intent fixture save request'});
-    const saved=await services.intentFixture!.saveAnalysis(session.workspaceId,parsed.data.fixture);
+    try{const saved=await services.intentFixture!.saveAnalysis(session.workspaceId,parsed.data.fixture,parsed.data.requestId,parsed.data.projectId);
     if(!saved.ok)return reply.code(422).send({status:'INVALID_FIXTURE',message:saved.error});
-    return {status:'SAVED',tableId:saved.tableId,rowId:saved.rowId};
+    return {status:'SAVED',tableId:saved.tableId,rowId:saved.rowId,replayed:saved.replayed};}catch(error){return researchFailure(reply,error);}
    });
    fastify.get('/research/intent-signals',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply);if(!session)return;
-    return {items:await services.intentFixture!.listAnalyses(session.workspaceId)};
+    const session=await authorize(request,reply,false,'research:read');if(!session)return;
+    const query=z.object({projectId:z.string().uuid().optional()}).strict().safeParse(request.query??{});if(!query.success)return reply.code(400).send({error:'Invalid research query'});
+    try{if(query.data.projectId&&(!services.projectRegistry||!await services.projectRegistry.findByIdOrSlug(session.workspaceId,query.data.projectId)))return reply.code(404).send({error:'Project not found'});return {items:await services.intentFixture!.listAnalyses(session.workspaceId,query.data.projectId)};}catch(error){return researchFailure(reply,error);}
+   });
+  }
+  if(services.projectRegistry){
+   fastify.post('/agent/project/research/hn-search',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false,HN_SEARCH_SCOPE);if(!session)return;
+    reply.header('Cache-Control','no-store');
+    if(!session.isAgentToken||!session.projectId||!session.scopes?.includes(HN_SEARCH_SCOPE))return reply.code(403).send({error:'Explicit project-bound project:research:search scope required for queries sent to public HN search; wildcard is not consent'});
+    const parsed=z.object({query:z.string().trim().min(1).max(120).regex(/^[^\u0000-\u001f\u007f]+$/)}).strict().safeParse(request.body);
+    if(!parsed.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Supply only one public HN query of1..120 characters. Project comes from the credential. Do not include private or secret information.'});
+    if(!await services.projectRegistry!.findByIdOrSlug(session.workspaceId,session.projectId))return reply.code(404).send({error:'Project not found'});
+    if(!services.projectHnResearch)return reply.code(503).send({error:'Public HN agent search is not enabled. No upstream query was made.'});
+    if(!await allowed(reply,session.workspaceId,'ai_researcher'))return;
+    try{return await services.projectHnResearch.search(session.workspaceId,session.projectId,parsed.data.query);}
+    catch(error){if(error instanceof HnResearchLimited)return reply.header('Retry-After','60').code(429).send({error:'Public HN query limit reached. Wait before a new request.'});if(error instanceof HnResearchBusy)return reply.code(409).send({error:'A public HN query is already running. No new query was started.'});return reply.code(502).send({error:'Public HN search unavailable. No result or saved research is confirmed.'});}
+   });
+  }
+  if(services.projectRegistry&&services.researchLeads&&services.intentFixture){
+   const researchIdentity=async(request:any,reply:any,agent:boolean)=>{
+    const session=await authorize(request,reply,false,agent?'project:research:read':'research:read');if(!session)return null;
+    if(agent&&(!session.isAgentToken||!session.projectId)){reply.code(403).send({error:'Project-bound research observation credential required'});return null;}
+    return session;
+   };
+   for(const agent of [false,true]){
+    const prefix=agent?'/agent/project/research':'/research/records';
+    fastify.get(prefix+(agent?'/index':''),async(request:any,reply:any)=>{
+     const session=await researchIdentity(request,reply,agent);if(!session)return;
+     const schema=agent?ProjectResearchIndexQuerySchema:ProjectResearchIndexQuerySchema.extend({projectId:z.string().uuid()});
+     const parsed=schema.safeParse(request.query??{});if(!parsed.success)return reply.code(400).send({error:'Supply research kind, optional search, bounded limit and matching cursor; project identity is explicit for humans and token-bound for agents'});
+     const projectId=agent?session.projectId:(parsed.data as any).projectId;
+     try{
+      if(!await services.projectRegistry!.findByIdOrSlug(session.workspaceId,projectId))return reply.code(404).send({error:'Project not found'});
+      const service=parsed.data.kind==='website'?services.researchLeads!:services.intentFixture!;
+      const result=await service.searchProjectAnalyses(session.workspaceId,projectId,parsed.data);
+      return reply.header('Cache-Control','no-store').send(result);
+     }catch(error){if(error instanceof ResearchCursorInvalid)return reply.code(400).send({error:'Cursor does not match this project, research kind or search. Start a fresh search.'});return researchFailure(reply,error);}
+    });
+    fastify.get(prefix+(agent?'/records/:rowId':'/:rowId'),async(request:any,reply:any)=>{
+     const session=await researchIdentity(request,reply,agent);if(!session)return;
+     const schema=agent?ProjectResearchDetailQuerySchema:ProjectResearchDetailQuerySchema.extend({projectId:z.string().uuid()});
+     const parsed=schema.safeParse(request.query??{}),id=z.string().uuid().safeParse(request.params.rowId);
+     if(!parsed.success||!id.success)return reply.code(400).send({error:'Supply a saved research row UUID, kind and expected project identity'});
+     const projectId=agent?session.projectId:(parsed.data as any).projectId;
+     try{
+      if(!await services.projectRegistry!.findByIdOrSlug(session.workspaceId,projectId))return reply.code(404).send({error:'Project not found'});
+      const service=parsed.data.kind==='website'?services.researchLeads!:services.intentFixture!;
+      const result=await service.getProjectAnalysis(session.workspaceId,projectId,id.data);
+      return result?reply.header('Cache-Control','no-store').send(result):reply.code(404).send({error:'Saved project research row not found'});
+     }catch(error){return researchFailure(reply,error);}
+    });
+   }
+   fastify.get('/agent/project/research',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false,'project:research:read');if(!session)return;
+    if(!session.isAgentToken||!session.projectId)return reply.code(403).send({error:'Project-bound research observation credential required'});
+    const query=z.object({kind:z.enum(['website','intent-fixture'])}).strict().safeParse(request.query??{});if(!query.success)return reply.code(400).send({error:'Choose website or intent-fixture research; project comes from token only'});
+    try{if(!await services.projectRegistry!.findByIdOrSlug(session.workspaceId,session.projectId))return reply.code(404).send({error:'Project not found'});const service=query.data.kind==='website'?services.researchLeads!:services.intentFixture!;return{kind:query.data.kind,items:await service.listAnalyses(session.workspaceId,session.projectId),limit:50,note:'Newest saved computed rows only. Current editable cells, not source snapshots, live feeds, approvals or complete history.'};}catch(error){return researchFailure(reply,error);}
    });
   }
   if(services.validator) {
    fastify.post('/validator/experiments',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply,true);if(!session)return;
+    const session=await authorize(request,reply,true,'experiments:write');if(!session)return;
     if(!await allowed(reply,session.workspaceId,'validator'))return;
     try{return await services.validator!.generate(session.workspaceId,request.body);}
     catch{return reply.code(400).send({error:'Invalid validation request'});}
    });
    fastify.post('/validator/experiments/:id/outreach',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply,true);if(!session)return;
+    const session=await authorize(request,reply,true,'experiments:write');if(!session)return;
     if(!await allowed(reply,session.workspaceId,'validator'))return;
     try{return await services.validator!.recordOutreach(String(request.params.id),session.workspaceId,request.body);}
     catch{return reply.code(400).send({error:'Invalid outreach metrics'});}
    });
    fastify.get('/validator/experiments/:id/page',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply);if(!session)return;
+    const session=await authorize(request,reply,false,'experiments:read');if(!session)return;
     const page=await services.validator!.getOwnerPage(String(request.params.id),session.workspaceId);
     if(!page)return reply.code(404).send({error:'Experiment not found'});
     return page;
    });
-   fastify.post('/validator/experiments/:id/publish',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply,true);if(!session)return;
+   fastify.put('/validator/experiments/:id/page',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true,'experiments:write');if(!session)return;
     if(!await allowed(reply,session.workspaceId,'validator'))return;
-    try{return await services.validator!.setPublishStatus(String(request.params.id),session.workspaceId,true);}
-    catch{return reply.code(404).send({error:'Experiment not found'});}
+    const id=z.string().uuid().safeParse(request.params.id),body=EditDraftPageCopySchema.safeParse(request.body);
+    if(!id.success||!body.success)return reply.code(400).send({error:'Invalid page-copy edit'});
+    try{
+     const result=await services.validator!.editDraftCopy(id.data,session.workspaceId,body.data);
+     if(!result)return reply.code(404).send({error:'Experiment not found'});return result;
+    }catch(error){if(error instanceof DraftPageConflict)return reply.code(409).send({error:error.message});return reply.code(503).send({error:'Page copy could not be saved. Reload the page before retrying.'});}
+   });
+   fastify.post('/validator/experiments/:id/publish',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true,'experiments:write');if(!session)return;
+    if(!await allowed(reply,session.workspaceId,'validator'))return;
+    const id=z.string().uuid().safeParse(request.params.id),body=PublishReviewedPageSchema.safeParse(request.body);if(!id.success||!body.success)return reply.code(400).send({error:'Publishing requires the reviewed page expectedRevision'});
+    try{return await services.validator!.setPublishStatus(id.data,session.workspaceId,true,body.data.expectedRevision);}
+    catch(error){if(error instanceof PagePublicationConflict)return reply.code(409).send({error:error.message});if(error instanceof ExperimentNotFound)return reply.code(404).send({error:'Experiment not found'});return reply.code(503).send({error:'Publication was not confirmed. Reload current page status before retrying.'});}
    });
    fastify.post('/validator/experiments/:id/unpublish',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply,true);if(!session)return;
+    const session=await authorize(request,reply,true,'experiments:write');if(!session)return;
     if(!await allowed(reply,session.workspaceId,'validator'))return;
-    try{return await services.validator!.setPublishStatus(String(request.params.id),session.workspaceId,false);}
-    catch{return reply.code(404).send({error:'Experiment not found'});}
+    const id=z.string().uuid().safeParse(request.params.id);if(!id.success)return reply.code(400).send({error:'Invalid experiment ID'});
+    try{return await services.validator!.setPublishStatus(id.data,session.workspaceId,false);}
+    catch(error){if(error instanceof ExperimentNotFound)return reply.code(404).send({error:'Experiment not found'});return reply.code(503).send({error:'Unpublication was not confirmed. Reload current page status before retrying.'});}
    });
    fastify.get('/validator/experiments/:id/scorecard',async(request:any,reply:any)=>{
-    const session=await authorize(request,reply);if(!session)return;
+    const session=await authorize(request,reply,false,'experiments:read');if(!session)return;
     try{return await services.validator!.getScorecard(String(request.params.id),session.workspaceId);}
     catch{return reply.code(404).send({error:'Experiment not found'});}
+   });
+   fastify.get('/validator/experiments/:id/leads',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false,'experiments:read');if(!session)return;
+    try{return await services.validator!.getLeads(String(request.params.id),session.workspaceId);}
+    catch{return reply.code(404).send({error:'Experiment not found'});}
+   });
+   fastify.get('/validator/experiments/:id/leads/export',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,false,'experiments:read');if(!session)return;
+    try{
+     const data=await services.validator!.getLeads(String(request.params.id),session.workspaceId);
+     const csv=formatLeadsCsv(data.leads as any);
+     return reply
+      .header('Content-Type','text/csv; charset=utf-8')
+      .header('Content-Disposition',`attachment; filename="experiment-${encodeURIComponent(String(request.params.id))}-leads.csv"`)
+      .header('Cache-Control','no-store')
+      .send(csv);
+    }catch{return reply.code(404).send({error:'Experiment not found'});}
+   });
+   fastify.post('/validator/experiments/:id/import-leads',async(request:any,reply:any)=>{
+    const session=await authorize(request,reply,true,'experiments:write');if(!session)return;
+    const expId=z.string().uuid().safeParse((request.params as any)?.id);
+    if(!expId.success)return reply.code(400).send({error:'Invalid experiment ID'});
+    const parsed=ImportCapturedLeadsRequestSchema.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:'Invalid import request'});
+
+    let leadsRes;
+    try{leadsRes=await services.validator!.getLeads(expId.data,session.workspaceId);}
+    catch{return reply.code(404).send({error:'Experiment not found'});}
+
+    if(!leadsRes||leadsRes.leads.length===0){
+     return reply.code(400).send({error:'No captured leads to import'});
+    }
+
+    let targetName='Target';
+    let importedCount=0;
+
+    if(parsed.data.targetType==='campaign'){
+     if(!services.recipients)return reply.code(503).send({error:'Campaign store unavailable'});
+
+     const recipients=leadsRes.leads.map((l)=>{
+      const parts=(l.name||'').trim().split(/\s+/);
+      return {
+       email:l.email,
+       firstName:parts[0]||null,
+       lastName:parts.slice(1).join(' ')||null,
+       companyName:l.company||null,
+       customFields:{
+        surveyResponses:l.surveyResponses,
+        experimentId:expId.data,
+       },
+      };
+     });
+
+     const atomicRes=await services.recipients.importRecipientsIntoDraft(session.workspaceId,parsed.data.targetId,recipients);
+     if(!atomicRes.ok){
+      if(atomicRes.reason==='not_found')return reply.code(404).send({error:'Target campaign not found'});
+      return reply.code(409).send({error:'Target campaign must be in draft status'});
+     }
+     targetName=atomicRes.campaignName;
+     importedCount=atomicRes.upserted;
+    }else if(parsed.data.targetType==='table'){
+     if(!services.prisma?.$transaction)return reply.code(503).send({error:'Table import persistence unavailable'});
+     try {
+      const result=await importCapturedLeadsToTable(new PrismaDispatchDatabase(services.prisma),session.workspaceId,parsed.data.targetId,leadsRes.leads,parsed.data.expectedTableRevision);
+      if(!result)return reply.code(404).send({error:'Target table not found'});
+      targetName=result.name;
+      importedCount=result.importedCount;
+     } catch(error) {if(error instanceof CapturedTableMappingConflict)return reply.code(409).send({error:error.message});if(error instanceof CapturedTableMappingInvalid)return reply.code(400).send({error:error.message});return reply.code(503).send({error:'Table import was not confirmed. Reload the table before retrying. Repeating this append operation can add duplicate rows.'});}
+    }
+
+    return reply.code(200).send({
+     success:true,
+     targetType:parsed.data.targetType,
+     targetId:parsed.data.targetId,
+     targetName,
+     importedCount,
+     status:parsed.data.targetType==='table'?'saved':'draft',
+     message:parsed.data.targetType==='table'?`Appended ${importedCount} lead(s) to the saved table. Repeating appends new rows. No sends triggered.`:`Successfully imported ${importedCount} lead(s) into campaign draft. No sends triggered.`,
+    });
    });
    // Public by design: smoke-test pages render and collect waitlist leads
    // without an account. Strict schema validation only. State persists in
@@ -804,7 +1521,7 @@ export async function createApplication(services?:RuntimeServices) {
    const mailLimiter=new SlidingWindowLimiter(6,60*60_000);    // per target email, mail-sending routes
    const Cred=z.object({email:z.string().email().max(320),password:z.string().min(1).max(256)}).strict();
    const Reg=z.object({email:z.string().email().max(320),password:z.string().min(1).max(256),name:z.string().max(255).optional()}).strict();
-   const Verify=z.object({email:z.string().email().max(320),code:z.string().min(1).max(12)}).strict();
+   const Verify=z.object({email:z.string().email().max(320),code:z.string().min(1).max(12),password:z.string().min(10).max(256)}).strict();
    const Forgot=z.object({email:z.string().email().max(320)}).strict();
    const Reset=z.object({email:z.string().email().max(320),code:z.string().min(1).max(12),password:z.string().min(1).max(256)}).strict();
    const codeLimiter=new SlidingWindowLimiter(10,15*60_000);   // per target email, code checks (on top of 5 per code)
@@ -833,7 +1550,7 @@ export async function createApplication(services?:RuntimeServices) {
     if(limited(request,reply)) return reply;
     const p=Verify.safeParse(request.body); if(!p.success) return reply.code(400).send({error:'Invalid request'});
     if(!codeLimiter.take(p.data.email.toLowerCase())) return reply.code(429).send({error:'Too many attempts. Request a new code'});
-    try { await pw.verifyEmail(p.data.email,p.data.code); } catch(e) { return fail(reply,e); }
+    try { await pw.verifyEmail(p.data.email,p.data.code,p.data.password); } catch(e) { return fail(reply,e); }
     return {status:'verified'};
    });
    fastify.post('/auth/forgot-password',async(request:any,reply:any)=>{
@@ -869,7 +1586,7 @@ export async function createApplication(services?:RuntimeServices) {
  // report per-route mount state so health checks show exactly what exists.
  // Every mounted mutation route still requires a session + write role, and
  // sessions can only be minted when the login issuer itself is mounted.
- fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',mutationsEnabled:Boolean(services),outboundSendingEnabled:services?.outboundSendingEnabled===true,worker:services?.outboundWorker?'mounted':'unmounted',routes:{provisioning:services?.provisioning&&services.nextAuthBridgeKey?'mounted:bridge-token-required':'unmounted',entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted',research:services?.websiteSignals?(services.websiteFetcher?'mounted:session-required:fetch-enabled':'mounted:session-required:pasted-text-only'):'unmounted'}}));
+ fastify.get('/health',async()=>({status:'ok',service:'leadloom-engine',buildId:RELEASE_BUILD_ID,growthObservationWorker:services?.growthWatchWorker?.available?'mounted':'unmounted',mutationsEnabled:Boolean(services),outboundSendingEnabled:services?.outboundSendingEnabled===true,worker:services?.outboundWorker?'mounted':'unmounted',routes:{provisioning:services?.provisioning&&services.nextAuthBridgeKey?'mounted:bridge-token-required':'unmounted',entitlements:services?.entitlements?'enforced':'not_enforced',mutations:services?'mounted:session+write-role-required':'unmounted',loginIssuer:services?.userDirectory&&process.env.LEADLOOM_AUTH_ISSUER_ENABLED==='true'?'mounted':'unmounted',unsubscribe:services?.unsubscribeKey?'mounted':'unmounted',waterfall:services?.waterfall?'mounted:session-required':'unmounted',validator:services?.validator?'mounted:session-required':'unmounted',research:services?.websiteSignals?(services.websiteFetcher?'mounted:session-required:fetch-enabled':'mounted:session-required:pasted-text-only'):'unmounted'}}));
  // Readiness is honest about the worker: 503 until the send worker is actually mounted
  // (LEADLOOM_WORKER_ENABLED), 200 once it is. The send gate is reported separately and
  // stays off unless LEADLOOM_OUTBOUND_SENDING_ENABLED was set at boot.
@@ -877,9 +1594,77 @@ export async function createApplication(services?:RuntimeServices) {
   if(services?.outboundWorker)return {status:'ready',workers:'mounted',sendingEnabled:services.outboundSendingEnabled===true};
   return reply.code(503).send({status:'not-ready',reason:'Send worker is not mounted (LEADLOOM_WORKER_ENABLED unset)',workers:'not-mounted'});
  });
+ fastify.get('/setup-health',async(request:any,reply:any)=>{
+  if(services){
+   const session=await authorize(request,reply,false);
+   if(!session)return;
+   if((session as any).isAgentToken || !isAdmin(session)){
+    return reply.code(403).send({error:'Human administrator access required'});
+   }
+  }
+  let runner:any=undefined;
+  if(services?.prisma){
+   runner={
+    query:(sql:string,params?:any[])=>
+     services.prisma.$queryRawUnsafe(sql,...(params||[])).then((rows:any)=>({rows})),
+   };
+  }
+  const dbPreflight=await runDbSchemaPreflight({
+   databaseUrl:process.env.DATABASE_URL,
+   runner,
+  });
+
+  const publicApiUrl=process.env.LEADLOOM_PUBLIC_API_URL||'https://leadloom.dmpilot.org/api/agent';
+  const publicApiConfigured=Boolean(process.env.LEADLOOM_PUBLIC_API_URL);
+  const authSecretConfigured=Boolean(process.env.LEADLOOM_SESSION_KEY||process.env.AUTH_SECRET||process.env.NEXTAUTH_SECRET);
+  const bridgeSecretConfigured=Boolean(services?.nextAuthBridgeKey||process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET);
+
+  const websiteFetcher=services?.websiteSignals
+   ?(services.websiteFetcher?'active':'pasted-text-only')
+   :'disabled';
+  const outboundDispatch=services?.outboundSendingEnabled
+   ?'live'
+   :(services?.outboundWorker?'dry-run-safe':'unmounted');
+  const vaultEncryption=process.env.LEADLOOM_MASTER_KEY
+   ?'active-aes-256-gcm'
+   :'unconfigured';
+
+  let overallStatus:'ok'|'degraded'|'error'='ok';
+  if(dbPreflight.verdict==='AUTH_FAILED'||dbPreflight.verdict==='UNREACHABLE'||dbPreflight.verdict==='UNCONFIGURED'){
+   overallStatus='error';
+  }else if(dbPreflight.verdict==='DEGRADED'||dbPreflight.verdict==='MISSING_TABLES'||!publicApiConfigured||websiteFetcher==='pasted-text-only'){
+   overallStatus='degraded';
+  }
+
+  return {
+   status:overallStatus,
+   database:{
+    status:dbPreflight.connectivity.status,
+    verdict:dbPreflight.verdict,
+    verificationMode:'column-presence-only',
+    missingTables:dbPreflight.missingTables,
+    missingColumnsCount:dbPreflight.missingColumnsCount,
+    diagnostic:`${dbPreflight.diagnostic} (verified by column-presence-only; runtime column types unverified)`,
+   },
+   config:{
+    publicApiUrl,
+    publicApiConfigured,
+    authSecretConfigured,
+    bridgeSecretConfigured,
+   },
+   providers:{
+    websiteFetcher,
+    outboundDispatch,
+    vaultEncryption,
+    mutationsEnabled:Boolean(services),
+   },
+   checkedAt:new Date().toISOString(),
+  };
+ });
  await app.init();
+ services?.growthWatchWorker?.start();
  services?.outboundWorker?.start();
- fastify.addHook('onClose',async()=>{services?.outboundWorker?.stop();services?.waterfallDispatch?.stop();});
+ fastify.addHook('onClose',async()=>{await services?.growthWatchWorker?.stop();services?.outboundWorker?.stop();services?.waterfallDispatch?.stop();});
  return app;
 }
 
@@ -898,8 +1683,10 @@ if(require.main===module) {
    if(unsubscribeKey&&unsubscribeKey.length<16)throw new Error('Invalid unsubscribe signing key');
    const sendingEnabled=process.env.LEADLOOM_OUTBOUND_SENDING_ENABLED==='true';
    outboundRepo=new AtomicDispatchRepository(new PrismaDispatchDatabase(prisma),undefined,{sendingEnabled});
-   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:outboundRepo,recipients:new CampaignRecipientsRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),outboundSendingEnabled:sendingEnabled,...(unsubscribeKey?{unsubscribeKey}:{})};
+   services={credentials:new CredentialService(new PrismaCredentialRepository(prisma),vault),outbound:outboundRepo,recipients:new CampaignRecipientsRepository(new PrismaDispatchDatabase(prisma)),sessionKey:key,userDirectory:new PrismaUserDirectory(prisma),outboundSendingEnabled:sendingEnabled,prisma,...(unsubscribeKey?{unsubscribeKey}:{})};
    services.accessGuard=new PrismaAccessGuard(prisma);
+   services.growthWatches=new ProjectGrowthWatchService(prisma);
+   if(process.env.LEADLOOM_GROWTH_WATCHES_ENABLED==='true')services.growthWatchWorker=new ProjectGrowthWatchWorker(services.growthWatches);
    services.reads=new WorkspaceReadService(prisma as any);
    if(process.env.LEADLOOM_ENTITLEMENTS_ENFORCED==='true') {
     const {EntitlementService}=await import('./modules/entitlements/entitlements.service.js');
@@ -968,7 +1755,7 @@ if(require.main===module) {
     const {TestConnectionService,TESTABLE_CONNECTOR_IDS}=await import('./modules/waterfall/connectors/test-connection.service.js');
     services.connectorTest=new TestConnectionService(registry,services.entitlements as never);
     services.waterfallConnectors={list:async(workspaceId:string)=>{
-     const creds=await prisma!.byokCredential.findMany({where:{workspaceId}});
+     const creds=await prisma!.byokCredential.findMany({where:{workspaceId},orderBy:[{createdAt:'desc'},{id:'desc'}]});
      return reconcileConnectorStatus(
       registry.list().map((c:any)=>({id:c.id,name:c.name,capabilities:c.capabilities,testable:TESTABLE_CONNECTOR_IDS.has(c.id)})),
       creds.map((c:any)=>({provider:c.provider,maskedKey:c.maskedKey,label:c.label,isValid:c.isValid,lastVerifiedAt:c.lastVerifiedAt,updatedAt:c.updatedAt})),
@@ -991,7 +1778,7 @@ if(require.main===module) {
      // honest 503 posture stands. Jobs stay inert until the proposed migration
      // is applied on the host (enrichment_jobs does not exist before then).
      const {mountDurableWaterfallDispatch}=await import('./modules/waterfall/durable-dispatch.js');
-     const mounted=await mountDurableWaterfallDispatch({env:process.env,prisma,runner:waterfallSvc.getRunner()});
+     const mounted=await mountDurableWaterfallDispatch({env:{LEADLOOM_WATERFALL_DURABLE_DISPATCH:process.env.LEADLOOM_WATERFALL_DURABLE_DISPATCH},prisma,runner:waterfallSvc.getRunner()});
      if(mounted){waterfallQueue=mounted.queue;services.waterfallDispatch=mounted;}
     }
     services.waterfall=new WaterfallController(waterfallQueue?new WaterfallService(undefined,waterfallCache,waterfallQueue):waterfallSvc);
@@ -1011,6 +1798,12 @@ if(require.main===module) {
      services.websiteFetcher=new SafeWebsiteFetcher({allowPrivateHosts:PRIV});
     }
    }
+   if(process.env.LEADLOOM_PUBLIC_HN_AGENT_ENABLED==='true') {
+    const {PgSharedLimiter}=await import('./modules/auth/rate-limiter.js');
+    const db=prisma;
+    const limiter=new PgSharedLimiter((text,params)=>db.$queryRawUnsafe(text,...params) as Promise<Array<Record<string,unknown>>>,60_000);
+    services.projectHnResearch=new ProjectHnResearchService((key,max)=>limiter.take(key,max));
+   }
    if(process.env.LEADLOOM_VALIDATOR_API_ENABLED==='true') {
     const {ValidatorController}=await import('./modules/validator/validator.controller.js');
     const {ValidatorService}=await import('./modules/validator/validator.service.js');
@@ -1022,7 +1815,21 @@ if(require.main===module) {
     const pubPg=new PgSharedLimiter((text,params)=>db.$queryRawUnsafe(text,...params) as Promise<Array<Record<string,unknown>>>,600_000);
     services.publicRateLimit=(key,max)=>pubPg.take(key,max);
    }
-
+   const {AgentTokenService,PrismaAgentTokenStore}=await import('./modules/auth/agent-token.service.js');
+   services.agentTokens=new AgentTokenService(new PrismaAgentTokenStore(prisma));
+   const {ProjectContextService,PrismaProjectContextStore}=await import('./modules/project-context/project-context.service.js');
+   services.projectContext=new ProjectContextService(new PrismaProjectContextStore(prisma));
+   const {ProjectRegistryService,PrismaProjectRegistryStore}=await import('./modules/project-context/project-registry.service.js');
+   services.projectRegistry=new ProjectRegistryService(new PrismaProjectRegistryStore(prisma));
+   services.projectEntries=new ProjectEntryService(prisma);
+   services.projectAssets=new ProjectAssetService(prisma);
+   services.projectInventory=new ProjectInventoryService(prisma);
+   services.tableExports=new TableExportService(prisma);
+   if(process.env.LEADLOOM_DNS_DIAGNOSTICS_ENABLED==='true')services.mailboxDns=new MailboxDnsService(prisma);
+   services.savedWaterfalls=new SavedWaterfallService(new PrismaDispatchDatabase(prisma));
+   services.privateCampaigns=new PrivateCampaignService(new PrismaDispatchDatabase(prisma));
+   services.tableCells=new TableCellService(new PrismaDispatchDatabase(prisma));
+   services.tableImports=new TableImportService(prisma,services.entitlements?async(id,tx)=>{const {PrismaEntitlementStore}=await import('./modules/entitlements/prisma-entitlement-store.js');const {EntitlementService}=await import('./modules/entitlements/entitlements.service.js');const {DEFAULT_PLANS}=await import('./modules/entitlements/default-plans.js');const store=new PrismaEntitlementStore(tx);return(await new EntitlementService(DEFAULT_PLANS,store,store).checkLimit(id,'tables')).allowed;}:undefined);
   }
   // G3 worker mount (default off; LEADLOOM_WORKER_ENABLED). The loop only ticks
   // dispatch; jobs become send-reservable solely through the gated release step

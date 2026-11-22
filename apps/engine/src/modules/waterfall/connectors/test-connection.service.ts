@@ -1,6 +1,7 @@
 import { WaterfallEntitlementPort } from '../waterfall.service';
 import { ConnectorRegistry, defaultRegistry } from './registry';
 import { ConnectorCredentialStore } from '../credentials/credential-store.port';
+import { redactSecrets } from './security';
 import { ConnectorContext } from './connector.interface';
 
 export interface TestConnectionOptions {
@@ -95,6 +96,8 @@ export class TestConnectionService {
       };
     }
 
+    if(connectorId==='dropcontact'&&!options.fetch)return{status:'DISABLED',connectorId,message:'Live asynchronous Dropcontact probes are unavailable until durable request/result reconciliation is wired. No request submitted.'};
+
     // 4. Resolve API key: either provided in options, or loaded from credential store
     let apiKey = options.apiKey;
     if (!apiKey && this.credentialStore) {
@@ -140,11 +143,11 @@ export class TestConnectionService {
         status: 'FAILED',
         connectorId,
         latencyMs,
-        message: result.error?.message ?? `${connector.name} probe failed`,
+        message: redactSecrets(result.error?.message ?? `${connector.name} probe failed`,[apiKey]),
         error: result.error
           ? {
               code: result.error.code,
-              message: result.error.message,
+              message: redactSecrets(result.error.message,[apiKey]),
             }
           : undefined,
       };
@@ -153,7 +156,7 @@ export class TestConnectionService {
         status: 'FAILED',
         connectorId,
         latencyMs: Date.now() - start,
-        message: err instanceof Error ? err.message : 'Unknown connection test failure',
+        message: redactSecrets(err instanceof Error ? err.message : 'Unknown connection test failure',[apiKey]),
       };
     }
   }

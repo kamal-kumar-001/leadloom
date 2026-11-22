@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReadOptions, buildImapOptions, buildSmtpOptions, buildSendOptions } from './client-factories';
+import { readReferenceHeaders, buildReadOptions, buildImapOptions, buildSmtpOptions, buildSendOptions } from './client-factories';
 
 const BASE = { host: 'smtp.provider.test', port: 587, user: 'sales@brand.test' };
 
@@ -93,4 +93,10 @@ describe('buildSendOptions (worker SMTP send path)', () => {
     const prev = process.env.NODE_ENV; process.env.NODE_ENV = 'production';
     try { await expect(buildSendOptions(cfg, { allowPrivateHosts: true })).rejects.toThrow('refused in production'); } finally { process.env.NODE_ENV = prev; }
   });
+});
+
+
+describe('bounded References header data',()=>{
+ it('unfolds requested header values and does not mistake unrelated headers for References',()=>{expect(readReferenceHeaders(Buffer.from('References: <root@x>\r\n <current@x>\r\nOther: References: <not-a-reference@x>\r\n'))).toEqual(['<root@x> <current@x>']);expect(readReferenceHeaders(undefined)).toBeUndefined();expect(readReferenceHeaders(Buffer.from('Other: data\r\n'))).toBeUndefined();});
+ it('refuses oversized or excessive References values without truncation',()=>{expect(()=>readReferenceHeaders(Buffer.from('References: '+ 'x'.repeat(16384)))).toThrow('supported size');expect(()=>readReferenceHeaders(Buffer.from(('References: <id@x>\r\n').repeat(33)))).toThrow('Too many');});
 });

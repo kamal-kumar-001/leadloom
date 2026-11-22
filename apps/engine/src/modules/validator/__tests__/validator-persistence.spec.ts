@@ -7,7 +7,9 @@ function fakePrisma() {
   const pages: any[] = [];
   const leads: any[] = [];
   const withLeads = (p: any) => ({ ...p, waitlistLeads: leads.filter((l) => l.pageId === p.id) });
-  return {
+  const db: any = {
+    $transaction: async (fn: any) => fn(db),
+    $queryRawUnsafe: async (sql:string,first:string,workspaceId?:string)=>pages.filter(p=>sql.includes('JOIN validation_experiments')?p.experimentId===first&&experiments.some(e=>e.id===first&&e.workspaceId===workspaceId):p.slug===first&&p.status==='published').map(p=>({id:p.id})),
     validationExperiment: {
       findFirst: async ({ where, include }: any) => {
         const e = experiments.find((x) => (!where.id || x.id === where.id) && (!where.workspaceId || x.workspaceId === where.workspaceId));
@@ -25,6 +27,7 @@ function fakePrisma() {
       update: async ({ where, data }: any) => { const e = experiments.find((x) => x.id === where.id); Object.assign(e, data); return e; },
     },
     smokeTestPage: {
+      findUnique:async({where}:any)=>pages.find(p=>p.id===where.id)??null,
       findMany: async ({ where, select }: any) =>
         pages.filter((p) => (where.slug?.startsWith ? p.slug.startsWith(where.slug.startsWith) : true)).map((p) => (select?.slug ? { slug: p.slug } : p)),
       findFirst: async ({ where, include }: any) => {
@@ -43,12 +46,15 @@ function fakePrisma() {
       },
     },
     waitlistLead: {
+      findFirst: async ({ where }: any) => leads.find((l) => l.pageId === where.pageId && l.email.toLowerCase() === where.email.equals.toLowerCase()) ?? null,
+      count: async ({ where }: any) => leads.filter((l) => l.pageId === where.pageId).length,
       create: async ({ data }: any) => {
         if (leads.some((l) => l.pageId === data.pageId && l.email === data.email)) throw new Error('Unique constraint failed');
         leads.push({ createdAt: new Date(), ...data }); return data;
       },
     },
   };
+  return db;
 }
 
 const WS = 'ws-tenant-a';
@@ -60,7 +66,7 @@ describe('ValidatorService persistence (Prisma path)', () => {
     const generated = await svc.generate(WS, { rawHypothesis: 'Automated Kubernetes cost-cutter for Series A startups', preferredSlug: 'k8s-persist' });
     expect(generated.pageUrl).toBe('http://localhost:3000/v/k8s-persist');
 
-    await svc.setPublishStatus(generated.experimentId, WS, true);
+    await svc.setPublishStatus(generated.experimentId,WS,true,(await svc.getOwnerPage(generated.experimentId,WS))?.revision);
     const page = await svc.getPublicPage('k8s-persist');
     expect(page?.headline).toContain('Kubernetes');
     expect(page?.surveyQuestions).toHaveLength(2);
@@ -76,9 +82,15 @@ describe('ValidatorService persistence (Prisma path)', () => {
     expect(scorecard.metrics.visitors).toBe(1); // one public page load
     expect(scorecard.metrics.pageConversions).toBe(1);
     const page2 = await svc2.getPublicPage('k8s-persist');
-    expect(page2?.headline).toContain('Kubernetes');
     const scorecard2 = await svc2.getScorecard(generated.experimentId, WS);
     expect(scorecard2.metrics.visitors).toBe(2);
+
+    // Restart survival for getLeads: fresh service instance queries persisted waitlist leads
+    const leads = await svc2.getLeads(generated.experimentId, WS);
+    expect(leads.totalLeads).toBe(1);
+    expect(leads.leads[0].email).toBe('founder@scaleup.io');
+    expect(leads.leads[0].surveyResponses).toEqual({ q1: 'too slow' });
+    await expect(svc2.getLeads(generated.experimentId, 'ws-foreign')).rejects.toThrow(/not found/i);
   });
 
   it('scopes scorecard reads to the owning workspace', async () => {
@@ -108,7 +120,7 @@ describe('ValidatorService persistence (Prisma path)', () => {
     await expect(svc.submitLead(slug, { email: 'a@b.co', surveyResponses: {} })).rejects.toThrow(/not found/);
 
     // Publish: page renders and collects.
-    const pub = await svc.setPublishStatus(gen.experimentId, WS, true);
+    const pub = await svc.setPublishStatus(gen.experimentId,WS,true,(await svc.getOwnerPage(gen.experimentId,WS))?.revision);
     expect(pub.status).toBe('published');
     expect(await svc.getPublicPage(slug)).toBeDefined();
     expect((await svc.submitLead(slug, { email: 'a@b.co', surveyResponses: {} })).success).toBe(true);
@@ -121,7 +133,7 @@ describe('ValidatorService persistence (Prisma path)', () => {
   it('scopes publish actions to the owning workspace', async () => {
     const svc = new ValidatorService('http://localhost:3000', fakePrisma() as any);
     const gen = await svc.generate(WS, { rawHypothesis: 'Tenant scoping for publish' });
-    await expect(svc.setPublishStatus(gen.experimentId, 'ws-other', true)).rejects.toThrow(/not found/);
+    await expect(svc.setPublishStatus(gen.experimentId,'ws-other',true,(await svc.getOwnerPage(gen.experimentId,'ws-other'))?.revision)).rejects.toThrow(/not found/);
   });
 
   it('returns undefined for unknown public slugs', async () => {

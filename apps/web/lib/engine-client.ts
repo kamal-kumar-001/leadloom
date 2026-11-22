@@ -3,6 +3,14 @@ import {
   SaveBYOKCredentialRequest,
   BYOKProvider,
   PreFlightEstimateResponse,
+  ProjectResponse,
+  CreateProjectRequest,
+  AgentTokenResponse,
+  AgentTokenListItem,
+  IssueAgentTokenRequest,
+  SetupHealthResponse,
+  ImportCapturedLeadsRequest,
+  ImportCapturedLeadsResponse,
 } from '@leadloom/contracts';
 
 interface CachedToken {
@@ -33,6 +41,7 @@ export class EngineClientError extends Error {
 }
 
 export interface EngineAuthMe {
+  name?: string | null;
   userId: string;
   workspaceId: string;
   role: string;
@@ -47,7 +56,7 @@ export async function engineFetch<T>(
 ): Promise<{ data: T | null; isMock: boolean; error?: string; status?: number }> {
   // Same-origin proxy: the server attaches the engine credential from the session cookie.
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(options.body !== undefined && options.body !== null ? { 'Content-Type': 'application/json' } : {}),
     ...(options.headers as Record<string, string> | undefined),
   };
 
@@ -302,9 +311,10 @@ export async function testConnectorPing(
 }
 
 export async function estimateWaterfallCost(
-  columnId: string,
-  rowIds: string[]
+  columnId: string | number,
+  rowIds?: string[]
 ): Promise<{ data: PreFlightEstimateResponse | null; error?: string }> {
+  if(typeof columnId!=='string'||!Array.isArray(rowIds))throw new EngineClientError('Live waterfall pricing is unavailable. No provider quote is established.',503,false,'WATERFALL_UNAVAILABLE');
   const result = await engineFetch<PreFlightEstimateResponse>('/waterfall/pre-flight', {
     method: 'POST',
     body: JSON.stringify({ columnId, rowIds }),
@@ -378,6 +388,7 @@ export interface WorkspaceSummary {
   providerKeys: number;
 }
 export interface WorkspaceTableRow {
+  projectId?: string|null;
   id: string;
   name: string;
   rowCount: number;
@@ -418,9 +429,11 @@ export interface CampaignSendStatus {
   lastActivityAt: string | null;
 }
 export interface WorkspaceCampaignRow {
+  replayed?:boolean;
   id: string;
   name: string;
   status: string;
+  projectId?: string | null;
   steps?: WorkspaceCampaignStep[];
   dailyLimitTotal: number;
   scheduleTimezone: string;
@@ -429,11 +442,13 @@ export interface WorkspaceCampaignRow {
   sendStatus?: CampaignSendStatus;
 }
 export interface CreateWorkspaceCampaignInput {
+  requestId?:string;
   name: string;
   steps: WorkspaceCampaignStep[];
   dailyLimitTotal: number;
   scheduleTimezone: string;
   tableId?: string;
+  projectId?: string;
   mailboxPoolIds?: string[];
 }
 export async function createWorkspaceCampaign(input: CreateWorkspaceCampaignInput): Promise<{ data: WorkspaceCampaignRow | null; error?: string }> {
@@ -462,7 +477,7 @@ async function workspaceRead<T>(path: string): Promise<{ data: T | null; error?:
 export const fetchWorkspaceSummary = () => workspaceRead<WorkspaceSummary>('/workspace/summary');
 export const fetchWorkspaceTables = () => workspaceRead<WorkspaceTableRow[]>('/workspace/tables');
 export const fetchWorkspaceMailboxes = () => workspaceRead<WorkspaceMailboxRow[]>('/workspace/mailboxes');
-export const fetchWorkspaceCampaigns = () => workspaceRead<WorkspaceCampaignRow[]>('/workspace/campaigns');
+export const fetchWorkspaceCampaigns = (projectId?:string) => workspaceRead<WorkspaceCampaignRow[]>('/workspace/campaigns'+(projectId?'?projectId='+encodeURIComponent(projectId):''));
 
 export interface CampaignJobRow {
   id: string;
@@ -508,6 +523,7 @@ export interface WorkspaceSuppressionRow {
 }
 export interface WorkspaceExperimentRow {
   id: string;
+  projectId?: string | null;
   /** Truncated to 140 characters by the server. */
   hypothesis: string;
   verdict: string;
@@ -527,7 +543,7 @@ export interface ExperimentScorecard {
   metrics: {
     visitors: number;
     pageConversions: number;
-    pageConversionRate: number;
+    pageConversionRate: number | null;
     outreachSent: number;
     replies: number;
     replyRate: number;
@@ -551,22 +567,47 @@ export async function fetchOwnerPage(experimentId: string): Promise<{ data: (imp
   return { data: res.data, error: res.error };
 }
 
+export async function editDraftPageCopy(experimentId:string,input:import('@leadloom/contracts').EditDraftPageCopy){
+  const result=await engineFetch<import('../components/validator/page-preview-modal').OwnerPagePreview&{saved:true;changed:boolean}>(`/validator/experiments/${experimentId}/page`,{method:'PUT',body:JSON.stringify(input)});
+  return{data:result.data,error:result.error,status:result.status};
+}
+
+export interface WaitlistLeadItem {
+  id: string;
+  email: string;
+  name?: string | null;
+  company?: string | null;
+  surveyResponses: Record<string, string>;
+  createdAt: string;
+}
+
+export interface ExperimentLeadsResponse {
+  experimentId: string;
+  totalLeads: number;
+  leads: WaitlistLeadItem[];
+}
+
+export async function fetchExperimentLeads(experimentId: string): Promise<{ data: ExperimentLeadsResponse | null; error?: string }> {
+  const res = await engineFetch<ExperimentLeadsResponse>(`/validator/experiments/${experimentId}/leads`);
+  return { data: res.data, error: res.error };
+}
+
 export async function recordOutreach(experimentId: string, input: { outreachSent: number; replies: number; positiveReplies: number }): Promise<{ data: ExperimentScorecard | null; error?: string }> {
   const res = await engineFetch<ExperimentScorecard>(`/validator/experiments/${experimentId}/outreach`, { method: 'POST', body: JSON.stringify(input) });
   return { data: res.data, error: res.error };
 }
 
-export async function setExperimentPublish(experimentId: string, publish: boolean): Promise<{ data: { slug: string; status: string } | null; error?: string }> {
-  const res = await engineFetch<{ slug: string; status: string }>(`/validator/experiments/${experimentId}/${publish ? 'publish' : 'unpublish'}`, { method: 'POST', body: '{}' });
+export async function setExperimentPublish(experimentId: string, publish: boolean,expectedRevision?:string): Promise<{ data: { slug: string; status: string } | null; error?: string }> {
+  const res = await engineFetch<{ slug: string; status: string }>(`/validator/experiments/${experimentId}/${publish ? 'publish' : 'unpublish'}`, { method: 'POST', body: JSON.stringify(publish?{expectedRevision}:{}) });
   return { data: res.data, error: res.error };
 }
 
-export async function generateExperiment(input: { rawHypothesis: string; preferredSlug?: string }): Promise<{ data: { experimentId: string; pageUrl: string } | null; error?: string; status?: number }> {
+export async function generateExperiment(input: { rawHypothesis: string; projectId?: string; preferredSlug?: string; pageCopy?: import('@leadloom/contracts').DraftPageCopy; surveyQuestions?: import('@leadloom/contracts').DraftSurveyQuestions }): Promise<{ data: { experimentId: string; pageUrl: string } | null; error?: string; status?: number }> {
   const res = await engineFetch<{ experimentId: string; pageUrl: string }>('/validator/experiments', { method: 'POST', body: JSON.stringify(input) });
   return { data: res.data, error: res.error, status: res.status };
 }
 export const fetchWorkspaceSuppressions = () => workspaceRead<WorkspaceSuppressionRow[]>('/workspace/suppressions');
-export const fetchWorkspaceExperiments = () => workspaceRead<WorkspaceExperimentRow[]>('/workspace/experiments');
+export const fetchWorkspaceExperiments = (projectId?:string) => workspaceRead<WorkspaceExperimentRow[]>('/workspace/experiments'+(projectId?'?projectId='+encodeURIComponent(projectId):''));
 
 export interface MailboxPreset {
   id: 'gmail' | 'outlook' | 'yahoo' | 'custom';
@@ -763,6 +804,8 @@ export async function fetchConnectorStatus(): Promise<{ connectors: ConnectorSta
 }
 
 export interface OutboundApprovalRow {
+  /** Exact displayed saved snapshot; null can only request a review refresh. */
+  reviewRevision: string | null;
   id: string;
   workspaceId: string;
   campaignId: string;
@@ -845,8 +888,8 @@ export async function fetchInboundReplies(campaignId?: string): Promise<{ data: 
 }
 
 export async function approveOutboundJobs(input: {
-  jobIds?: string[];
-  all?: boolean;
+  jobIds: string[];
+  expectedRevisions: Record<string, string | null>;
   campaignId?: string;
 }): Promise<{ approvedCount: number; staleCount: number; sendingEnabled: boolean; error?: string }> {
   const result = await engineFetch<{ approvedCount: number; staleCount: number; sendingEnabled: boolean }>('/outbound/approvals/approve', {
@@ -910,7 +953,7 @@ export async function analyzeWebsiteSignals(input: { domain: string; pageText: s
   return { data: res.data, error: res.error, status: res.status };
 }
 
-export async function saveWebsiteAnalysis(input: { domain: string; pageText: string }): Promise<{ data: { status: string; tableId: string; rowId: string } | null; error?: string; status?: number }> {
+export async function saveWebsiteAnalysis(input: { domain: string; pageText: string; requestId?:string;projectId?:string }): Promise<{ data: { status: string; tableId: string; rowId: string } | null; error?: string; status?: number }> {
   const res = await engineFetch<{ status: string; tableId: string; rowId: string }>('/research/website-signals/save', { method: 'POST', body: JSON.stringify(input) });
   return { data: res.data, error: res.error, status: res.status };
 }
@@ -920,8 +963,8 @@ export interface SavedResearchRow {
   values: Record<string, unknown>;
 }
 
-export async function fetchResearchLeads(): Promise<{ data: { items: SavedResearchRow[] } | null; error?: string }> {
-  const res = await engineFetch<{ items: SavedResearchRow[] }>('/research/leads', { method: 'GET' });
+export async function fetchResearchLeads(projectId?:string): Promise<{ data: { items: SavedResearchRow[] } | null; error?: string }> {
+  const res = await engineFetch<{ items: SavedResearchRow[] }>('/research/leads'+(projectId?'?projectId='+encodeURIComponent(projectId):''), { method: 'GET' });
   return { data: res.data, error: res.error };
 }
 
@@ -942,24 +985,25 @@ export async function analyzeIntentFixture(fixture: unknown): Promise<{ data: { 
   return { data: res.data, error: res.error, status: res.status };
 }
 
-export async function saveIntentFixture(fixture: unknown): Promise<{ data: { status: string; tableId?: string; rowId?: string; message?: string } | null; error?: string; status?: number }> {
-  const res = await engineFetch<{ status: string; tableId?: string; rowId?: string; message?: string }>('/research/intent-fixture/save', { method: 'POST', body: JSON.stringify({ fixture }) });
+export async function saveIntentFixture(fixture: unknown,requestId?:string,projectId?:string): Promise<{ data: { status: string; tableId?: string; rowId?: string; message?: string } | null; error?: string; status?: number }> {
+  const res = await engineFetch<{ status: string; tableId?: string; rowId?: string; message?: string }>('/research/intent-fixture/save', { method: 'POST', body: JSON.stringify({ fixture,...(requestId?{requestId}:{}),...(projectId?{projectId}:{}) }) });
   return { data: res.data, error: res.error, status: res.status };
 }
 
-export async function fetchIntentSignals(): Promise<{ data: { items: SavedResearchRow[] } | null; error?: string }> {
-  const res = await engineFetch<{ items: SavedResearchRow[] }>('/research/intent-signals', { method: 'GET' });
+export async function fetchIntentSignals(projectId?:string): Promise<{ data: { items: SavedResearchRow[] } | null; error?: string }> {
+  const res = await engineFetch<{ items: SavedResearchRow[] }>('/research/intent-signals'+(projectId?'?projectId='+encodeURIComponent(projectId):''), { method: 'GET' });
   return { data: res.data, error: res.error };
 }
 
 export interface WorkspaceTableRows {
+  offset?: number; limit?: number; nextOffset?: number | null;
   table: { id: string; name: string; rowCount: number };
   columns: { id: string; name: string; type: string }[];
   rows: { rowId: string; values: Record<string, unknown> }[];
 }
 
-export async function fetchWorkspaceTableRows(tableId: string): Promise<{ data: WorkspaceTableRows | null; error?: string }> {
-  const res = await engineFetch<WorkspaceTableRows>(`/workspace/tables/${tableId}/rows`, { method: 'GET' });
+export async function fetchWorkspaceTableRows(tableId: string, offset=0): Promise<{ data: WorkspaceTableRows | null; error?: string }> {
+  const res = await engineFetch<WorkspaceTableRows>(`/workspace/tables/${tableId}/rows?offset=${offset}`, { method: 'GET' });
   return { data: res.data, error: res.error };
 }
 
@@ -1002,12 +1046,12 @@ export async function fetchCampaignMailboxPool(campaignId: string): Promise<{ da
 }
 
 /** Replace the sender pool for one campaign. Empty pool blocks message approval server-side. */
-export async function setCampaignMailboxPool(campaignId: string, mailboxIds: string[]): Promise<{ data: CampaignPoolMailbox[] | null; error?: string }> {
-  const result = await engineFetch<{ pool: CampaignPoolMailbox[] }>(`/campaigns/${campaignId}/mailboxes`, {
+export async function setCampaignMailboxPool(campaignId: string, mailboxIds: string[],expectedMailboxIds?:string[]): Promise<{ data: CampaignPoolMailbox[] | null; error?: string;invalidatedCount?:number;reservedCount?:number;unchanged?:boolean }> {
+  const result = await engineFetch<{ pool: CampaignPoolMailbox[];invalidatedCount:number;reservedCount:number;unchanged:boolean }>(`/campaigns/${campaignId}/mailboxes`, {
     method: 'PUT',
-    body: JSON.stringify({ mailboxIds }),
+    body: JSON.stringify({ mailboxIds,...(expectedMailboxIds?{expectedMailboxIds}:{}) }),
   });
-  if (result.data && !result.isMock) return { data: result.data.pool };
+  if (result.data && !result.isMock) return { data: result.data.pool,invalidatedCount:result.data.invalidatedCount,reservedCount:result.data.reservedCount,unchanged:result.data.unchanged };
   return { data: null, error: result.error || 'Sender pool could not be saved.' };
 }
 
@@ -1065,3 +1109,128 @@ export async function getWaterfallJobStatus(jobId: string): Promise<WaterfallJob
     return { state: 'error', message: 'Engine service temporarily unavailable.' };
   }
 }
+/**
+ * Project Registry Services
+ */
+export async function fetchWorkspaceProjects(): Promise<{
+  projects: ProjectResponse[];
+  error?: string;
+}> {
+  const res = await engineFetch<ProjectResponse[]>('/projects', { method: 'GET' });
+  if (res.data) return { projects: res.data };
+  return { projects: [], error: res.error || 'Failed to fetch projects' };
+}
+
+export async function createWorkspaceProject(
+  input: CreateProjectRequest
+): Promise<{ project: ProjectResponse | null; error?: string; status?: number }> {
+  const res = await engineFetch<ProjectResponse>('/projects', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return { project: res.data, error: res.error, status: res.status };
+}
+
+/**
+ * Agent Token Services
+ */
+export async function fetchWorkspaceAgentTokens(): Promise<{
+  tokens: AgentTokenListItem[];
+  error?: string;
+}> {
+  const res = await engineFetch<AgentTokenListItem[]>('/agent-tokens', { method: 'GET' });
+  if (res.data) return { tokens: res.data };
+  return { tokens: [], error: res.error || 'Failed to fetch agent tokens' };
+}
+
+export async function issueWorkspaceAgentToken(
+  input: IssueAgentTokenRequest
+): Promise<{ data: AgentTokenResponse | null; error?: string; status?: number }> {
+  const res = await engineFetch<AgentTokenResponse>('/agent-tokens', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return { data: res.data, error: res.error, status: res.status };
+}
+
+export async function revokeWorkspaceAgentToken(
+  tokenId: string
+): Promise<{ success: boolean; error?: string }> {
+  const res = await engineFetch<{ id: string; revoked: boolean }>(`/agent-tokens/${tokenId}/revoke`, {
+    method: 'POST',
+  });
+  if (res.data?.revoked) return { success: true };
+  return { success: false, error: res.error || 'Failed to revoke agent token' };
+}
+
+export async function fetchSetupHealth(): Promise<{
+  health: SetupHealthResponse | null;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/projects/setup-health', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      return { health: null, error: `Health check failed with status ${res.status}` };
+    }
+    const data = await res.json();
+    return { health: data as SetupHealthResponse };
+  } catch (err: unknown) {
+    return { health: null, error: err instanceof Error ? err.message : 'Failed to query setup health' };
+  }
+}
+
+export async function importCapturedLeads(
+  experimentId: string,
+  input: ImportCapturedLeadsRequest
+): Promise<{ data: ImportCapturedLeadsResponse | null; error?: string }> {
+  const res = await engineFetch<ImportCapturedLeadsResponse>(
+    `/validator/experiments/${experimentId}/import-leads`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }
+  );
+  if (res.data) return { data: res.data };
+  return { data: null, error: res.error || 'Failed to import captured leads' };
+}
+
+export interface RunItem {
+  id: string;
+  name: string;
+  status: 'running' | 'completed' | 'failed' | 'pending';
+  startedAt: string;
+  createdAt?: string;
+  error?: string;
+}
+
+export async function fetchRunsList(): Promise<{ data: { runs: RunItem[] } | null; error?: string }> {
+  try {
+    const res = await fetch('/api/runs');
+    if (!res.ok) return { data: null, error: `Failed to fetch runs: ${res.status}` };
+    const json = await res.json();
+    const rows = (json?.rows ?? []) as Array<{ id: string; label?: string; kind?: string; status: string; error?: string | null; finishedAt?: string }>;
+    return {
+      data: {
+        runs: rows.map((r) => ({
+          id: r.id,
+          name: r.label || r.kind || r.id,
+          status: r.status === 'succeeded' ? 'completed' : r.status === 'failed' ? 'failed' : 'pending',
+          startedAt: r.finishedAt || new Date().toISOString(),
+          createdAt: r.finishedAt,
+          error: r.error ?? undefined,
+        })),
+      },
+    };
+  } catch (err) {
+    return { data: null, error: (err as Error).message };
+  }
+}
+
+
+
+export async function fetchSavedTableSchema(tableId:string){return engineFetch<import('@leadloom/contracts').SavedTableSchema>('/workspace/tables/'+encodeURIComponent(tableId)+'/schema');}

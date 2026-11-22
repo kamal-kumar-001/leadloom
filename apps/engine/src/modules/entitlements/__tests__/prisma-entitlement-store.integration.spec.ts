@@ -32,8 +32,8 @@ describe.runIf(RUN)('entitlement store on real Postgres (gated)', () => {
   it('usage increments atomically, is per workspace, and enforces the cap at the boundary', async () => {
     const store = new PrismaEntitlementStore(prisma);
     const svc = new EntitlementService(DEFAULT_PLANS, store, store);
-    await Promise.all(Array.from({ length: 20 }, () => store.record(ws, 'tables')));
-    expect(await store.used(ws, 'tables')).toBe(20);
+    await Promise.all(Array.from({ length: 20 }, () => store.record(ws, 'enrichment_credits_per_month')));
+    expect(await store.used(ws, 'enrichment_credits_per_month')).toBe(20);await prisma.table.createMany({data:Array.from({length:3},(_,i)=>({workspaceId:ws,name:'Saved '+i}))});expect(await store.used(ws,'tables')).toBe(3);
     expect(await store.used(other, 'tables')).toBe(0);
     await prisma.$executeRawUnsafe(`UPDATE workspace_plans SET status='active' WHERE workspace_id=$1::uuid`, ws);
     expect((await svc.checkLimit(ws, 'tables')).reason).toBe('limit_reached'); // free cap is 3

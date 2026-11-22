@@ -38,6 +38,7 @@ model Workspace {
 }
 
 model User {
+  credentialsRevokedAt DateTime? @map("credentials_revoked_at") @db.Timestamptz
   id           String   @id @default(uuid()) @db.Uuid
   workspaceId  String   @map("workspace_id") @db.Uuid
   email        String   @unique @db.VarChar(320)
@@ -76,6 +77,7 @@ model EmailOtp {
 // ─── Reactive Data Canvas (Grid) ─────────────────────────────────────────────
 
 model Table {
+  projectId   String?  @map("project_id") @db.Uuid
   id          String   @id @default(uuid()) @db.Uuid
   workspaceId String   @map("workspace_id") @db.Uuid
   name        String   @db.VarChar(255)
@@ -142,6 +144,7 @@ model Cell {
 // ─── Pre-Product Idea Validator (Epic 6) ─────────────────────────────────────
 
 model ValidationExperiment {
+  projectId         String?  @map("project_id") @db.Uuid
   id                String   @id @default(uuid()) @db.Uuid
   workspaceId       String   @map("workspace_id") @db.Uuid
   hypothesis        String
@@ -160,6 +163,7 @@ model ValidationExperiment {
   workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   smokeTestPages SmokeTestPage[]
 
+  @@index([workspaceId, projectId, createdAt])
   @@index([workspaceId])
   @@map("validation_experiments")
 }
@@ -259,6 +263,7 @@ model Campaign {
   id               String               @id @default(uuid()) @db.Uuid
   workspaceId      String               @map("workspace_id") @db.Uuid
   tableId          String?              @map("table_id") @db.Uuid
+  projectId        String?              @map("project_id") @db.Uuid
   name             String               @db.VarChar(255)
   status           String               @default("draft") @db.VarChar(32) // outbound.contract CampaignStatusEnum
   steps            Json                 @default("[]") // CampaignStep[]
@@ -274,6 +279,7 @@ model Campaign {
 
   @@unique([id, workspaceId])
   @@index([workspaceId])
+  @@index([workspaceId, projectId, createdAt])
   @@map("campaigns")
 }
 
@@ -471,4 +477,47 @@ model InboundReply {
   @@unique([workspaceId, messageId])
   @@index([workspaceId, campaignId])
   @@map("inbound_replies")
+}
+
+// Execution foundation written through guarded raw SQL. No provider worker is enabled here.
+model WaterfallRun {
+  id String @id @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  tableId String @map("table_id") @db.Uuid
+  columnId String @map("column_id") @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  requestedBy String? @map("requested_by") @db.Uuid
+  payloadHash String @map("payload_hash") @db.Char(64)
+  configSnapshot Json @map("config_snapshot")
+  createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+  @@unique([workspaceId,requestId])
+  @@unique([id,workspaceId])
+  @@map("waterfall_runs")
+}
+model WaterfallRunRow {
+  id String @id @db.Uuid
+  runId String @map("run_id") @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  rowId String @map("row_id") @db.Uuid
+  snapshot Json
+  state String @default("queued")
+  attemptId String? @map("attempt_id") @db.Uuid
+  claimedAt DateTime? @map("claimed_at") @db.Timestamptz
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz
+  result Json?
+  @@unique([runId,rowId])
+  @@index([workspaceId,state,runId,id],map:"waterfall_rows_claim_idx")
+  @@map("waterfall_run_rows")
+}
+
+// Deliberately no project/experiment FK: this is also a deletion tombstone.
+model ExperimentCreateReceipt {
+ workspaceId String @map("workspace_id") @db.Uuid
+ requestId String @map("request_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ payloadHash String @map("payload_hash") @db.Char(64)
+ experimentId String @map("experiment_id") @db.Uuid
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz(3)
+ @@id([workspaceId,requestId])
+ @@map("experiment_create_receipts")
 }

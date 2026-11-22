@@ -97,7 +97,7 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
             temperature: input.temperature ?? 0.7,
           },
         }),
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -157,7 +157,7 @@ export class OllamaConnector implements Connector<OllamaInput, OllamaOutput> {
             `Ollama local daemon unreachable: ${err instanceof Error ? err.message : 'Unknown network failure'}`,
             [ctx.apiKey]
           ),
-          retryable: true,
+          retryable: false,
         },
       };
     }

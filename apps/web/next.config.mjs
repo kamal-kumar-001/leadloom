@@ -8,8 +8,9 @@ const __dirname = path.dirname(__filename);
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  outputFileTracingIncludes: {'/api/projects/*/bundle': ['../../skills/**/*']},
   outputFileTracingRoot: path.join(__dirname, '../../'),
-  transpilePackages: ['@leadloom/contracts', '@leadloom/ui', '@leadloom/webgl-scenes'],
+  transpilePackages: ['@leadloom/contracts', '@leadloom/ui', '@leadloom/webgl-scenes', '@leadloom/engine'],
   webpack: (config) => {
     config.externals = [...(config.externals || [])];
     return config;

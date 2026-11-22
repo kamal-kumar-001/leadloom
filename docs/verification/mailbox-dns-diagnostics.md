@@ -1,0 +1,11 @@
+# Saved mailbox DNS diagnostics
+
+Optional runtime capability: set LEADLOOM_DNS_DIAGNOSTICS_ENABLED=true when deploying an authorized candidate to mount the human-session route. Default off means no DNS queries and the screen reports disabled/unavailable rather than inventing results. No user/provider credentials are needed for DNS record reads. Enabling the flag is operational configuration, not done by this source change.
+
+POST /workspace/mailboxes/:mailboxId/dns-diagnostics accepts only dkimSelectors, up to5distinct provider-supplied selector labels. The domain is derived from the tenant-selected saved mailbox, never a caller URL/hostname/resolver. Current human session/read access is required. Customer bearer credentials including wildcard cannot use the route. Ten diagnostics per workspace per minute per process, bounded selector/domain caches,3second per-query timeout and no-store response headers limit the path. DNS work may continue inside the OS resolver after an application timeout; no provider task or send is involved.
+
+The underlying diagnostic checks basic DNS record shape/presence. It does not evaluate an actual SMTP source IP, DKIM message signature, authentication alignment, reputation, inbox placement or consent. The internal verified enum is presented as Record checks passed, not verified delivery. No selectors means DKIM pending; temporary lookup failures are unknown. No health score is returned. Mailbox DNS fields, health score, pause state, connection state, approval and send eligibility remain unchanged.
+
+Results are ephemeral diagnostics only, not saved health evidence. They may be cached up to5minutes; temporary unknown values use the underlying shorter cache interval. User changes to selectors clear displayed results. Failures clear stale results. Closing/reopening the modal invalidates an in-flight response so it cannot populate a new diagnostic view.
+
+Verification uses an injected resolver for native route/service tests, plus a separately preloaded DNS fixture in a disposable compiled engine process for the browser journey. The fixture never resolves external DNS and is not used by production startup. The browser journey also injects one503to verify stale-result clearing. No real domain lookup, account call or email was performed.

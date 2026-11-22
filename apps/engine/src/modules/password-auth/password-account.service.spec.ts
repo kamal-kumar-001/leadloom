@@ -18,7 +18,6 @@ class MemStore implements PasswordAccountStore {
     this.users.set(id, { id, email: i.email, workspaceId: 'w' + id, role: 'admin', sessionVersion: 0, passwordHash: i.passwordHash, verified: false, active: true });
     return { userId: id };
   }
-  async replaceUnverifiedPassword(e: string, h: string) { const u = [...this.users.values()].find(x => x.email === e && !x.verified && x.active); if (!u) return null; u.passwordHash = h; return u.id; }
   async putOtpUnlessRecent(i: any, cd: number) {
     if (this.otps.some(o => o.userId === i.userId && o.purpose === i.purpose && this.clock() - o.at < cd * 1000)) return false;
     this.otps = this.otps.filter(o => !(o.userId === i.userId && o.purpose === i.purpose && !o.used));
@@ -31,7 +30,12 @@ class MemStore implements PasswordAccountStore {
     if (o.hash === h) { o.used = true; return true; }
     o.attempts++; return false;
   }
-  async markVerified(id: string) { this.users.get(id)!.verified = true; }
+  async completeSignup(id: string, h: string, passwordHash: string, max: number) {
+    const u = this.users.get(id);
+    if (!u || !u.active || u.verified || !await this.checkOtp(id, 'signup', h, max)) return false;
+    u.passwordHash = passwordHash; u.verified = true; u.sessionVersion++;
+    this.audits.push('user.email_verified'); return true;
+  }
   async setPassword(id: string, h: string) { const u = this.users.get(id)!; u.passwordHash = h; u.verified = true; u.sessionVersion++; }
   async claimByProvider(e: string) { const u = [...this.users.values()].find(x => x.email === e && !x.verified); if (u) { u.verified = true; u.passwordHash = null; u.sessionVersion++; } }
   async audit(a: string) { this.audits.push(a); }
@@ -62,7 +66,7 @@ describe('PasswordAccountService (emailed codes)', () => {
     const { m, svc } = mk();
     await svc.register('a@example.com', PW);
     await expect(svc.authenticate('a@example.com', PW)).rejects.toBeInstanceOf(EmailNotVerifiedError);
-    await svc.verifyEmail('a@example.com', codeOf(m.sent[0]));
+    await svc.verifyEmail('a@example.com', codeOf(m.sent[0]), PW);
     await expect(svc.authenticate('a@example.com', PW)).resolves.toMatchObject({ role: 'admin' });
     await expect(svc.authenticate('a@example.com', PW + 'x')).rejects.toBeInstanceOf(InvalidCredentialsError);
     await expect(svc.authenticate('nobody@example.com', PW)).rejects.toBeInstanceOf(InvalidCredentialsError);
@@ -76,24 +80,24 @@ describe('PasswordAccountService (emailed codes)', () => {
     const { m, svc, advance } = mk();
     await svc.register('a@example.com', PW);
     const c = codeOf(m.sent[0]);
-    await svc.verifyEmail('a@example.com', c);
-    await expect(svc.verifyEmail('a@example.com', c)).rejects.toBeInstanceOf(InvalidCodeError);
+    await svc.verifyEmail('a@example.com', c, PW);
+    await expect(svc.verifyEmail('a@example.com', c, PW)).rejects.toBeInstanceOf(InvalidCodeError);
     await svc.register('b@example.com', PW);
     advance(11 * 60_000);
-    await expect(svc.verifyEmail('b@example.com', codeOf(m.sent[1]))).rejects.toBeInstanceOf(InvalidCodeError);
-    await expect(svc.verifyEmail('b@example.com', '12345')).rejects.toBeInstanceOf(InvalidCodeError);
-    await expect(svc.verifyEmail('b@example.com', 'abcdef')).rejects.toBeInstanceOf(InvalidCodeError);
+    await expect(svc.verifyEmail('b@example.com', codeOf(m.sent[1]), PW)).rejects.toBeInstanceOf(InvalidCodeError);
+    await expect(svc.verifyEmail('b@example.com', '12345', PW)).rejects.toBeInstanceOf(InvalidCodeError);
+    await expect(svc.verifyEmail('b@example.com', 'abcdef', PW)).rejects.toBeInstanceOf(InvalidCodeError);
   });
   it('five wrong guesses kill the code, even the right one afterwards; a resend gives a new code', async () => {
     const { m, svc, advance } = mk();
     await svc.register('a@example.com', PW);
     const c = codeOf(m.sent[0]);
-    for (let i = 0; i < MAX_OTP_ATTEMPTS; i++) await expect(svc.verifyEmail('a@example.com', wrong(c))).rejects.toBeInstanceOf(InvalidCodeError);
-    await expect(svc.verifyEmail('a@example.com', c)).rejects.toBeInstanceOf(InvalidCodeError);
+    for (let i = 0; i < MAX_OTP_ATTEMPTS; i++) await expect(svc.verifyEmail('a@example.com', wrong(c), PW)).rejects.toBeInstanceOf(InvalidCodeError);
+    await expect(svc.verifyEmail('a@example.com', c, PW)).rejects.toBeInstanceOf(InvalidCodeError);
     advance(61_000);
     await svc.resendVerification('a@example.com');
     expect(m.sent).toHaveLength(2);
-    await svc.verifyEmail('a@example.com', codeOf(m.sent[1]));
+    await svc.verifyEmail('a@example.com', codeOf(m.sent[1]), PW);
   });
   it('resend has a cooldown and replaces the earlier code', async () => {
     const { m, svc, advance } = mk();
@@ -102,23 +106,23 @@ describe('PasswordAccountService (emailed codes)', () => {
     advance(61_000);
     await svc.resendVerification('a@example.com'); expect(m.sent).toHaveLength(2);
     const [c1, c2] = [codeOf(m.sent[0]), codeOf(m.sent[1])];
-    if (c1 !== c2) await expect(svc.verifyEmail('a@example.com', c1)).rejects.toBeInstanceOf(InvalidCodeError);
-    await svc.verifyEmail('a@example.com', c2);
+    if (c1 !== c2) await expect(svc.verifyEmail('a@example.com', c1, PW)).rejects.toBeInstanceOf(InvalidCodeError);
+    await svc.verifyEmail('a@example.com', c2, PW);
   });
   it('registering a verified email changes nothing and sends nothing (no enumeration)', async () => {
     const { s, m, svc } = mk();
-    await svc.register('a@example.com', PW); await svc.verifyEmail('a@example.com', codeOf(m.sent[0]));
+    await svc.register('a@example.com', PW); await svc.verifyEmail('a@example.com', codeOf(m.sent[0]), PW);
     const hash = [...s.users.values()][0].passwordHash;
     await expect(svc.register('a@example.com', 'another long password')).resolves.toBeUndefined();
     expect(s.users.size).toBe(1); expect(m.sent).toHaveLength(1); expect([...s.users.values()][0].passwordHash).toBe(hash);
   });
-  it('re-registering an UNVERIFIED email replaces the password and mails a fresh code (squatter cannot lock the owner out)', async () => {
+  it('re-registering an unverified email leaves credentials alone; the code holder sets their own password', async () => {
     const { s, m, svc, advance } = mk();
     await svc.register('v@example.com', 'attacker chosen password');
     advance(61_000);
     await svc.register('v@example.com', 'owner chosen password');
     expect(s.users.size).toBe(1); expect(m.sent).toHaveLength(2);
-    await svc.verifyEmail('v@example.com', codeOf(m.sent[1]));
+    await svc.verifyEmail('v@example.com', codeOf(m.sent[1]), 'owner chosen password');
     await expect(svc.authenticate('v@example.com', 'attacker chosen password')).rejects.toBeInstanceOf(InvalidCredentialsError);
     await expect(svc.authenticate('v@example.com', 'owner chosen password')).resolves.toBeDefined();
   });
@@ -145,7 +149,7 @@ describe('PasswordAccountService (emailed codes)', () => {
   });
   it('reset: code mailed only for real active accounts; new password works, old does not; version bumps', async () => {
     const { s, m, svc } = mk();
-    await svc.register('a@example.com', PW); await svc.verifyEmail('a@example.com', codeOf(m.sent[0]));
+    await svc.register('a@example.com', PW); await svc.verifyEmail('a@example.com', codeOf(m.sent[0]), PW);
     await svc.forgotPassword('ghost@example.com'); expect(m.sent).toHaveLength(1);
     const before = await svc.authenticate('a@example.com', PW);
     await svc.forgotPassword('a@example.com'); expect(m.sent).toHaveLength(2); expect(m.sent[1].kind).toBe('password_reset');
@@ -159,7 +163,7 @@ describe('PasswordAccountService (emailed codes)', () => {
   });
   it('a weak new password is refused without spending the reset code', async () => {
     const { m, svc, advance } = mk();
-    await svc.register('a@example.com', PW); await svc.verifyEmail('a@example.com', codeOf(m.sent[0]));
+    await svc.register('a@example.com', PW); await svc.verifyEmail('a@example.com', codeOf(m.sent[0]), PW);
     await svc.forgotPassword('a@example.com');
     const c = codeOf(m.sent[1]);
     await expect(svc.resetPassword('a@example.com', c, 'short')).rejects.toBeInstanceOf(WeakPasswordError);
@@ -174,16 +178,16 @@ describe('PasswordAccountService (emailed codes)', () => {
     advance(61_000);
     await svc.forgotPassword('a@example.com'); // unverified accounts may reset
     const reset = codeOf(m.sent[1]);
-    await expect(svc.verifyEmail('a@example.com', reset)).rejects.toBeInstanceOf(InvalidCodeError);
+    await expect(svc.verifyEmail('a@example.com', reset, PW)).rejects.toBeInstanceOf(InvalidCodeError);
   });
   it('a code for one account never works for another (hash is bound to the user)', async () => {
     const { m, svc } = mk();
     await svc.register('a@example.com', PW); await svc.register('b@example.com', PW);
-    await expect(svc.verifyEmail('b@example.com', codeOf(m.sent[0]))).rejects.toBeInstanceOf(InvalidCodeError);
+    await expect(svc.verifyEmail('b@example.com', codeOf(m.sent[0]), PW)).rejects.toBeInstanceOf(InvalidCodeError);
   });
   it('suspended accounts cannot sign in, reset or get codes', async () => {
     const { s, m, svc } = mk();
-    await svc.register('a@example.com', PW); await svc.verifyEmail('a@example.com', codeOf(m.sent[0]));
+    await svc.register('a@example.com', PW); await svc.verifyEmail('a@example.com', codeOf(m.sent[0]), PW);
     [...s.users.values()][0].active = false;
     await expect(svc.authenticate('a@example.com', PW)).rejects.toBeInstanceOf(AccountInactiveError);
     await svc.forgotPassword('a@example.com'); expect(m.sent).toHaveLength(1);
@@ -208,5 +212,50 @@ describe('PasswordAccountService (emailed codes)', () => {
     fail = false;
     await svc.resendVerification('a@example.com');
     expect(s.otps.filter(o => !o.used)).toHaveLength(1);
+  });
+});
+
+
+describe('signup mailbox-holder password binding', () => {
+  it('repeat registration inside cooldown never changes the pending credential or activates a different password', async () => {
+    const { s, m, svc } = mk();
+    await svc.register('holder@example.com', PW);
+    const pendingHash = [...s.users.values()][0].passwordHash;
+    await svc.register('holder@example.com', 'Anonymous other password');
+    expect(m.sent).toHaveLength(1);
+    expect([...s.users.values()][0].passwordHash).toBe(pendingHash);
+    await svc.verifyEmail('holder@example.com', codeOf(m.sent[0]), PW);
+    await expect(svc.authenticate('holder@example.com', PW)).resolves.toBeDefined();
+    await expect(svc.authenticate('holder@example.com', 'Anonymous other password')).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+  it('a mailbox holder can replace a preregistered password during verification without waiting for cooldown', async () => {
+    const { m, svc } = mk();
+    await svc.register('holder@example.com', 'Preregistered wrong password');
+    await svc.register('holder@example.com', PW);
+    expect(m.sent).toHaveLength(1);
+    await svc.verifyEmail('holder@example.com', codeOf(m.sent[0]), PW);
+    await expect(svc.authenticate('holder@example.com', PW)).resolves.toBeDefined();
+    await expect(svc.authenticate('holder@example.com', 'Preregistered wrong password')).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+  it('missing or weak activation password does not consume the signup code', async () => {
+    const { s, m, svc } = mk(); await svc.register('holder@example.com', PW);
+    const code = codeOf(m.sent[0]);
+    await expect(svc.verifyEmail('holder@example.com', code, undefined as any)).rejects.toBeInstanceOf(WeakPasswordError);
+    await expect(svc.verifyEmail('holder@example.com', code, 'short')).rejects.toBeInstanceOf(WeakPasswordError);
+    expect(s.otps[0].used).toBe(false);
+    await svc.verifyEmail('holder@example.com', code, PW);
+  });
+  it('unused signup proof cannot overwrite a password installed by the reset flow', async () => {
+    const { m, svc } = mk(); await svc.register('holder@example.com', PW);
+    const signup = codeOf(m.sent[0]); await svc.forgotPassword('holder@example.com');
+    await svc.resetPassword('holder@example.com', codeOf(m.sent[1]), 'Mailbox reset password');
+    await expect(svc.verifyEmail('holder@example.com', signup, 'Old signup replacement')).rejects.toBeInstanceOf(InvalidCodeError);
+    await expect(svc.authenticate('holder@example.com', 'Mailbox reset password')).resolves.toBeDefined();
+  });
+  it('unused signup proof cannot add a password after a provider claims the identity', async () => {
+    const { m, svc } = mk(); await svc.register('holder@example.com', PW);
+    const signup = codeOf(m.sent[0]); await svc.claimByProvider('holder@example.com');
+    await expect(svc.verifyEmail('holder@example.com', signup, PW)).rejects.toBeInstanceOf(InvalidCodeError);
+    await expect(svc.authenticate('holder@example.com', PW)).rejects.toBeInstanceOf(InvalidCredentialsError);
   });
 });

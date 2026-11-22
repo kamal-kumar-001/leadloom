@@ -1,19 +1,27 @@
 'use client';
+import {ProjectResearchArchive} from '../../../components/research/project-research-archive';
 
 import React, { useState } from 'react';
 import { Badge, Button, Card } from '@leadloom/ui';
 import { Globe, Search, AlertTriangle, Save, Check } from 'lucide-react';
 import Link from 'next/link';
 import {
+  fetchWorkspaceProjects,
   analyzeWebsiteSignals,
   saveWebsiteAnalysis,
   fetchResearchLeads,
   type WebsiteSignalsResult,
   type SavedResearchRow,
 } from '../../../lib/engine-client';
+import {canSaveResearchSnapshot} from '../../../lib/research-snapshot';
 import { IntentFixturePanel } from '../../../components/research/intent-fixture-panel';
 
-export default function ResearchPage() {
+export default function ResearchPage(){
+ const [projectId,setProjectId]=useState(''),[projects,setProjects]=useState<import('@leadloom/contracts').ProjectResponse[]>([]),[error,setError]=useState('');
+ React.useEffect(()=>{let active=true;fetchWorkspaceProjects().then(r=>{if(!active)return;if(r.error)setError(r.error);else setProjects(r.projects);});return()=>{active=false;};},[]);
+ return <><div className="px-6 pt-6 max-w-5xl mx-auto space-y-2"><label className="text-sm" htmlFor="research-project">Research project for new saves and saved-list retrieval</label><select id="research-project" aria-label="Research project" value={projectId} onChange={e=>setProjectId(e.target.value)} className="w-full bg-canvas-elevated border border-border-subtle rounded-lg p-2 text-sm"><option value="">Workspace: new saves unassigned, show all saved research</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><p className="text-xs text-text-secondary">Project selection is explicit, fixed when saving a new row. Workspace members/tools and Tables retain workspace access. Switching discards the current unsaved analysis and request ID; inspect saved results before retrying after a switch. Historical rows are not assigned by name.</p>{error&&<p role="alert" className="text-xs text-signal-failed">Projects unavailable. Workspace saves remain unassigned. {error}</p>}</div><ResearchContent key={projectId||'workspace'} projectId={projectId||undefined}/></>;
+}
+function ResearchContent({projectId}:{projectId?:string}) {
   const [url, setUrl] = useState('');
   const [domain, setDomain] = useState('');
   const [pageText, setPageText] = useState('');
@@ -22,24 +30,32 @@ export default function ResearchPage() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [savedRows, setSavedRows] = useState<SavedResearchRow[]>([]);
+  const [requestId,setRequestId]=useState<string|null>(null);
   const [lastPageText, setLastPageText] = useState('');
+  const [archiveRevision,setArchiveRevision]=useState(0);
 
   React.useEffect(() => {
-    fetchResearchLeads().then((res) => {
+    if(projectId)return;
+    fetchResearchLeads(projectId).then((res) => {
+      if(res.error)setError(res.error);
       if (res.data?.items) setSavedRows(res.data.items);
     });
   }, []);
 
   async function save(domain: string, pageText: string) {
+    if(!requestId){setError('Analyze the pasted text before saving.');return;}
+    setError(null);
     setBusy(true);
-    const res = await saveWebsiteAnalysis({ domain, pageText });
+    const res = await saveWebsiteAnalysis({ domain, pageText,requestId,...(projectId?{projectId}:{}) });
     setBusy(false);
-    if (res.error) {
-      setError(res.error);
+    if (res.error||!res.data?.rowId||res.data.status!=='SAVED') {
+      setError((res.error||'Research save was not confirmed.')+' Reload saved analyses before retrying an unconfirmed save.');
       return;
     }
     setSaved(res.data?.rowId ?? null);
-    const list = await fetchResearchLeads();
+    if(projectId){setArchiveRevision(n=>n+1);return;}
+    const list = await fetchResearchLeads(projectId);
+    if(list.error)setError('Save succeeded, but saved-list reload failed. '+list.error);
     if (list.data?.items) setSavedRows(list.data.items);
   }
 
@@ -48,7 +64,8 @@ export default function ResearchPage() {
     setError(null);
     setResult(null);
     setSaved(null);
-    if (mode === 'text') setLastPageText(pageText);
+    setRequestId(null);
+    setLastPageText(mode==='text'?pageText:'');
     const input = mode === 'url' ? { url: url.trim() } : { domain: domain.trim(), pageText };
     const res = await analyzeWebsiteSignals(input as { url: string });
     setBusy(false);
@@ -61,10 +78,11 @@ export default function ResearchPage() {
       return;
     }
     setResult(res.data);
+    if(res.data?.input==='pasted_text')setRequestId(crypto.randomUUID());
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 font-sans">
       <div>
         <h1 className="text-xl font-semibold flex items-center gap-2">
           <Globe className="h-5 w-5" /> Website research
@@ -186,13 +204,15 @@ export default function ResearchPage() {
             </p>
           </div>
 
+          {result.input!=='pasted_text'&&<p className="text-xs text-text-secondary">Fetched output has no saved source-text snapshot. Paste the exact source text to save a reproducible analysis; earlier pasted text is never reused.</p>}
+          <p className="text-xs text-text-secondary">One analysis keeps the same save request ID for safe retries in this page session. Analyze again to deliberately append another row. Reload saved analyses after an uncertain response. Reloading or leaving this page loses that ID, so inspect the saved list before starting again. New saved rows use the selected project, or remain unassigned in Workspace mode. Workspace access stays broad.</p>
           <div className="border-t border-[var(--border)] pt-3 flex items-center gap-3">
             {saved ? (
               <Badge variant="verified" className="text-[10px] font-mono">
                 <Check className="h-3 w-3 mr-1" /> Saved to lead table
               </Badge>
             ) : (
-              <Button disabled={busy} onClick={() => save(result.signals.companyDomain, lastPageText)}>
+              <Button disabled={busy||!requestId||!canSaveResearchSnapshot(result.input,lastPageText)} onClick={() => save(result.signals.companyDomain, lastPageText)}>
                 <Save className="h-4 w-4 mr-1" /> Save to lead table
               </Button>
             )}
@@ -207,7 +227,9 @@ export default function ResearchPage() {
         </Card>
       )}
 
-      {savedRows.length > 0 && (
+      {projectId&&<ProjectResearchArchive key={projectId} projectId={projectId} revision={archiveRevision}/>}
+      {!projectId&&<Button variant="outline" disabled={busy} onClick={async()=>{setError(null);const r=await fetchResearchLeads(projectId);if(r.error)setError(r.error);else if(r.data)setSavedRows(r.data.items);}}>Reload saved research</Button>}
+      {!projectId&&savedRows.length > 0 && (
         <Card className="p-4 space-y-2">
           <h2 className="font-semibold text-sm">Saved analyses ({savedRows.length})</h2>
           <p className="text-xs text-[var(--text-secondary)]">
@@ -230,7 +252,7 @@ export default function ResearchPage() {
       )}
 
       <div className="border-t border-[var(--border)] pt-6">
-        <IntentFixturePanel />
+        <IntentFixturePanel projectId={projectId} />
       </div>
     </div>
   );

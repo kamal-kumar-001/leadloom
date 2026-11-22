@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button, Card } from '@leadloom/ui';
 import { notify } from '@/lib/notify';
 import { X } from 'lucide-react';
-import { createWorkspaceCampaign, type WorkspaceCampaignRow, type WorkspaceCampaignStep } from '../../lib/engine-client';
+import { createWorkspaceCampaign, fetchWorkspaceProjects, type WorkspaceCampaignRow, type WorkspaceCampaignStep } from '../../lib/engine-client';
 import { CampaignStepsEditor } from './campaign-steps-editor';
 
 interface CampaignCreateFormProps {
@@ -21,6 +21,11 @@ const inputClass =
  * pooled later; a campaign without a pool simply has no senders yet.
  */
 export function CampaignCreateForm({ onCreated, onCancel }: CampaignCreateFormProps) {
+  const pending=useRef<{signature:string;requestId:string}|null>(null);
+  const [projectId,setProjectId]=useState('');
+  const [projects,setProjects]=useState<import('@leadloom/contracts').ProjectResponse[]>([]);
+  const [projectError,setProjectError]=useState<string|null>(null);
+  useEffect(()=>{let active=true;fetchWorkspaceProjects().then(r=>{if(!active)return;if(r.error)setProjectError('Projects could not be loaded. Leave unassigned or reload before creating.');else setProjects(r.projects);}).catch(()=>{if(active)setProjectError('Projects could not be loaded.');});return()=>{active=false;};},[]);
   const [name, setName] = useState('');
   const [scheduleTimezone, setScheduleTimezone] = useState('Asia/Calcutta');
   const [dailyLimitTotal, setDailyLimitTotal] = useState(50);
@@ -58,14 +63,18 @@ export function CampaignCreateForm({ onCreated, onCancel }: CampaignCreateFormPr
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const res = await createWorkspaceCampaign({
+      const input = {
         name: name.trim(),
+        ...(projectId?{projectId}:{}),
         steps: steps.map((s, i) => ({ ...s, stepNumber: i + 1, subject: s.subject.trim(), bodyTemplate: s.bodyTemplate.trim() })),
         dailyLimitTotal,
         scheduleTimezone: scheduleTimezone.trim() || 'UTC',
-      });
+      };
+      const signature=JSON.stringify(input);if(pending.current?.signature!==signature)pending.current={signature,requestId:crypto.randomUUID()};
+      const res=await createWorkspaceCampaign({...input,requestId:pending.current.requestId});
       if (res.data) {
-        notify.success('Campaign created as draft - nothing sends until recipients are added, messages are approved, and the gated release runs');
+        notify.success(res.data.replayed?'Original campaign save recovered. Its current state is shown; nothing was reset or sent.':'Campaign created as draft - nothing sends until recipients are added, messages are approved, and the gated release runs');
+        pending.current=null;
         onCreated(res.data);
       } else {
         setSubmitError(res.error || 'Campaign could not be created');
@@ -128,9 +137,19 @@ export function CampaignCreateForm({ onCreated, onCancel }: CampaignCreateFormPr
         </div>
       </div>
 
+      <div>
+        <label htmlFor="campaign-project" className="block text-xs text-text-muted mb-1">Project, fixed at creation</label>
+        <select id="campaign-project" aria-label="New campaign project" value={projectId} onChange={e=>setProjectId(e.target.value)} disabled={isSubmitting} className={inputClass}>
+          <option value="">Unassigned workspace campaign</option>
+          {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {projectError&&<p role="alert" className="text-xs text-signal-failed mt-1">{projectError}</p>}
+        <p className="text-xs text-text-muted mt-1">Ownership organizes project observation. Workspace members and workspace tool scopes retain access. Nothing sends at creation.</p>
+      </div>
       <CampaignStepsEditor steps={steps} onChange={setSteps} disabled={isSubmitting} fieldErrors={fieldErrors} />
 
-      {submitError && <p className="text-xs text-signal-failed">{submitError}</p>}
+      <p className="text-xs text-text-muted">An unconfirmed save can be retried with unchanged fields without creating another campaign. Changing fields starts a new request. Closing or reloading loses this request ID; inspect saved campaigns before starting again.</p>
+      {submitError && <p role="alert" className="text-xs text-signal-failed">{submitError}</p>}
 
       <div className="flex items-center justify-end gap-2 pt-1">
         <Button size="sm" variant="outline" onClick={onCancel} disabled={isSubmitting} className="text-xs">

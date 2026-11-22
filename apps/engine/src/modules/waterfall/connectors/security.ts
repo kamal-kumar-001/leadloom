@@ -68,6 +68,8 @@ export function validateAndResolveBaseUrl(
     parsedDefault = new URL('https://api.leadloom.invalid');
   }
 
+  if(parsedCtx.username||parsedCtx.password||parsedCtx.search||parsedCtx.hash||(!options?.allowLocalHttp&&parsedCtx.port!==parsedDefault.port))return{url:defaultBaseUrl,error:{code:'INVALID_BASE_URL',message:'Base URL must not contain credentials, query, fragment or an alternate vendor port',retryable:false}};
+
   if (options?.allowLocalHttp) {
     // Ollama: allow http or https only for localhost / 127.0.0.1 / ::1
     if (parsedCtx.protocol !== 'http:' && parsedCtx.protocol !== 'https:') {
@@ -173,12 +175,34 @@ export function resolveFetch(ctx: ConnectorContext): { fetchFn?: typeof fetch; e
 export async function safeFetch(
   fetchImpl: typeof fetch,
   url: string,
-  init: RequestInit
+  init: RequestInit,
+  timeoutMs = 10000,
 ): Promise<Response> {
-  return fetchImpl(url, {
-    ...init,
-    redirect: 'manual',
-  });
+  if(!Number.isFinite(timeoutMs)||timeoutMs<=0)throw new Error('Invalid connector timeout');
+  const controller=new AbortController(),timeout=Math.min(30000,timeoutMs),maxBytes=1048576;
+  let reader:ReadableStreamDefaultReader<Uint8Array>|undefined,response:Response|undefined,timer:ReturnType<typeof setTimeout>|undefined;
+  const abort=()=>controller.abort();init.signal?.addEventListener('abort',abort,{once:true});if(init.signal?.aborted)controller.abort();
+  const cancel=()=>{if(reader)void reader.cancel().catch(()=>{});else if(response?.body)void response.body.cancel().catch(()=>{});};
+  try{
+    return await Promise.race([
+      (async()=>{
+        response=await fetchImpl(url,{...init,redirect:'manual',signal:controller.signal});
+        if(controller.signal.aborted){cancel();throw new Error('Connector request aborted; outcome unconfirmed');}
+        if(!response.ok||response.type==='opaqueredirect'||response.status>=300&&response.status<400){cancel();return response;}
+        if(Number(response.headers?.get('content-length'))>maxBytes){cancel();throw new Error('Connector response too large; outcome unconfirmed');}
+        if(response.body?.getReader){
+          reader=response.body.getReader();const chunks:Uint8Array[]=[];let size=0;
+          for(;;){const part=await reader.read();if(controller.signal.aborted)throw new Error('Connector request aborted; outcome unconfirmed');if(part.done)break;size+=part.value.length;if(size>maxBytes){cancel();throw new Error('Connector response too large; outcome unconfirmed');}chunks.push(part.value);}
+          return new Response([204,205].includes(response.status)?null:Buffer.concat(chunks),{status:response.status,statusText:response.statusText,headers:response.headers});
+        }
+        // Older injected fixture transports expose only json(). Global fetch must supply a real body.
+        if(fetchImpl===globalThis.fetch)return new Response(null,{status:response.status,headers:response.headers});
+        const data=await response.json(),encoded=JSON.stringify(data);if(typeof encoded!=='string'||Buffer.byteLength(encoded)>maxBytes)throw new Error('Connector response too large; outcome unconfirmed');
+        return Object.assign({},response,{json:async()=>data}) as Response;
+      })(),
+      new Promise<never>((_resolve,reject)=>{timer=setTimeout(()=>{controller.abort();cancel();reject(new Error('Connector request timed out; outcome unconfirmed. Do not retry blindly.'));},timeout);}),
+    ]);
+  }catch(error){cancel();throw error;}finally{clearTimeout(timer);init.signal?.removeEventListener('abort',abort);try{reader?.releaseLock();}catch{/* A pending reader is already being canceled. */}}
 }
 
 /**

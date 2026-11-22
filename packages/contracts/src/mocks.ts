@@ -67,6 +67,7 @@ export const MOCK_PREFLIGHT_RESPONSE: PreFlightEstimateResponse = {
     { tierIndex: 2, provider: 'hunter', unitCostUSD: 0.003, estimatedHitRate: 0.28 },
     { tierIndex: 3, provider: 'dropcontact', unitCostUSD: 0.02, estimatedHitRate: 0.10 },
   ],
+  guaranteeNotice: 'Sample fixture assumptions, not a provider quote or execution guarantee',
 };
 
 export const MOCK_VALIDATION_SCORECARD: ValidationScorecardResponse = {

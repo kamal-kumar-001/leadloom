@@ -70,3 +70,6 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
+
+# Owned only while an explicit release runs. Stale lock requires operator inspection.
+.leadloom-release.lock/

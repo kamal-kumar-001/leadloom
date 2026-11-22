@@ -218,7 +218,7 @@ export function InviteMemberDialog({
             <FormField
               id="invite-email"
               label="Email Address"
-              hint="Must not already have an account. No email will be sent automatically."
+              hint="New or existing account. Accepting requires an empty personal workspace. No email is sent."
               required
               error={fieldErrors.email}
             >
@@ -261,7 +261,7 @@ export function InviteMemberDialog({
             <div className="p-3 rounded-xl bg-canvas-elevated border border-border-subtle flex items-start gap-2.5 text-text-muted">
               <Info className="w-4 h-4 text-brand-loom shrink-0 mt-0.5" />
               <p className="text-[11px] leading-relaxed">
-                No invitation email is sent. Ask them to sign up with this address, then open Settings and accept the invitation.
+                No invitation email is sent. Ask them to sign in or sign up with this address, then open Settings and accept the invitation.
               </p>
             </div>
 

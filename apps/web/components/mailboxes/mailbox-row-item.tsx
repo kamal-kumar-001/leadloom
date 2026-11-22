@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import {DnsInspectorModal} from './dns-inspector-modal';
 import { Card, Badge, Button } from '@leadloom/ui';
 import { notify } from '@/lib/notify';
 import {
@@ -88,6 +89,7 @@ export function MailboxRowItem({
   isAdmin,
   onRefresh,
 }: MailboxRowItemProps) {
+  const [dnsOpen,setDnsOpen]=useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -160,6 +162,8 @@ export function MailboxRowItem({
               </span>
             </div>
 
+            <button type="button" className="text-xs underline mt-2" onClick={()=>setDnsOpen(true)}>Inspect saved mailbox DNS</button>
+            <DnsInspectorModal mailboxId={m.id} isOpen={dnsOpen} onClose={()=>setDnsOpen(false)} />
             {/* DNS Status (not claimed from password connect) */}
             <div className="flex flex-wrap items-center gap-2 mt-2">
               {renderDnsChip('SPF', m.spfStatus)}

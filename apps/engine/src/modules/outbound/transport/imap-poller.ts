@@ -75,19 +75,28 @@ export class ImapReplyPoller {
   ) {}
 
   /**
-   * Poll once. Returns contract-valid reply events in uid order. The last
-   * processed uid advances ONLY after every fetched message is recorded, so a
-   * mid-batch failure replays the batch (dedupe keeps that idempotent).
+   * Compatibility read helper: acknowledges delivery to this caller only, NOT
+   * durable downstream handling. Never compose pollOnce() then a separate
+   * database write for a reliable reply pipeline; use pollAndConsume instead.
    */
   async pollOnce(context: ReplyPollerContext): Promise<InboundReplyEvent[]> {
-    if (this.seen.withLock) {
-      const r = await this.seen.withLock(context.mailboxId, () => this.pollLocked(context));
-      return r ?? [];
-    }
-    return this.pollLocked(context);
+    return (await this.pollAndConsume(context, async events => events)) ?? [];
   }
 
-  private async pollLocked(context: ReplyPollerContext): Promise<InboundReplyEvent[]> {
+  /**
+   * Keep the mailbox lock through delivery and acknowledgement. Markers and the
+   * UID watermark advance only after the consumer confirms durable handling.
+   * Consumer failure leaves the batch replayable. If marker persistence fails
+   * after handling committed, retry may replay events, so the consumer MUST be
+   * idempotent. null means a different poll owns the lock, not an empty inbox.
+   */
+  async pollAndConsume<T>(context: ReplyPollerContext, consume: (events: InboundReplyEvent[]) => Promise<T>): Promise<T | null> {
+    if(typeof consume !== 'function')throw new Error('Reply consumer required');
+    if (this.seen.withLock) return this.seen.withLock(context.mailboxId, () => this.pollLocked(context, consume));
+    return this.pollLocked(context, consume);
+  }
+
+  private async pollLocked<T>(context: ReplyPollerContext, consume: (events: InboundReplyEvent[]) => Promise<T>): Promise<T> {
     let since = await this.seen.lastUid(context.mailboxId);
     let uidValidity: number | undefined;
     let batch: RawInboundMessage[];
@@ -122,7 +131,7 @@ export class ImapReplyPoller {
         ? { classification: 'bounce' as const, confidence: 0.95 }
         : classifyReply(raw.bodyText);
       const event = InboundReplyEventSchema.parse({
-        messageId: raw.messageId || key,
+        messageId: raw.messageId?.trim() || 'imap:' + context.mailboxId + ':' + key,
         campaignId: context.campaignId,
         mailboxId: context.mailboxId,
         fromEmail: raw.fromEmail,
@@ -134,15 +143,16 @@ export class ImapReplyPoller {
         inReplyTo: raw.inReplyTo,
         references: raw.references,
       });
-      if (!this.seen.persistBatch) await this.seen.add(context.mailboxId, key);
       events.push(event);
     }
+    const result = await consume(events);
     if (this.seen.persistBatch) {
       if (newKeys.length > 0 || maxUid > since) await this.seen.persistBatch(context.mailboxId, newKeys, maxUid);
-    } else if (maxUid > since) {
-      await this.seen.setLastUid(context.mailboxId, maxUid);
+    } else {
+      for (const key of newKeys) await this.seen.add(context.mailboxId, key);
+      if (maxUid > since) await this.seen.setLastUid(context.mailboxId, maxUid);
     }
-    return events;
+    return result;
   }
 }
 

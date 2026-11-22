@@ -1,0 +1,1 @@
+Skills in this directory are vendored from https://github.com/sergiodxa/agent-skills (MIT License, copyright Sergio Xalambri). See LICENSE.sergiodxa-agent-skills. Vendored 2026-11-19 as project-local agent guidance; apply selectively - the tailwind skill's custom v-stack/h-stack utilities are the author's project conventions, NOT Leadloom's.

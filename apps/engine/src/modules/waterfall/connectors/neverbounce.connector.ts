@@ -93,7 +93,7 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
       const response = await safeFetch(fetchImpl, url, {
         method: 'GET',
         headers: { Accept: 'application/json' },
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -186,7 +186,7 @@ export class NeverBounceConnector implements Connector<NeverBounceInput, NeverBo
           message: redactSecrets(err instanceof Error ? err.message : 'Unknown NeverBounce error', [
             ctx.apiKey,
           ]),
-          retryable: true,
+          retryable: false,
         },
       };
     }

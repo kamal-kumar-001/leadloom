@@ -112,7 +112,7 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
           max_tokens: input.maxTokens ?? 1024,
           temperature: input.temperature,
         }),
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -188,7 +188,7 @@ export class AnthropicConnector implements Connector<AnthropicInput, AnthropicOu
           message: redactSecrets(err instanceof Error ? err.message : 'Unknown Anthropic error', [
             ctx.apiKey,
           ]),
-          retryable: true,
+          retryable: false,
         },
       };
     }

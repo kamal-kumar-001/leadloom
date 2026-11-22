@@ -12,6 +12,9 @@ import { isImapPollEnabled } from './transport/poll-enablement';
  * Live gating is structural: pollMailboxReplies refuses to run unless the
  * operator set LEADLOOM_IMAP_POLL_ENABLED=true. Fixture tests call
  * recordPollEvents directly with synthetic events and never need the flag.
+ * The gated bridge consumes the batch durably before the poller acknowledges
+ * seen markers or the UID checkpoint. Partial durable batches may replay;
+ * recordInboundReply keeps reply storage and sequence halting idempotent.
  */
 
 export interface PollRecordSummary {
@@ -55,7 +58,7 @@ export async function recordPollEvents(
 }
 
 export interface MailboxReplyPoller {
-  pollOnce(context: { mailboxId: string; campaignId: string }): Promise<InboundReplyEvent[]>;
+  pollAndConsume<T>(context: { mailboxId: string; campaignId: string }, consume: (events: InboundReplyEvent[]) => Promise<T>): Promise<T | null>;
 }
 
 /**
@@ -72,6 +75,6 @@ export async function pollMailboxReplies(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<PollRecordSummary | null> {
   if (!isImapPollEnabled(env)) return null;
-  const events = await poller.pollOnce({ mailboxId, campaignId: pollCampaignId });
-  return recordPollEvents(repo, workspaceId, mailboxId, events);
+  if(typeof poller.pollAndConsume !== 'function')throw new Error('Acknowledged reply poller required');
+  return poller.pollAndConsume({ mailboxId, campaignId: pollCampaignId }, events => recordPollEvents(repo, workspaceId, mailboxId, events));
 }

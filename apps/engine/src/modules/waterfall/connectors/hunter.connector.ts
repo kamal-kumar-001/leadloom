@@ -104,7 +104,7 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
           'X-API-KEY': ctx.apiKey,
           Accept: 'application/json',
         },
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -203,7 +203,7 @@ export class HunterConnector implements Connector<HunterInput, HunterOutput> {
           message: redactSecrets(err instanceof Error ? err.message : 'Unknown Hunter error', [
             ctx.apiKey,
           ]),
-          retryable: true,
+          retryable: false,
         },
       };
     }

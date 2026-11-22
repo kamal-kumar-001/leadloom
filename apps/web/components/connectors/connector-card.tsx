@@ -35,6 +35,7 @@ export interface ConnectorMeta {
 interface ConnectorCardProps {
   meta: ConnectorMeta;
   credential?: MaskedBYOKCredential;
+  credentialState?: 'loading' | 'unavailable' | 'confirmed';
   onConfigure: (meta: ConnectorMeta) => void;
   onToggleStatus?: (provider: BYOKProvider, enabled: boolean) => void;
 }
@@ -42,13 +43,15 @@ interface ConnectorCardProps {
 export function ConnectorCard({
   meta,
   credential,
+  credentialState = 'confirmed',
   onConfigure,
 }: ConnectorCardProps) {
   // Stored and verified are distinct states. A saved key that has never passed
   // a live test-connection is stored, not connected; the card must not call it
   // "Not Configured" (the key exists) nor "Connected" (it is unproven).
-  const hasStoredKey = !!credential;
-  const isVerified = !!credential && credential.isValid;
+  const metadataKnown = credentialState === 'confirmed';
+  const hasStoredKey = metadataKnown && !!credential;
+  const isVerified = hasStoredKey && !!credential?.isValid && !!credential.lastVerifiedAt;
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     latencyMs: number;
@@ -100,10 +103,14 @@ export function ConnectorCard({
             </div>
           </div>
 
-          {isVerified ? (
+          {!metadataKnown ? (
+            <Badge variant="matrix" className="text-[10px] text-text-muted border-border-subtle">
+              {credentialState === 'loading' ? 'Key metadata loading' : 'Key metadata unavailable'}
+            </Badge>
+          ) : isVerified ? (
             <Badge variant="subtle" className="text-signal-verified border-signal-verified/30 text-[10px] flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-signal-verified" />
-              Connected
+              Last test passed
             </Badge>
           ) : hasStoredKey ? (
             <Badge variant="matrix" className="text-[10px] text-text-muted border-border-subtle">
@@ -130,6 +137,7 @@ export function ConnectorCard({
               </span>
               <span className="text-[10px] font-mono text-signal-verified">AES-256 Vault</span>
             </div>
+            {isVerified && <p className="text-[10px] text-text-muted">Stored test: {credential.lastVerifiedAt}. Not a live connection check.</p>}
             {credential.quotaRemaining !== null && (
               <div className="text-[10px] text-text-muted flex justify-between">
                 <span>Remaining Quota:</span>
@@ -171,7 +179,7 @@ export function ConnectorCard({
               variant="outline"
               size="sm"
               onClick={handleTest}
-              disabled={testing}
+              disabled={testing || !metadataKnown}
               className="text-xs flex-1 gap-1.5 h-8 font-mono"
             >
               <RefreshCw className={`w-3 h-3 ${testing ? 'animate-spin' : ''}`} />
@@ -181,6 +189,7 @@ export function ConnectorCard({
               variant="outline"
               size="sm"
               onClick={() => onConfigure(meta)}
+            disabled={!metadataKnown}
               className="text-xs h-8 px-3"
             >
               Rotate Key
@@ -191,6 +200,7 @@ export function ConnectorCard({
             variant="outline"
             size="sm"
             onClick={() => onConfigure(meta)}
+            disabled={!metadataKnown}
             className="w-full text-xs h-8 px-3"
           >
             Rotate Key
@@ -200,6 +210,7 @@ export function ConnectorCard({
             variant="primary"
             size="sm"
             onClick={() => onConfigure(meta)}
+            disabled={!metadataKnown}
             className="w-full text-xs gap-1.5 h-8"
           >
             <Lock className="w-3.5 h-3.5" />

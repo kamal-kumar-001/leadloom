@@ -1,0 +1,41 @@
+import {it,expect} from 'vitest';
+import {randomUUID} from 'node:crypto';
+import {PrismaClient} from '@leadloom/database';
+import {PrivateCampaignService,PrivateCampaignConflict} from '../private-campaign.service';
+import {PrismaDispatchDatabase} from '../prisma-database';
+import {AgentTokenService,InMemoryAgentTokenStore} from '../../auth/agent-token.service';
+import {ProjectRegistryService,PrismaProjectRegistryStore} from '../../project-context/project-registry.service';
+import {createApplication} from '../../../main';
+import {issueSession} from '../../auth/issuer';
+const url=process.env.LEADLOOM_TEST_DATABASE_URL;
+it.skipIf(process.env.LEADLOOM_INTEGRATION!=='1'||!url)('native guarded private draft revisions serialize stale writers, respect authority and preserve outbound boundaries',async()=>{
+ const db=new PrismaClient({datasources:{db:{url}}}),ws=randomUUID(),p=randomUUID(),q=randomUUID(),uid=randomUUID(),key=Buffer.alloc(32,8);let app:any;
+ try{
+  await db.workspace.create({data:{id:ws,name:'Private revision fixture'}});await db.user.create({data:{id:uid,workspaceId:ws,email:uid+'@example.invalid',role:'admin'}});for(const id of [p,q])await db.$executeRawUnsafe('INSERT INTO projects(id,workspace_id,slug,name)VALUES($1::uuid,$2::uuid,$3,$3)',id,ws,id);
+  const campaign=await db.campaign.create({data:{workspaceId:ws,projectId:p,name:'Human-reviewed copy',steps:[{stepNumber:1,delayHours:0,subject:'Original subject',bodyTemplate:'Original body'}]}}),service=new PrivateCampaignService(new PrismaDispatchDatabase(db)),store=new InMemoryAgentTokenStore(),tokens=new AgentTokenService(store);store.users.set(uid,{role:'admin',disabledAt:null});store.workspaces.set(ws,{active:true});
+  const issue=(scopes:string[],projectId=p)=>tokens.issue(ws,uid,{name:'Private revision',projectId,scopes});const editor=await issue(['project:campaigns:read','project:campaigns:edit']),creator=await issue(['project:campaigns:draft']),reader=await issue(['project:campaigns:read']),foreign=await issue(['project:campaigns:read','project:campaigns:edit'],q);
+  app=await createApplication({sessionKey:key,privateCampaigns:service,agentTokens:tokens,projectRegistry:new ProjectRegistryService(new PrismaProjectRegistryStore(db))} as any);const server=app.getHttpAdapter().getInstance(),req=(method:string,body?:any,t=editor.token,suffix='')=>server.inject({method,url:'/agent/project/campaign-drafts/'+campaign.id+suffix,headers:{authorization:'Bearer '+t},payload:body});
+  const first=await req('GET');expect(first.statusCode).toBe(200);expect(first.headers['cache-control']).toBe('no-store');const old=first.json(),input={expectedRevision:old.revision,name:'Caller revised copy',steps:[{stepNumber:1,delayHours:0,subject:'Revised {{firstName}}',bodyTemplate:'Literal <script>inert</script>'}],dailyLimitTotal:7,scheduleTimezone:'Asia/Kolkata'};
+  const races=await Promise.all(['First review','Second review'].map(name=>req('PUT',{...input,name})));expect(races.map(r=>r.statusCode).sort()).toEqual([200,409]);const saved=(await req('GET')).json();expect(saved.steps).toEqual(input.steps);expect(saved.dailyLimitTotal).toBe(7);
+  const exact={...input,name:saved.name};const replay=await req('PUT',exact);expect(replay.statusCode).toBe(200);expect(replay.json().changed).toBe(false);expect((await req('PUT',input)).statusCode).toBe(saved.name===input.name?200:409);
+  for(const extra of [{status:'active'},{tableId:randomUUID()},{projectId:q},{mailboxPoolIds:[]},{recipients:[]},{steps:[{...input.steps[0],approval:true}]}])expect((await req('PUT',{...exact,...extra})).statusCode).toBe(400);
+  const {dailyLimitTotal,...missing}=exact;expect((await req('PUT',missing)).statusCode).toBe(400);expect((await req('PUT',exact,editor.token,'?projectId='+q)).statusCode).toBe(400);
+  for(const token of [creator.token,reader.token,issueSession({workspaceId:ws,userId:uid,role:'admin'},key,3600).token])expect((await req('PUT',exact,token)).statusCode).toBe(403);expect((await req('GET',undefined,foreign.token)).statusCode).toBe(404);expect((await req('PUT',exact,foreign.token)).statusCode).toBe(404);
+  store.users.set(uid,{role:'read_only',disabledAt:null});expect((await req('PUT',exact)).statusCode).toBe(403);store.users.set(uid,{role:'admin',disabledAt:null});
+  const original=service.revise.bind(service);service.revise=async()=>{throw Error('private SQL diagnostics');};const failure=await req('PUT',exact);expect(failure.statusCode).toBe(503);expect(failure.body).not.toContain('diagnostics');service.revise=original;
+  await db.$executeRawUnsafe('INSERT INTO campaign_recipients(id,workspace_id,campaign_id,email,custom_fields,updated_at)VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5::jsonb,now())',randomUUID(),ws,campaign.id,'synthetic@example.invalid','{}');expect((await req('GET')).statusCode).toBe(409);expect((await req('PUT',exact)).statusCode).toBe(409);await db.$executeRawUnsafe('DELETE FROM campaign_recipients WHERE campaign_id=$1::uuid',campaign.id);
+  const table=await db.table.create({data:{workspaceId:ws,name:'Attached fixture'}});await db.campaign.update({where:{id:campaign.id},data:{tableId:table.id}});expect((await req('PUT',exact)).statusCode).toBe(409);await db.campaign.update({where:{id:campaign.id},data:{tableId:null}});
+  const mailbox=await db.mailbox.create({data:{workspaceId:ws,email:'inert@example.invalid',smtpHost:'never-contacted.invalid'}});await db.$executeRawUnsafe('INSERT INTO campaign_mailboxes(campaign_id,mailbox_id,workspace_id)VALUES($1::uuid,$2::uuid,$3::uuid)',campaign.id,mailbox.id,ws);expect((await req('PUT',exact)).statusCode).toBe(409);await db.$executeRawUnsafe('DELETE FROM campaign_mailboxes WHERE campaign_id=$1::uuid',campaign.id);
+  const job=await db.outboundJob.create({data:{workspaceId:ws,campaignId:campaign.id,recipientEmail:'inert@example.invalid',recipientHash:'a'.repeat(64),idempotencyKey:randomUUID(),stepNumber:1,status:'pending_approval',scheduledAt:new Date()}});expect((await req('PUT',exact)).statusCode).toBe(409);await db.outboundJob.delete({where:{id:job.id}});
+  await db.campaign.update({where:{id:campaign.id},data:{status:'active'}});expect((await req('PUT',exact)).statusCode).toBe(409);expect((await db.campaign.findUniqueOrThrow({where:{id:campaign.id}})).status).toBe('active');expect(await db.outboundJob.count({where:{workspaceId:ws}})).toBe(0);
+  await tokens.revoke(ws,editor.id);expect((await req('GET')).statusCode).toBe(401);
+ }finally{await app?.close();await db.workspace.deleteMany({where:{id:ws}});await db.$disconnect();}
+},30000);
+
+it.skipIf(process.env.LEADLOOM_INTEGRATION!=='1'||!url)('native campaign FOR UPDATE waits for earlier attachment transaction and refuses the revision',async()=>{
+ const db=new PrismaClient({datasources:{db:{url}}}),ws=randomUUID(),p=randomUUID();let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(r=>release=r),ready=new Promise<void>(r=>entered=r);
+ try{await db.workspace.create({data:{id:ws,name:'Attachment serialization fixture'}});await db.$executeRawUnsafe('INSERT INTO projects(id,workspace_id,slug,name)VALUES($1::uuid,$2::uuid,$3,$3)',p,ws,p);const c=await db.campaign.create({data:{workspaceId:ws,projectId:p,name:'Untouched',steps:[{stepNumber:1,delayHours:0,subject:'Subject',bodyTemplate:'Body'}]}}),service=new PrivateCampaignService(new PrismaDispatchDatabase(db)),old=(await service.get(ws,p,c.id))!;
+ const attaching=db.$transaction(async tx=>{await tx.$executeRawUnsafe('INSERT INTO campaign_recipients(id,workspace_id,campaign_id,email,custom_fields,updated_at)VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5::jsonb,now())',randomUUID(),ws,c.id,'race@example.invalid','{}');entered();await gate;});await ready;
+ let settled=false;const revision=service.revise(ws,p,c.id,{...old,name:'Must not replace attached copy',expectedRevision:old.revision}).finally(()=>settled=true);await new Promise(r=>setTimeout(r,80));expect(settled).toBe(false);release();await attaching;await expect(revision).rejects.toBeInstanceOf(PrivateCampaignConflict);expect((await db.campaign.findUniqueOrThrow({where:{id:c.id}})).name).toBe('Untouched');
+ }finally{release?.();await db.workspace.deleteMany({where:{id:ws}});await db.$disconnect();}
+},30000);

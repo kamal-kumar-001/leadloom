@@ -1,0 +1,10 @@
+import {afterEach,expect,test} from 'vitest';
+import {authConfig} from './auth.config';
+const old=process.env.LEADLOOM_PLATFORM_ADMIN_EMAIL;
+afterEach(()=>{if(old===undefined)delete process.env.LEADLOOM_PLATFORM_ADMIN_EMAIL;else process.env.LEADLOOM_PLATFORM_ADMIN_EMAIL=old;});
+const project=(token:Record<string,unknown>)=>(authConfig.callbacks.session as any)({session:{user:{email:'admin@example.invalid'}},token});
+const allowed=(user:any)=>(authConfig.callbacks.authorized as any)({auth:{user},request:{nextUrl:{pathname:'/admin'}}});
+test('shared middleware projection retains signed boolean proof for explicitly designated admin',()=>{process.env.LEADLOOM_PLATFORM_ADMIN_EMAIL='admin@example.invalid';expect(allowed(project({email_verified:true,idp:'google'}).user)).toBe(true);});
+test('missing false and string-shaped verification remain denied',()=>{process.env.LEADLOOM_PLATFORM_ADMIN_EMAIL='admin@example.invalid';for(const value of [undefined,false,'true','false',1])expect(allowed(project({email_verified:value}).user)).toBe(false);});
+test('verified identity still denied without explicit configuration or with another address',()=>{delete process.env.LEADLOOM_PLATFORM_ADMIN_EMAIL;expect(allowed(project({email_verified:true}).user)).toBe(false);process.env.LEADLOOM_PLATFORM_ADMIN_EMAIL='other@example.invalid';expect(allowed(project({email_verified:true}).user)).toBe(false);});
+test('middleware session projection never discloses engine credentials',()=>{const session=project({email_verified:true,engineToken:'synthetic-token-marker',engineExp:999});expect(JSON.stringify(session)).not.toContain('synthetic-token-marker');expect(session.user).not.toHaveProperty('engineExp');});

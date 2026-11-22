@@ -34,3 +34,14 @@ describe.runIf(RUN)('IMAP read-only sync against a local hoodiecrow fixture (gat
     } finally { imap.close?.(); }
   });
 });
+
+
+describe.runIf(RUN)('IMAP header fidelity (local fixture only)',()=>{
+ it('retains messages without Message-ID and retrieves folded References without mutating flags',async()=>{
+  const hc=createRequire(MOD!)('hoodiecrow-imap');const messages=[{raw:'Message-ID: <refs@example.test>\r\nFrom: lead@example.test\r\nTo: me@example.test\r\nReferences: <root@example.test>\r\n <target@example.test>\r\nSubject: references only\r\n\r\nHello\r\n',flags:[]},{raw:'From: lead@example.test\r\nTo: me@example.test\r\nSubject: no message id\r\n\r\nPlease stop\r\n',flags:[]}];const imap=hc({users:{u:{password:'p'}},storage:{INBOX:{messages}}});await new Promise<void>(r=>imap.listen(2152,'127.0.0.1',r));
+  try{const client=await createImapflowClient({host:'127.0.0.1',port:2152,user:'u',password:'p',authType:'password',plaintextForTestsOnly:true});const batch=await client.fetchBatch!(0);expect(batch.messages).toHaveLength(2);expect(batch.messages[0].references).toEqual(['<root@example.test> <target@example.test>']);expect(batch.messages[1]).toMatchObject({uid:2,messageId:'',fromEmail:'lead@example.test'});expect((await client.fetchSince(2))).toEqual([]);expect(messages.every(m=>!m.flags.includes('\\Seen'))).toBe(true);}finally{await new Promise<void>(r=>imap.close(r));}
+ });
+ it('refuses a message with no usable sender instead of silently skipping it and advancing past it',async()=>{
+  const hc=createRequire(MOD!)('hoodiecrow-imap');const imap=hc({users:{u:{password:'p'}},storage:{INBOX:{messages:[{raw:'Message-ID: <no-from@example.test>\r\nSubject: missing sender\r\n\r\nUnknown author\r\n',flags:[]},{raw:raw(2),flags:[]}]}}});await new Promise<void>(r=>imap.listen(2153,'127.0.0.1',r));try{const client=await createImapflowClient({host:'127.0.0.1',port:2153,user:'u',password:'p',authType:'password',plaintextForTestsOnly:true});await expect(client.fetchBatch!(0)).rejects.toThrow('usable sender');}finally{await new Promise<void>(r=>imap.close(r));}
+ });
+});

@@ -25,14 +25,14 @@ export class ScorecardService {
     sequenceSubject: string,
     sequenceBody: string
   ): ValidationScorecardResponse {
-    if (metrics.visitors < MIN_PAGE_LOADS_FOR_VERDICT || metrics.outreachSent < MIN_OUTREACH_FOR_VERDICT) {
+    if (metrics.pageConversionRate === null || metrics.visitors < MIN_PAGE_LOADS_FOR_VERDICT || metrics.outreachSent < MIN_OUTREACH_FOR_VERDICT) {
       return {
         experimentId,
         hypothesis,
         verdict: 'pending',
         verdictScore: 0,
         metrics,
-        actionableSummary: `Not enough data for a verdict yet: ${metrics.visitors}/${MIN_PAGE_LOADS_FOR_VERDICT} page loads and ${metrics.outreachSent}/${MIN_OUTREACH_FOR_VERDICT} outreach recorded. These thresholds are a product heuristic, not a statistical bar: page loads are raw (repeat and bot traffic included) and outreach numbers are team-entered.`,
+        actionableSummary: (metrics.pageConversionRate === null ? 'A comparable signup-to-load rate is unavailable. Keep the observed load and signup counts separate; signups do not create measured page loads. ' : '') + `Not enough data for a verdict yet: ${metrics.visitors}/${MIN_PAGE_LOADS_FOR_VERDICT} page loads and ${metrics.outreachSent}/${MIN_OUTREACH_FOR_VERDICT} outreach recorded. These thresholds are a product heuristic, not a statistical bar: page loads are raw (repeat and bot traffic included) and outreach numbers are team-entered.`,
         pageUrl,
         sequenceSubject,
         sequenceBody,

@@ -15,6 +15,9 @@ export class PrismaEntitlementStore implements PlanLookup, UsageLookup {
   }
 
   async used(workspaceId: string, limit: LimitKey): Promise<number> {
+    // Saved tables are inventory, not a consumption counter. Includes project/unassigned tables.
+    if(limit==='tables'){const rows:any[]=await this.prisma.$queryRawUnsafe('SELECT count(*)::bigint AS used FROM tables WHERE workspace_id=$1::uuid',workspaceId);return Number(rows[0]?.used??0);}
+
     const rows: Array<{ used: bigint | number }> = await this.prisma.$queryRawUnsafe(
       `SELECT used FROM usage_counters WHERE workspace_id = $1::uuid AND limit_key = $2 AND period = $3`,
       workspaceId, limit, periodFor(limit, this.clock()));

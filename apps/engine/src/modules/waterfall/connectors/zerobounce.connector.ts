@@ -101,7 +101,7 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
       const response = await safeFetch(fetchImpl, url, {
         method: 'GET',
         headers: { Accept: 'application/json' },
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -212,7 +212,7 @@ export class ZeroBounceConnector implements Connector<ZeroBounceInput, ZeroBounc
           message: redactSecrets(err instanceof Error ? err.message : 'Unknown ZeroBounce error', [
             ctx.apiKey,
           ]),
-          retryable: true,
+          retryable: false,
         },
       };
     }

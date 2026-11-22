@@ -21,8 +21,6 @@ export interface PasswordAccountStore {
   findByEmail(email: string): Promise<PasswordUser | null>;
   /** Atomic: workspace + admin user + audit row, unverified. Null when the email already exists. */
   createPasswordAccount(input: { email: string; name: string | null; workspaceName: string; passwordHash: string }): Promise<{ userId: string } | null>;
-  /** Unverified account only: replace its password (the mailbox owner proves the address next). Returns the user id, or null when none applies. */
-  replaceUnverifiedPassword(email: string, passwordHash: string): Promise<string | null>;
   /**
    * Atomically: unless a code of this purpose was created for the user within
    * `cooldownSeconds`, supersede any unused code and store this one. Returns
@@ -36,7 +34,8 @@ export interface PasswordAccountStore {
    * at `maxAttempts` the code is dead. A right guess consumes it. Atomic.
    */
   checkOtp(userId: string, purpose: OtpPurpose, candidateHash: string, maxAttempts: number): Promise<boolean>;
-  markVerified(userId: string): Promise<void>;
+  /** Atomically consume a signup code and install its holder-selected password, only while unverified and active. Includes the verification audit. */
+  completeSignup(userId: string, candidateHash: string, passwordHash: string, maxAttempts: number): Promise<boolean>;
   /** Sets the password, verifies the address (the code proved the mailbox) and bumps session_version. */
   setPassword(userId: string, passwordHash: string): Promise<void>;
   /** A provider has proven this email: verify an unverified password account and drop its password (pre-registration takeover guard). */
@@ -108,20 +107,17 @@ export class PasswordAccountService {
     if (!EMAIL.test(email) || email.length > 320) throw new Error('Invalid email');
     checkPassword(password, email);
     if (!this.mailReady()) throw new MailUnavailableError(); // never create an account nobody can verify
-    const passwordHash = await hashPassword(password);
     const existing = await this.store.findByEmail(email);
     if (existing) {
-      // Unverified: whoever proves the mailbox next owns it, so the latest password wins and a fresh code goes out.
-      // Verified: change nothing and send nothing.
-      if (!existing.verified && existing.active) {
-        const id = await this.store.replaceUnverifiedPassword(email, passwordHash);
-        if (id) await this.issue(id, email, 'signup');
-      }
+      // Anonymous repeat registration may send a code, never replace a credential.
+      // The code holder explicitly chooses the final password at verification.
+      if (!existing.verified && existing.active) await this.issue(existing.id, email, 'signup');
       return;
     }
     if (this.cfg.creationGate && !this.cfg.creationGate()) throw new SignupLimitedError();
     const name = (nameIn ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 255) || null;
     const workspaceName = (name ? `${name}'s workspace` : `${email.split('@')[0]}'s workspace`).slice(0, 255);
+    const passwordHash = await hashPassword(password);
     const made = await this.store.createPasswordAccount({ email, name, workspaceName, passwordHash });
     if (!made) return; // lost a race with another registration of the same email
     await this.issue(made.userId, email, 'signup');
@@ -145,10 +141,14 @@ export class PasswordAccountService {
     return u;
   }
 
-  async verifyEmail(emailIn: string, code: string): Promise<void> {
-    const u = await this.checkCode(normEmail(emailIn), 'signup', code);
-    await this.store.markVerified(u.id);
-    await this.store.audit('user.email_verified', u.id);
+  async verifyEmail(emailIn: string, code: string, password: string): Promise<void> {
+    const email = normEmail(emailIn);
+    checkPassword(password, email); // Invalid credentials must not spend the mailbox proof.
+    const c = typeof code === 'string' ? code.trim() : '';
+    const u = await this.store.findByEmail(email);
+    if (!u || !u.active || u.verified || !/^\d{6}$/.test(c)) throw new InvalidCodeError();
+    const passwordHash = await hashPassword(password);
+    if (!await this.store.completeSignup(u.id, this.codeHash(u.id, 'signup', c), passwordHash, MAX_OTP_ATTEMPTS)) throw new InvalidCodeError();
   }
 
   async forgotPassword(emailIn: string): Promise<void> {

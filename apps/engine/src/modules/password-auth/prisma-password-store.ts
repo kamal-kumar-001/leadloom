@@ -32,12 +32,6 @@ export class PrismaPasswordStore implements PasswordAccountStore {
     }
   }
 
-  async replaceUnverifiedPassword(email: string, passwordHash: string) {
-    const rows: Array<{ id: string }> = await this.prisma.$queryRawUnsafe(
-      `UPDATE users SET password_hash = $2 WHERE email = $1 AND email_verified_at IS NULL AND disabled_at IS NULL RETURNING id::text AS id`, email, passwordHash);
-    return rows[0]?.id ?? null;
-  }
-
   async putOtpUnlessRecent(i: { userId: string; purpose: 'signup' | 'reset'; codeHash: string; expiresAt: Date }, cooldownSeconds: number) {
     return this.prisma.$transaction(async (tx: any) => {
       // Serialize per account and purpose: concurrent resends queue here, so the cooldown check and the insert are one step.
@@ -55,31 +49,48 @@ export class PrismaPasswordStore implements PasswordAccountStore {
     await this.prisma.$executeRawUnsafe(`DELETE FROM email_otps WHERE user_id = $1::uuid AND purpose = $2 AND consumed_at IS NULL`, userId, purpose);
   }
 
-  async checkOtp(userId: string, purpose: 'signup' | 'reset', candidateHash: string, maxAttempts: number) {
-    return this.prisma.$transaction(async (tx: any) => {
-      const rows: Array<{ id: string; code_hash: string; attempts: number }> = await tx.$queryRawUnsafe(
-        `SELECT id::text AS id, code_hash, attempts FROM email_otps
-          WHERE user_id = $1::uuid AND purpose = $2 AND consumed_at IS NULL AND expires_at > now()
-          ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, userId, purpose);
-      const o = rows[0];
-      if (!o || o.attempts >= maxAttempts) return false;
-      const a = Buffer.from(o.code_hash), b = Buffer.from(candidateHash);
-      if (a.length === b.length && timingSafeEqual(a, b)) {
-        await tx.$executeRawUnsafe(`UPDATE email_otps SET consumed_at = now() WHERE id = $1::uuid`, o.id);
-        return true;
-      }
-      await tx.$executeRawUnsafe(`UPDATE email_otps SET attempts = attempts + 1 WHERE id = $1::uuid`, o.id);
-      return false;
-    });
+  private async consumeOtp(tx: any, userId: string, purpose: 'signup' | 'reset', candidateHash: string, maxAttempts: number): Promise<boolean> {
+    const rows: Array<{ id: string; code_hash: string; attempts: number }> = await tx.$queryRawUnsafe(
+      `SELECT id::text AS id, code_hash, attempts FROM email_otps
+        WHERE user_id = $1::uuid AND purpose = $2 AND consumed_at IS NULL AND expires_at > now()
+        ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, userId, purpose);
+    const o = rows[0];
+    if (!o || o.attempts >= maxAttempts) return false;
+    const a = Buffer.from(o.code_hash), b = Buffer.from(candidateHash);
+    if (a.length === b.length && timingSafeEqual(a, b)) {
+      await tx.$executeRawUnsafe(`UPDATE email_otps SET consumed_at = now() WHERE id = $1::uuid`, o.id);
+      return true;
+    }
+    await tx.$executeRawUnsafe(`UPDATE email_otps SET attempts = attempts + 1 WHERE id = $1::uuid`, o.id);
+    return false;
   }
 
-  async markVerified(userId: string) {
-    await this.prisma.$executeRawUnsafe(`UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1::uuid`, userId);
+  async checkOtp(userId: string, purpose: 'signup' | 'reset', candidateHash: string, maxAttempts: number) {
+    return this.prisma.$transaction((tx: any) => this.consumeOtp(tx, userId, purpose, candidateHash, maxAttempts));
+  }
+
+  async completeSignup(userId: string, candidateHash: string, passwordHash: string, maxAttempts: number): Promise<boolean> {
+    return this.prisma.$transaction(async (tx: any) => {
+      // Serialize competing completions and provider claims before touching the code.
+      // A signup code must never become a password reset after another flow verifies the identity.
+      const users = await tx.$queryRawUnsafe(
+        `SELECT u.id FROM users u JOIN workspaces w ON w.id=u.workspace_id
+          WHERE u.id=$1::uuid AND u.email_verified_at IS NULL AND u.disabled_at IS NULL AND w.is_active
+          FOR UPDATE OF u`, userId);
+      if (!users.length || !await this.consumeOtp(tx, userId, 'signup', candidateHash, maxAttempts)) return false;
+      await tx.$executeRawUnsafe(
+        `UPDATE users SET password_hash=$2, email_verified_at=clock_timestamp(), session_version=session_version+1,
+          credentials_revoked_at=clock_timestamp(), updated_at=clock_timestamp() WHERE id=$1::uuid`, userId, passwordHash);
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_log (workspace_id, actor_user_id, action, target)
+          SELECT workspace_id, id, 'user.email_verified', id::text FROM users WHERE id=$1::uuid`, userId);
+      return true;
+    });
   }
 
   // A reset link proves control of the mailbox, so it also verifies the address.
   async setPassword(userId: string, passwordHash: string) {
-    await this.prisma.$executeRawUnsafe(`UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()), session_version = session_version + 1 WHERE id = $1::uuid`, userId, passwordHash);
+    await this.prisma.$executeRawUnsafe(`UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()), session_version = session_version + 1, credentials_revoked_at = clock_timestamp() WHERE id = $1::uuid`, userId, passwordHash);
   }
 
   async claimByProvider(email: string) {

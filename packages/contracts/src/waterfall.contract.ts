@@ -88,8 +88,8 @@ export type WaterfallJobUncertainRowsResponse = z.infer<typeof WaterfallJobUncer
 
 export const PreFlightEstimateRequestSchema = z.object({
   columnId: z.string().uuid(),
-  rowIds: z.array(z.string().uuid()),
-});
+  rowIds: z.array(z.string().uuid()).min(1).max(1000),
+}).strict();
 export type PreFlightEstimateRequest = z.infer<typeof PreFlightEstimateRequestSchema>;
 
 export const PreFlightEstimateResponseSchema = z.object({
@@ -107,19 +107,20 @@ export const PreFlightEstimateResponseSchema = z.object({
     unitCostUSD: z.number().nonnegative(),
     estimatedHitRate: z.number().min(0).max(1),
   })),
+  guaranteeNotice: z.string().min(1),
 });
 export type PreFlightEstimateResponse = z.infer<typeof PreFlightEstimateResponseSchema>;
 
 export const DispatchWaterfallRequestSchema = z.object({
   columnId: z.string().uuid(),
-  rowIds: z.array(z.string().uuid()),
+  rowIds: z.array(z.string().uuid()).min(1).max(1000),
   priority: z.enum(['standard', 'high']).default('standard'),
-});
+}).strict();
 export type DispatchWaterfallRequest = z.infer<typeof DispatchWaterfallRequestSchema>;
 
 export const DispatchWaterfallResponseSchema = z.object({
   jobId: z.string(),
   totalQueued: z.number().int().nonnegative(),
-  estimatedCompletionAt: z.string().datetime(),
+  estimatedCompletionAt: z.string().datetime().optional(),
 });
 export type DispatchWaterfallResponse = z.infer<typeof DispatchWaterfallResponseSchema>;

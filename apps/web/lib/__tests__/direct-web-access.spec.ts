@@ -1,0 +1,17 @@
+import {it,expect,vi,beforeEach} from 'vitest';
+const f=vi.hoisted(()=>({access:vi.fn(),runs:vi.fn(),store:vi.fn(),rate:vi.fn(),acquire:vi.fn(),search:vi.fn()}));
+vi.mock('../current-web-access',()=>({currentWebAccess:f.access}));
+vi.mock('../runs-view-model',()=>({buildRunsView:f.runs}));
+vi.mock('../signals-drafts-store',()=>({getDraftStoreForUser:f.store}));
+vi.mock('../signals-rate-limit',()=>({checkRateLimit:f.rate,acquireInFlight:f.acquire,releaseInFlight:vi.fn()}));
+vi.mock('@leadloom/engine/src/modules/signals-ingest',()=>({PRODUCT_PROFILES:[],HnAlgoliaAdapter:class{search=f.search},SignalsIngestService:class{}}));
+import {GET as runs} from '../../app/api/runs/route';
+import {GET as drafts,POST as createDraft} from '../../app/api/signals/drafts/route';
+import {GET as live} from '../../app/api/signals/live-hn/route';
+import {POST as decide} from '../../app/api/signals/drafts/[id]/decision/route';
+const req=(post=false)=>new Request('https://fixture.invalid/api/test',{method:post?'POST':'GET',headers:{host:'fixture.invalid',origin:'https://fixture.invalid','content-type':'application/json'},body:post?'{}':undefined});
+const handlers=[()=>runs(req()),()=>drafts(req()),()=>live(req()),()=>createDraft(req(true)),()=>decide(req(true),{params:Promise.resolve({id:'synthetic-draft'})})];
+beforeEach(()=>{vi.clearAllMocks();f.rate.mockReturnValue({allowed:true});f.acquire.mockReturnValue(true);f.store.mockReturnValue({list:()=>[{id:'private-synthetic-draft'}]});f.runs.mockReturnValue({rows:[{id:'private-synthetic-run'}]});});
+it.each([401,403,503])('every direct route rejects %s before local data, limits or live fetch',async status=>{f.access.mockResolvedValue({ok:false,status,error:'Access unavailable'});for(const call of handlers){const response=await call();expect(response.status).toBe(status);expect(response.headers.get('cache-control')).toBe('no-store');expect(JSON.stringify(await response.json())).not.toContain('private-synthetic');}for(const call of [f.runs,f.store,f.rate,f.acquire,f.search])expect(call).not.toHaveBeenCalled();});
+it('active account reads remain available and validation precedes live fetch or draft actions',async()=>{f.access.mockResolvedValue({ok:true,email:'active@example.invalid',userId:'x',workspaceId:'y',role:'read_only'});expect((await runs(req())).status).toBe(200);expect((await drafts(req())).status).toBe(200);expect(f.runs).toHaveBeenCalledWith('active@example.invalid');expect(f.store).toHaveBeenCalledWith('active@example.invalid');expect((await live(req())).status).toBe(400);expect((await createDraft(req(true))).status).toBe(400);expect((await decide(req(true),{params:Promise.resolve({id:'synthetic'})})).status).toBe(400);expect(f.search).not.toHaveBeenCalled();});
+it('cross-origin and malformed-origin mutations are refused before account or state work',async()=>{for(const origin of ['https://foreign.invalid','malformed']){const request=new Request('https://fixture.invalid/api/test',{method:'POST',headers:{host:'fixture.invalid',origin},body:'{}'});expect((await createDraft(request.clone())).status).toBe(403);expect((await decide(request.clone(),{params:Promise.resolve({id:'synthetic'})})).status).toBe(403);}expect(f.access).not.toHaveBeenCalled();expect(f.store).not.toHaveBeenCalled();});

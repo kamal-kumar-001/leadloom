@@ -82,6 +82,7 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
       };
     }
 
+    if(!ctx.fetch)return{success:false,error:{code:'NOT_READY',message:'Live asynchronous Dropcontact submission requires durable request/result reconciliation; no request submitted',retryable:false}};
     const baseCheck = validateAndResolveBaseUrl(DEFAULT_BASE_URL, ctx.baseUrl);
     if (baseCheck.error) {
       return { success: false, error: baseCheck.error };
@@ -117,7 +118,7 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
           siren: true,
           language: 'en',
         }),
-      });
+      },ctx.timeoutMs);
 
       const redirectSubmitErr = checkRedirectResponse(submitResponse);
       if (redirectSubmitErr) {
@@ -188,7 +189,7 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
         headers: {
           'X-Access-Token': ctx.apiKey,
         },
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -276,7 +277,7 @@ export class DropcontactConnector implements Connector<DropcontactInput, Dropcon
           message: redactSecrets(err instanceof Error ? err.message : 'Unknown Dropcontact network error', [
             ctx.apiKey,
           ]),
-          retryable: true,
+          retryable: false,
         },
       };
     }

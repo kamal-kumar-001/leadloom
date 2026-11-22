@@ -791,3 +791,86 @@
 
 ### [2026-11-12T21:22:00Z] Team A | validation sweep 233c5c9 deployed live (ops) | Non-Breaking
 - Web-only deploy by Antigravity under the existing lane: git pull --ff-only to 233c5c9, docker compose --profile application build web + up -d --no-deps web. Verbatim host report: HEAD 233c5c9678cabd300100fe6afa61ad1dbf2a652f, new web image sha256:31b57d25..., ETag jedaemlqqe181z -> 4bmvmc053v181z, leadloom-web-1 recreated (Up seconds), leadloom-api-1 NOT recreated (Up 38h, b94f59d68a80), redis/postgres Up 2 days, /signup 200, no .env/secret changes, no sends. Independently verified by Integrator: live /signup + /login serve noValidate forms with all new fields, live build id changed (48Xi9um6Lg_6tjHrIhcin -> hb82H4H1OcJOartqvP19o), and the live v/[slug] chunk contains the new survey guard string "Please answer every question before submitting" with zero native required - proof the live bundle includes 233c5c9. Register probe still returns the engine-level 503 mail response pending Kamal's own-address OTP test. Docs-only commit; no redeploy needed.
+
+---
+
+### [2026-11-20T20:10:00Z] Team Gamma | contracts/agent-token.contract.ts | Non-Breaking
+- Added Agent API Token schemas (`IssueAgentTokenRequestSchema`, `AgentTokenResponseSchema`, `AgentTokenListItemSchema`).
+- Enables external coding agents (Slice A) to authenticate with scoped, revocable `lld_agt_...` Bearer tokens.
+
+---
+
+### [2026-11-20T21:05:00Z] Team Gamma | contracts/project-context.contract.ts | Non-Breaking
+- Added project-scoped agent context schemas (`PersistContextRequestSchema`, `ProjectContextResponseSchema`, `ProjectIdSchema`).
+- Extended agent token schemas with server-side `projectId` binding for Slice B bounded project isolation.
+
+---
+
+### [2026-11-20T22:45:00Z] Team Alpha | apps/web customer setup UI (/app/projects) | Non-Breaking
+- Shipped customer setup UI at `/app/projects` for project-bound agent credentials:
+  - `ProjectSelectorCard`: Multi-project dropdown, create project dialog with UUID-shaped slug rejection, canonical UUID display.
+  - `AgentTokensCard`: Issue project-scoped tokens, display token prefix metadata, revoke token with status badges.
+  - `TokenRevealCard`: One-time token reveal banner in React memory only; raw secret is never stored in `localStorage` or `sessionStorage`, and is wiped immediately on dismiss, project navigation, revocation, or unmount.
+  - `AgentSetupInstructions`: Shell and `.env.local` snippet generation with copy buttons and curl context verification commands.
+- Verified in real browser acceptance runner (`apps/web/scripts/e2e-real-browser-pglite.ts`) against Fastify engine and in-memory PGlite with 3 Prisma migrations. Redacted all authorization credentials and raw tokens from logs.
+
+---
+
+### [2026-11-20T23:35:00Z] Team Alpha & Beta | skills/* & docs/plan/SKILLS_SURFACE.md | Non-Breaking
+- Completed Slice D (Agent Skills Integration):
+  - Updated `docs/plan/SKILLS_SURFACE.md` and 6 core skill instruction packs (`skills/*/SKILL.md`): `idea-feasibility`, `competitor-review-mining`, `landing-publish`, `lead-capture`, `outreach-recording`, `scheduled-posting`.
+  - Replaced outdated blocking authentication notices with verified integration protocol using `LEADLOOM_AGENT_TOKEN` and `LEADLOOM_PROJECT_ID`.
+  - Integrated canonical Step 1 State Restoration (`GET /agent/context`) and Final Step State Persistence (`POST /agent/context`) across all skill execution protocols, treating the customer coding agent as the brain and Leadloom as the persistent PostgreSQL project memory substrate.
+
+---
+
+### [2026-11-21T01:00:00Z] Team Alpha & Beta | apps/web bundle & CLI operational smoke | Non-Breaking
+- Shipped customer coding agent setup bundle (`/api/projects/[projectId]/bundle`) packaging 6 skills, README.md, `.env.local`, and dependency-free `cli.mjs`:
+  - Inspected reverse proxy and docker configuration: marketing origin `https://leadloom.dmpilot.org` is strictly web frontend and not a direct bearer route.
+  - Added dependency-free `cli.mjs` supporting `context get`, `context set`, and `validator` workflows, validating non-sentinel `LEADLOOM_API_URL`.
+  - Verified operational smoke test (`cli-operational-smoke.spec.ts`) executing real `context set` and `context get` via `cli.mjs` child process against listening ephemeral Fastify engine with zero event-loop deadlocks.
+
+---
+
+### [2026-11-21T01:25:00Z] Team Alpha | apps/web/app/api/agent gateway & bundle routing | Non-Breaking
+- Shipped customer-accessible Bearer ingress gateway at `/api/agent/[...path]`:
+  - Enforced strict method + path allowlist: `/context`, `/validator/experiments`, `/validator/experiments/:id/(publish|unpublish|outreach|scorecard|page)`, and `/research/*`.
+  - Security invariants: forwards caller `Authorization: Bearer <token>` directly to internal engine with zero session/bridge minting; rejects traversal (400), unauthenticated requests (401), unallowlisted routes (404), and oversized payloads > 256KB (413); emits `Cache-Control: no-store, max-age=0`.
+  - Updated skills bundle and CLI template to target `https://leadloom.dmpilot.org/api/agent` by default (overridable via `LEADLOOM_PUBLIC_API_URL`).
+  - Verified with comprehensive spec (`agent-gateway.spec.ts`): all 6 contract, boundary, and real ephemeral engine smoke tests pass cleanly.
+
+---
+
+### [2026-11-21T01:55:00Z] Team Alpha & Beta | Core GTM Journey & Captured Leads Ingress | Non-Breaking
+- Repaired broken bridge between lead capture and outreach in the core GTM loop (`idea -> research -> validation -> lead capture -> outreach/growth`):
+  - Added `WaitlistLeadSchema` and `ValidationLeadsResponseSchema` in `packages/contracts/src/validation.contract.ts`.
+  - Added `getLeads(experimentId, workspaceId)` in `ValidatorService` supporting both Prisma DB and in-memory fallback with strict tenant isolation and restart survival.
+  - Mounted `GET /validator/experiments/:id/leads` on Fastify engine with `experiments:read` authorization fence.
+  - Allowlisted `GET /validator/experiments/:id/leads` on public customer agent gateway (`/api/agent`).
+  - Added `fetchExperimentLeads(experimentId)` and typing to web engine client.
+  - Added comprehensive operational smoke test (`core-journey-smoke.spec.ts`) validating end-to-end flow: website signals research -> idea decomposition & smoke page publish -> public lead capture -> lead query -> outreach feedback -> scorecard verdict calculation.
+
+---
+
+### [2026-11-21T02:40:00Z] Team Alpha, Beta & Gamma | Read-Only Schema Preflight & Setup Health Contract | Non-Breaking
+- Aligned `REQUIRED_SCHEMA_SPECS` in `packages/database/src/schema-preflight.ts` with exact columns and types from current migrations and runtime service SQL:
+  - Added `icp_spec`, `sequence_subject`, `sequence_body`, `verdict_score`, and `actionable_summary` to `validation_experiments`.
+  - Added `custom_domain` to `smoke_test_pages`.
+  - Derived exact 100% parity across `projects`, `agent_tokens`, `project_contexts`, `validation_experiments`, `smoke_test_pages`, and `waitlist_leads`.
+  - Preserved non-assertion rule: baseline migration sequence is strictly marked CANDIDATE ONLY, zero auto-apply or live DB mutation.
+- Added Setup Health contracts in `packages/contracts/src/project.contract.ts`:
+  - `SetupHealthResponseSchema`, `SetupHealthDatabaseSchema`, `SetupHealthConfigSchema`, and `SetupHealthProvidersSchema`.
+  - Guarantees zero secret exposure, read-only diagnostic telemetry, masked URLs, and actionable status badges.
+
+---
+
+### [2026-11-21T02:50:00Z] Team Alpha & Beta | Captured Leads Import & Health Endpoint Hardening | Non-Breaking
+- Hardened Health endpoint (`/setup-health`):
+  - Strictly human-admin-only: denies agent tokens and non-admin workspace roles (`member`, `read_only`) with 403.
+  - Stripped database URL, host, user, and name completely from browser-accessible responses.
+  - Labeled database verification explicitly as `column-presence-only` to prevent false READY assumptions.
+- Implemented manual captured leads import pipeline (`packages/contracts/src/validation.contract.ts`):
+  - Added `ImportCapturedLeadsRequestSchema` and `ImportCapturedLeadsResponseSchema`.
+  - Enables founders to manually import captured validation waitlist leads directly into an existing campaign draft or table.
+  - Enforced preview + explicit confirmation invariant: zero automatic sends or dispatches.
+

@@ -130,6 +130,16 @@ export async function buildReadOptions(config: MailboxClientConfig, hooks: ImapS
   };
 }
 
+/** Unfold only the requested References header. Oversized input is refused, not silently shortened into different evidence. */
+export function readReferenceHeaders(headers: Buffer | undefined): string[] | undefined {
+  if(!headers)return undefined;
+  if(headers.byteLength>16384)throw new Error('IMAP References header exceeds supported size');
+  const unfolded=headers.toString('utf8').replace(/\r?\n[ \t]+/g,' ');
+  const values=Array.from(unfolded.matchAll(/^references:[ \t]*([^\r\n]*)/gim),m=>m[1].trim()).filter(Boolean);
+  if(values.length>32)throw new Error('Too many IMAP References headers');
+  return values.length?values:undefined;
+}
+
 /**
  * Real IMAP client via imapflow. Call only inside the authorized worker.
  * Read-only by construction: the mailbox is opened with EXAMINE (readOnly), so messages are
@@ -157,17 +167,20 @@ export async function createImapflowClient(config: MailboxClientConfig, limits: 
           const found = (await client.search({ uid: `${Math.max(0, sinceUid) + 1}:*` }, { uid: true })) || [];
           const uids = found.filter((u: number) => u > sinceUid).sort((a: number, b: number) => a - b).slice(0, maxBatch);
           if (uids.length === 0) return { uidValidity, messages: out };
-          for await (const msg of client.fetch(uids.join(','), { uid: true, envelope: true, bodyParts: ['text'] }, { uid: true })) {
+          for await (const msg of client.fetch(uids.join(','), { uid: true, envelope: true, headers: ['references'], bodyParts: ['text'] }, { uid: true })) {
             const envelope = msg.envelope;
             if (!msg.uid || msg.uid <= sinceUid) continue; // '*' always yields the newest message
-            if (!envelope?.messageId || !envelope.from?.[0]?.address) continue;
+            // No author can be invented, and silently skipping would let a later
+            // UID checkpoint hide this message forever. Refuse the batch instead.
+            if (!envelope?.from?.[0]?.address) throw new Error('IMAP message has no usable sender; checkpoint not advanced');
             out.push({
               uid: msg.uid,
-              messageId: envelope.messageId,
+              messageId: envelope.messageId || '',
               fromEmail: envelope.from[0].address,
               subject: (envelope.subject ?? '').slice(0, 998),
               bodyText: (msg.bodyParts?.get('text')?.toString('utf8') ?? '').slice(0, maxBodyChars),
               inReplyTo: envelope.inReplyTo || undefined,
+              references: readReferenceHeaders(msg.headers),
               receivedAt: envelope.date ? new Date(envelope.date) : new Date(),
             });
           }

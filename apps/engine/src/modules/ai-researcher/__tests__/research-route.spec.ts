@@ -5,29 +5,7 @@ import { WebsiteSignalService, deriveIcpHints, deriveRelevanceReasons } from '..
 import { SafeWebsiteFetcher } from '../website-fetcher';
 import { ResearchLeadsService } from '../research-leads.service';
 
-function fakeLeadsDb() {
-  const tables: any[] = []; const columns: any[] = []; const rows: any[] = []; const cells: any[] = [];
-  return {
-    table: {
-      findFirst: async ({ where }: any) => tables.find((t) => t.workspaceId === where.workspaceId && t.name === where.name) ?? null,
-      create: async ({ data }: any) => { const t = { id: randomUUID(), rowCount: 0, ...data }; tables.push(t); return t; },
-      update: async ({ where, data }: any) => { const t = tables.find((x) => x.id === where.id); if (data.rowCount?.increment) t.rowCount += data.rowCount.increment; return t; },
-    },
-    column: {
-      create: async ({ data }: any) => { const c = { id: randomUUID(), ...data }; columns.push(c); return c; },
-      findMany: async ({ where }: any) => columns.filter((c) => c.tableId === where.tableId),
-    },
-    row: {
-      count: async ({ where }: any) => rows.filter((r) => r.tableId === where.tableId).length,
-      create: async ({ data }: any) => { const r = { id: randomUUID(), ...data }; rows.push(r); return r; },
-      findMany: async ({ where, take }: any) => rows.filter((r) => r.tableId === where.tableId).slice(0, take ?? 50),
-    },
-    cell: {
-      create: async ({ data }: any) => { const c = { id: randomUUID(), ...data }; cells.push(c); return c; },
-      findMany: async ({ where }: any) => cells.filter((c) => c.tableId === where.tableId && where.rowId.in.includes(c.rowId)),
-    },
-  };
-}
+import {fakeResearchDb as fakeLeadsDb} from './research-db.fixture';
 
 const key = randomBytes(32);
 const workspaceId = randomUUID();

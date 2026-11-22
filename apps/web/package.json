@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
-    "smoke:production": "node scripts/smoke-production.mjs"
+    "smoke:production": "node scripts/smoke-production.mjs",
+    "prebuild": "node ../../scripts/ops/build-identity.mjs --prepare"
   },
   "dependencies": {
     "@leadloom/contracts": "*",

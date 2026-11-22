@@ -1,6 +1,6 @@
-# Default profile starts PostgreSQL + Redis only. Application services remain
-# behind `application` until Alpha/Beta provide runnable entrypoints/Dockerfiles.
-# See docker/README.md. This is preparation, not a production-ready deployment.
+# Default profile starts PostgreSQL + Redis only. Runnable application services
+# remain opt-in behind `application`. See docker/README.md and scripts/ops/RELEASE.md.
+# Configuration and health probes alone are not proof of production readiness.
 x-common: &common
   restart: unless-stopped
   init: true
@@ -63,8 +63,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Intentionally opt-in: apps/engine currently exports libraries, not an API
-  # server. Do not supply a fake entrypoint that starts then exits successfully.
+  # Real API runtime, intentionally opt-in. Feature/provider/send flags remain separate.
   api:
     <<: *common
     profiles: [application]
@@ -83,12 +82,34 @@ services:
       PORT: 4000
       HOST: 0.0.0.0
       LEADLOOM_SESSION_KEY: ${LEADLOOM_SESSION_KEY:-}
+      # Explicit operator identity only. Empty stays fail-closed, never infer an admin.
+      LEADLOOM_PLATFORM_ADMIN_EMAIL: ${LEADLOOM_PLATFORM_ADMIN_EMAIL:-}
       APP_BASE_URL: ${APP_BASE_URL:-https://leadloom.dmpilot.org}
       # Web sign-in bridge (Google/GitHub). Both must be set or the bridge stays off.
       LEADLOOM_NEXTAUTH_BRIDGE_ENABLED: ${LEADLOOM_NEXTAUTH_BRIDGE_ENABLED:-false}
       LEADLOOM_NEXTAUTH_BRIDGE_SECRET: ${LEADLOOM_NEXTAUTH_BRIDGE_SECRET:-}
       LEADLOOM_SELF_SIGNUP_ENABLED: ${LEADLOOM_SELF_SIGNUP_ENABLED:-false}
       LEADLOOM_SIGNUP_HOURLY_CAP: ${LEADLOOM_SIGNUP_HOURLY_CAP:-20}
+      LEADLOOM_PUBLIC_API_URL: ${LEADLOOM_PUBLIC_API_URL:-}
+      # Private product APIs. Passing a flag through never enables it by default.
+      LEADLOOM_RESEARCH_API_ENABLED: ${LEADLOOM_RESEARCH_API_ENABLED:-false}
+      LEADLOOM_PUBLIC_HN_AGENT_ENABLED: ${LEADLOOM_PUBLIC_HN_AGENT_ENABLED:-false}
+      LEADLOOM_VALIDATOR_API_ENABLED: ${LEADLOOM_VALIDATOR_API_ENABLED:-false}
+      LEADLOOM_DNS_DIAGNOSTICS_ENABLED: ${LEADLOOM_DNS_DIAGNOSTICS_ENABLED:-false}
+      LEADLOOM_ENTITLEMENTS_ENFORCED: ${LEADLOOM_ENTITLEMENTS_ENFORCED:-false}
+      LEADLOOM_TEAM_INVITES_ENABLED: ${LEADLOOM_TEAM_INVITES_ENABLED:-false}
+      LEADLOOM_MAILBOX_CONNECT_ENABLED: ${LEADLOOM_MAILBOX_CONNECT_ENABLED:-false}
+      LEADLOOM_WATERFALL_API_ENABLED: ${LEADLOOM_WATERFALL_API_ENABLED:-false}
+      # External effects have separate opt-ins and require their own approval.
+      # Provider access is not a budget grant, and worker mount is not send approval.
+      LEADLOOM_RESEARCH_FETCH_ENABLED: ${LEADLOOM_RESEARCH_FETCH_ENABLED:-false}
+      LEADLOOM_CONNECTORS_LIVE_ENABLED: ${LEADLOOM_CONNECTORS_LIVE_ENABLED:-false}
+      LEADLOOM_WORKER_ENABLED: ${LEADLOOM_WORKER_ENABLED:-false}
+      LEADLOOM_OUTBOUND_SENDING_ENABLED: ${LEADLOOM_OUTBOUND_SENDING_ENABLED:-false}
+      LEADLOOM_WORKER_INTERVAL_MS: ${LEADLOOM_WORKER_INTERVAL_MS:-60000}
+      LEADLOOM_UNSUBSCRIBE_KEY: ${LEADLOOM_UNSUBSCRIBE_KEY:-}
+      # Private stored-counter observations only. Never enables providers, notifications or sends.
+      LEADLOOM_GROWTH_WATCHES_ENABLED: ${LEADLOOM_GROWTH_WATCHES_ENABLED:-false}
       # Email + password with emailed one-time codes. Needs the transactional mail settings below.
       LEADLOOM_PASSWORD_AUTH_ENABLED: ${LEADLOOM_PASSWORD_AUTH_ENABLED:-false}
       LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED: ${LEADLOOM_TRANSACTIONAL_EMAIL_ENABLED:-false}
@@ -119,8 +140,11 @@ services:
       # Server-side only: the browser reaches the engine through the web app's own /api/engine proxy.
       ENGINE_URL: http://api:4000
       AUTH_URL: ${APP_BASE_URL:-https://leadloom.dmpilot.org}
+      LEADLOOM_PUBLIC_API_URL: ${LEADLOOM_PUBLIC_API_URL:-}
       AUTH_TRUST_HOST: 'true'
       AUTH_SECRET: ${AUTH_SECRET:-}
+      # Must resolve to the same explicit identity as the API; empty denies platform admin.
+      LEADLOOM_PLATFORM_ADMIN_EMAIL: ${LEADLOOM_PLATFORM_ADMIN_EMAIL:-}
       LEADLOOM_NEXTAUTH_BRIDGE_SECRET: ${LEADLOOM_NEXTAUTH_BRIDGE_SECRET:-}
       AUTH_GITHUB_ID: ${AUTH_GITHUB_ID:-}
       AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET:-}

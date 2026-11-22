@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button, Badge } from '@leadloom/ui';
 import {
   Plug,
@@ -18,6 +18,7 @@ import { ByokVaultModal } from '../../../components/connectors/byok-vault-modal'
 import { fetchVaultCredentials, fetchWaterfallConnectors } from '../../../lib/engine-client';
 import { MaskedBYOKCredential, BYOKProvider } from '@leadloom/contracts';
 import { notify } from '@/lib/notify';
+import { currentProviderKeyRecords } from '../../../lib/provider-key-records';
 
 // Display-only metadata per engine registry connector id. No costs or hit rates:
 // those were invented and are gone for good; real pricing lives with the provider.
@@ -38,7 +39,7 @@ const DISPLAY: Record<string, { category: ConnectorMeta['category']; description
 const VAULT_PROVIDERS = new Set(['apollo', 'hunter', 'anymail_finder', 'dropcontact', 'prospeo', 'openai', 'anthropic', 'deepseek', 'groq', 'perplexity', 'pdl', 'zerobounce', 'neverbounce', 'serper', 'ollama']);
 
 export default function ConnectorsPage() {
-  const [credentials, setCredentials] = useState<Record<string, MaskedBYOKCredential>>({});
+  const [credentials, setCredentials] = useState<Record<string, MaskedBYOKCredential> | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeModalConnector, setActiveModalConnector] = useState<ConnectorMeta | null>(null);
@@ -47,52 +48,59 @@ export default function ConnectorsPage() {
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    async function load() {
-      try {
-        const [registryRes, credsRes] = await Promise.all([fetchWaterfallConnectors(), fetchVaultCredentials()]);
-        if (!mounted) return;
-        if (registryRes.error || !registryRes.data) {
-          setLoadError(registryRes.error || 'Connector registry unavailable');
-        } else {
-          const metas: ConnectorMeta[] = registryRes.data.connectors.map((row) => {
-            const d = DISPLAY[row.id] ?? { category: 'Enrichment' as const, description: '', icon: '\ud83d\udd0c', docsUrl: '' };
-            return {
-              id: row.id,
-              name: row.name,
-              category: d.category,
-              description: d.description,
-              icon: d.icon,
-              docsUrl: d.docsUrl,
-              isLocal: d.isLocal,
-              testable: row.testable === true,
-              keyStorageAvailable: VAULT_PROVIDERS.has(row.id),
-            };
-          });
-          setConnectors(metas);
-        }
-        const mapped: Record<string, MaskedBYOKCredential> = {};
-        for (const c of credsRes.credentials ?? []) mapped[c.provider] = c;
-        setCredentials(mapped);
-      } catch {
-        if (mounted) setLoadError('Connector registry unavailable');
-      } finally {
-        if (mounted) setIsLoading(false);
+  const [vaultError, setVaultError] = useState<string | null>(null);
+  const generation = useRef(0);
+  const mounted = useRef(true);
+  const load = useCallback(async () => {
+    if (!mounted.current) return;
+    const request = ++generation.current;
+    setIsLoading(true);
+    setCredentials(null);
+    setLoadError(null);
+    setVaultError(null);
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const [registryRes, credsRes] = await Promise.race([
+        Promise.all([fetchWaterfallConnectors(), fetchVaultCredentials()]),
+        new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error('Metadata read timed out')), 15000); }),
+      ]);
+      if (!mounted.current || request !== generation.current) return;
+      if (registryRes.error || !registryRes.data || !Array.isArray(registryRes.data.connectors)) {
+        setConnectors([]);
+        setLoadError('Connector registry unavailable');
+      } else {
+        const metas: ConnectorMeta[] = registryRes.data.connectors.map((row) => {
+          const d = DISPLAY[row.id] ?? { category: 'Enrichment' as const, description: '', icon: '\ud83d\udd0c', docsUrl: '' };
+          return { id: row.id, name: row.name, category: d.category, description: d.description,
+            icon: d.icon, docsUrl: d.docsUrl, isLocal: d.isLocal,
+            testable: row.testable === true, keyStorageAvailable: VAULT_PROVIDERS.has(row.id) };
+        });
+        setConnectors(metas);
       }
+      const mapped = !credsRes.error && !credsRes.isMock ? currentProviderKeyRecords(credsRes.credentials) : null;
+      setCredentials(mapped);
+      if (mapped === null) setVaultError('Saved key metadata unavailable. Reload before changing keys.');
+    } catch {
+      if (mounted.current && request === generation.current) {
+        setConnectors([]);
+        setCredentials(null);
+        setLoadError('Connector registry unavailable');
+        setVaultError('Saved key metadata unavailable. Reload before changing keys.');
+      }
+    } finally {
+      clearTimeout(deadline);
+      if (mounted.current && request === generation.current) setIsLoading(false);
     }
-    load();
-    return () => {
-      mounted = false;
-    };
   }, []);
 
-  const handleCredentialSaved = (cred: MaskedBYOKCredential) => {
-    setCredentials((prev) => ({
-      ...prev,
-      [cred.provider]: cred,
-    }));
-  };
+  useEffect(() => {
+    mounted.current = true;
+    void load();
+    return () => { mounted.current = false; generation.current++; };
+  }, [load]);
+
+  // A successful save is a stored row, not proof that it is the selected key.
+  const handleCredentialSaved = (_cred: MaskedBYOKCredential) => { void load(); };
 
   const categories = ['All', 'Enrichment', 'Verification', 'AI Intelligence', 'Search Signals', 'Local AI'];
 
@@ -104,7 +112,7 @@ export default function ConnectorsPage() {
     return matchesCategory && matchesSearch;
   });
 
-  const connectedCount = Object.keys(credentials).length;
+  const connectedCount = credentials === null ? null : Object.keys(credentials).length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 font-sans">
@@ -124,9 +132,9 @@ export default function ConnectorsPage() {
         <div className="flex items-center gap-3">
           <div className="bg-canvas-surface border border-border-subtle rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs">
             <span className="w-2 h-2 rounded-full bg-signal-verified animate-pulse" />
-            <span className="text-text-muted">Keys saved:</span>
+            <span className="text-text-muted">Providers with saved keys:</span>
             <span className="font-mono font-semibold text-text-primary">
-              {connectedCount} / {connectors.length}
+              {connectedCount === null ? (isLoading ? 'Loading' : 'Unavailable') : connectedCount}
             </span>
           </div>
         </div>
@@ -136,8 +144,10 @@ export default function ConnectorsPage() {
 
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-sm font-semibold text-text-primary">Enrichment key vault</h2>
-        <span className="text-[11px] text-text-muted">Connector list comes from the engine registry. Keys you save are stored encrypted. No enrichment provider is called yet.</span>
+        <span className="text-[11px] text-text-muted">Connector list comes from the engine registry. Keys you save are stored encrypted. This page does not call providers. The current key is the newest-created saved row, with native id order breaking exact ties. Stored test results are not a live connection check.</span>
         {loadError && <Badge variant="matrix" className="text-xs font-mono">{loadError}</Badge>}
+        {vaultError && <Badge variant="matrix" className="text-xs font-mono">{vaultError}</Badge>}
+        <Button variant="outline" size="sm" onClick={() => void load()} disabled={isLoading}>Reload metadata</Button>
       </div>
 
       {/* Filter and Search Bar */}
@@ -179,8 +189,10 @@ export default function ConnectorsPage() {
           <ConnectorCard
             key={connector.id}
             meta={connector}
-            credential={credentials[connector.id]}
+            credential={credentials?.[connector.id]}
+            credentialState={isLoading ? 'loading' : credentials === null ? 'unavailable' : 'confirmed'}
             onConfigure={(meta) => {
+              if (credentials === null || isLoading) return;
               if (meta.keyStorageAvailable === false) {
                 notify.info(`Key storage is not available for ${meta.name} yet (provider id not accepted by the vault).`);
                 return;
@@ -192,7 +204,7 @@ export default function ConnectorsPage() {
       </div>
 
       {/* Zero State if Filter empty */}
-      {filteredConnectors.length === 0 && (
+      {!isLoading && !loadError && filteredConnectors.length === 0 && (
         <div className="text-center py-16 bg-canvas-surface border border-border-subtle rounded-xl p-8">
           <Plug className="w-10 h-10 text-text-muted mx-auto mb-3 opacity-40" />
           <h3 className="font-semibold text-sm text-text-primary mb-1">No connectors found</h3>

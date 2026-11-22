@@ -1,253 +1,38 @@
 'use client';
+import React,{useCallback,useEffect,useRef,useState} from 'react';
+import {PlatformOverviewSchema,type PlatformOverview} from '@leadloom/contracts';
 
-import React from 'react';
-import { Badge, Button } from '@leadloom/ui';
-import {
-  Building,
-  Shield,
-  Layers,
-  Database,
-  Activity,
-  Calendar,
-  Lock,
-  CheckCircle2,
-  AlertTriangle,
-  ArrowUpRight,
-} from 'lucide-react';
-
-const MOCK_TENANTS = [
-  {
-    id: '11111111-1111-4111-8111-111111111111',
-    name: 'Acme Growth Labs',
-    owner: 'alex@acme.com',
-    planId: 'plan_scale',
-    planName: 'Scale Tier',
-    status: 'active',
-    members: 4,
-    enrichmentCreditsUsed: 3420,
-    creditLimit: 10000,
-    created: '2026-11-01',
-  },
-  {
-    id: '22222222-2222-4222-8222-222222222222',
-    name: 'DevOps Engine Core',
-    owner: 'sarah@devopsengine.io',
-    planId: 'plan_growth',
-    planName: 'Growth Tier',
-    status: 'active',
-    members: 2,
-    enrichmentCreditsUsed: 890,
-    creditLimit: 2500,
-    created: '2026-11-04',
-  },
-  {
-    id: '33333333-3333-4333-8333-333333333333',
-    name: 'SaaS Alpha Ventures',
-    owner: 'ken@alphaventures.vc',
-    planId: 'plan_growth',
-    planName: 'Growth Tier',
-    status: 'trialing',
-    members: 1,
-    enrichmentCreditsUsed: 120,
-    creditLimit: 500,
-    created: '2026-11-09',
-  },
-];
-
-const MOCK_AUDIT_LOGS = [
-  {
-    id: 'aud_01',
-    actor: 'system_cron',
-    action: 'vault.dek_rotation',
-    target: 'tenant_11111111',
-    status: 'success',
-    timestamp: '2026-11-10 17:15:02 UTC',
-    ip: '10.0.4.12',
-  },
-  {
-    id: 'aud_02',
-    actor: 'platform_admin (kamal)',
-    action: 'plan.limit_override',
-    target: 'tenant_22222222',
-    status: 'success',
-    timestamp: '2026-11-10 16:42:19 UTC',
-    ip: '192.168.1.101',
-  },
-  {
-    id: 'aud_03',
-    actor: 'alex@acme.com',
-    action: 'mailbox.verify_dns',
-    target: 'alex-outreach@loom.dev',
-    status: 'success',
-    timestamp: '2026-11-10 15:30:45 UTC',
-    ip: '82.165.197.1',
-  },
-  {
-    id: 'aud_04',
-    actor: 'unknown_ip',
-    action: 'auth.failed_attempt',
-    target: 'admin@acme.com',
-    status: 'rejected_401',
-    timestamp: '2026-11-10 14:12:00 UTC',
-    ip: '198.51.100.4',
-  },
-];
-
-export default function AdminPage() {
-  return (
-    <div className="space-y-8">
-      {/* Top Telemetry Row */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-xl font-bold text-text-primary tracking-tight">Platform Overview</h1>
-            <p className="text-xs text-text-secondary mt-0.5">
-              Multi-tenant instances, vault operations, and global system health
-            </p>
-          </div>
-          <Badge variant="subtle" className="font-mono text-xs">
-            Demo data • Operator View
-          </Badge>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle">
-            <div className="text-xs text-text-muted">Active Workspaces</div>
-            <div className="text-2xl font-bold text-text-primary mt-1">3</div>
-            <div className="text-[11px] text-signal-verified mt-1 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> All DB schemas isolated
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle">
-            <div className="text-xs text-text-muted">Total Enriched Leads</div>
-            <div className="text-2xl font-bold text-text-primary mt-1">4,430</div>
-            <div className="text-[11px] text-text-secondary mt-1">Across 3 active tables</div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle">
-            <div className="text-xs text-text-muted">Active Mailbox Pools</div>
-            <div className="text-2xl font-bold text-text-primary mt-1">6</div>
-            <div className="text-[11px] text-signal-verified mt-1 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> SPF / DKIM valid
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-canvas-surface border border-border-subtle">
-            <div className="text-xs text-text-muted">Vault Security Envelope</div>
-            <div className="text-2xl font-bold text-text-primary mt-1">AES-256</div>
-            <div className="text-[11px] text-signal-verified mt-1 flex items-center gap-1">
-              <Shield className="w-3 h-3" /> KEK/DEK verified
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tenants Table */}
-      <section className="bg-canvas-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-border-subtle flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Building className="w-4 h-4 text-brand-loom" />
-            <h2 className="text-sm font-semibold text-text-primary">Registered Tenant Workspaces</h2>
-          </div>
-          <span className="text-xs font-mono text-text-muted">3 tenants registered</span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-canvas-elevated/50 text-text-muted font-mono uppercase text-[10px] border-b border-border-subtle">
-              <tr>
-                <th className="py-2.5 px-4">Organization</th>
-                <th className="py-2.5 px-4">Tenant ID</th>
-                <th className="py-2.5 px-4">Plan</th>
-                <th className="py-2.5 px-4">Status</th>
-                <th className="py-2.5 px-4">Credit Metering</th>
-                <th className="py-2.5 px-4 text-right">Created</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle">
-              {MOCK_TENANTS.map((t) => (
-                <tr key={t.id} className="hover:bg-canvas-elevated/30 transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="font-medium text-text-primary">{t.name}</div>
-                    <div className="text-text-muted text-[11px]">{t.owner}</div>
-                  </td>
-                  <td className="py-3 px-4 font-mono text-text-muted text-[11px]">{t.id.slice(0, 18)}...</td>
-                  <td className="py-3 px-4 font-medium text-brand-loom">{t.planName}</td>
-                  <td className="py-3 px-4">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-signal-verified/15 text-signal-verified">
-                      <span className="w-1.5 h-1.5 rounded-full bg-signal-verified" />
-                      {t.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-1.5 rounded-full bg-canvas-subtle overflow-hidden">
-                        <div
-                          className="h-full bg-brand-loom rounded-full"
-                          style={{ width: `${(t.enrichmentCreditsUsed / t.creditLimit) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-[11px] text-text-muted font-mono">
-                        {t.enrichmentCreditsUsed} / {t.creditLimit}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-right text-text-muted font-mono">{t.created}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Global Audit Log */}
-      <section id="audit" className="bg-canvas-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-border-subtle flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-brand-weave" />
-            <h2 className="text-sm font-semibold text-text-primary">Global Security & Audit Log</h2>
-          </div>
-          <span className="text-xs font-mono text-text-muted">Live event stream</span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
-            <thead className="bg-canvas-elevated/50 text-text-muted uppercase text-[10px] border-b border-border-subtle">
-              <tr>
-                <th className="py-2.5 px-4">Timestamp</th>
-                <th className="py-2.5 px-4">Actor</th>
-                <th className="py-2.5 px-4">Action</th>
-                <th className="py-2.5 px-4">Target</th>
-                <th className="py-2.5 px-4">Status</th>
-                <th className="py-2.5 px-4 text-right">Source IP</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle">
-              {MOCK_AUDIT_LOGS.map((log) => (
-                <tr key={log.id} className="hover:bg-canvas-elevated/30 transition-colors">
-                  <td className="py-2.5 px-4 text-text-muted">{log.timestamp}</td>
-                  <td className="py-2.5 px-4 text-text-primary">{log.actor}</td>
-                  <td className="py-2.5 px-4 text-brand-loom font-semibold">{log.action}</td>
-                  <td className="py-2.5 px-4 text-text-secondary">{log.target}</td>
-                  <td className="py-2.5 px-4">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] ${
-                        log.status === 'success'
-                          ? 'bg-signal-verified/15 text-signal-verified'
-                          : 'bg-signal-failed/15 text-signal-failed'
-                      }`}
-                    >
-                      {log.status}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4 text-right text-text-muted">{log.ip}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-  );
+export default function AdminPage(){
+ const [snapshot,setSnapshot]=useState<PlatformOverview|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false);
+ const [search,setSearch]=useState(''),[applied,setApplied]=useState(''),[cursor,setCursor]=useState<string|null>(null),[previous,setPrevious]=useState<(string|null)[]>([]);
+ const request=useRef(0),controller=useRef<AbortController|null>(null);
+ const load=useCallback(async(q:string,next:string|null,history:(string|null)[])=>{
+  controller.current?.abort();const abort=new AbortController();controller.current=abort;const generation=++request.current;
+  let timedOut=false;const timer=setTimeout(()=>{timedOut=true;abort.abort();},10000);
+  setLoading(true);setError('');setSnapshot(null);setApplied(q);setCursor(next);setPrevious(history);
+  const params=new URLSearchParams();if(q)params.set('q',q);if(next)params.set('cursor',next);
+  try{
+   const response=await fetch('/api/engine/admin/overview'+(params.size?'?'+params.toString():''),{signal:abort.signal,cache:'no-store'});
+   if(!response.ok)throw Error(response.status===401||response.status===403?'Operator access denied or expired. No snapshot displayed.':'Platform overview unavailable. No snapshot displayed.');
+   const parsed=PlatformOverviewSchema.safeParse(await response.json());if(!parsed.success||parsed.data.search!==q)throw Error('Invalid platform snapshot. No data displayed.');
+   if(generation!==request.current)return;setSnapshot(parsed.data);
+  }catch(e){if(generation!==request.current||(abort.signal.aborted&&!timedOut))return;setSnapshot(null);setError(timedOut?'Platform overview timed out. No snapshot displayed.':e instanceof Error?e.message:'Platform overview unavailable.');}
+  finally{clearTimeout(timer);if(generation===request.current)setLoading(false);}
+ },[]);
+ useEffect(()=>{void load('',null,[]);return()=>{request.current++;controller.current?.abort();};},[load]);
+ const stat=[['Stored workspaces',snapshot?.counts.workspaces],['Active access flags',snapshot?.counts.activeWorkspaces],['User records',snapshot?.counts.users],['Project records',snapshot?.counts.projects],['Campaign records',snapshot?.counts.campaigns],['Outbound job records',snapshot?.counts.outboundJobs]] as const;
+ return <div className="space-y-6" data-testid="platform-overview">
+  <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-xl font-bold text-text-primary">Platform overview</h1><p className="text-sm text-text-secondary mt-1">Current database metadata. Read-only, no demo telemetry or automatic action.</p></div><button type="button" onClick={()=>void load(applied,null,[])} disabled={loading} className="px-3 py-2 rounded border border-border-subtle text-xs text-text-primary disabled:opacity-50">Refresh first page</button></header>
+  <form className="flex flex-wrap items-end gap-3" onSubmit={e=>{e.preventDefault();void load(search.trim(),null,[]);}}><label className="text-xs text-text-secondary flex-1 min-w-64">Workspace name<input aria-label="Search platform workspaces" value={search} maxLength={100} onChange={e=>setSearch(e.target.value)} className="block mt-1 w-full rounded border border-border-subtle bg-canvas-surface p-2 text-sm text-text-primary"/></label><button disabled={loading} className="px-4 py-2 rounded bg-brand-loom text-canvas text-sm disabled:opacity-50">Search workspaces</button></form>
+  <p className="text-xs text-text-muted">Applied name search: {applied||'all workspaces'}. Totals always cover the full database, not only this search. Each page contains up to 25 workspaces.</p>
+  {loading&&<p role="status" className="text-sm text-text-secondary">Loading current platform metadata...</p>}
+  {error&&<p role="alert" className="rounded border border-signal-failed/40 p-3 text-sm text-signal-failed">{error}</p>}
+  {snapshot&&<>
+   <p className="text-xs text-text-muted" data-testid="platform-asof">Snapshot {snapshot.asOf}. Refresh after other changes. Not a readiness, billing or delivery verdict.</p>
+   <section className="grid grid-cols-2 lg:grid-cols-3 gap-3" aria-label="Current platform record counts">{stat.map(([label,value])=><div key={label} className="rounded-xl border border-border-subtle bg-canvas-surface p-4"><p className="text-xs text-text-secondary">{label}</p><p className="text-2xl text-text-primary font-semibold mt-1">{value}</p></div>)}</section>
+   <section className="rounded-xl border border-border-subtle bg-canvas-surface overflow-hidden"><h2 className="p-4 text-sm font-semibold text-text-primary border-b border-border-subtle">Workspace records, page {previous.length+1}</h2><div className="overflow-x-auto"><table className="w-full min-w-[960px] text-left text-xs" aria-label="Current platform workspace page"><thead className="bg-canvas-elevated text-text-secondary"><tr>{['Workspace','Access flag','Stored plan key','Members','Projects','Campaigns','Created'].map(t=><th className="p-3 font-medium" key={t}>{t}</th>)}</tr></thead><tbody>{snapshot.workspaces.map(w=><tr key={w.id} className="border-t border-border-subtle"><td className="p-3 text-text-primary"><div className="font-medium">{w.name}</div><code className="block text-[10px] text-text-muted mt-1">{w.id}</code></td><td className="p-3 text-text-secondary">{w.active?'Active':'Inactive'}</td><td className="p-3 text-text-secondary">{w.storedPlan}</td><td className="p-3 text-text-secondary">{w.members}</td><td className="p-3 text-text-secondary">{w.projects}</td><td className="p-3 text-text-secondary">{w.campaigns}</td><td className="p-3 text-text-muted whitespace-nowrap">{w.createdAt.slice(0,10)}</td></tr>)}</tbody></table></div>{snapshot.workspaces.length===0&&<p className="p-4 text-sm text-text-secondary">No matching workspace records in this page snapshot.</p>}</section>
+   <div className="flex gap-3"><button type="button" disabled={loading||previous.length===0} onClick={()=>{const history=previous.slice(0,-1);void load(applied,previous.at(-1)??null,history);}} className="px-3 py-2 rounded border border-border-subtle text-xs text-text-primary disabled:opacity-40">Previous workspaces</button><button type="button" disabled={loading||!snapshot.nextCursor} onClick={()=>void load(applied,snapshot.nextCursor,[...previous,cursor])} className="px-3 py-2 rounded border border-border-subtle text-xs text-text-primary disabled:opacity-40">Next workspaces</button></div>
+   <details className="rounded border border-border-subtle p-4 text-xs text-text-secondary"><summary className="cursor-pointer font-medium text-text-primary">Source limits and unsupported controls</summary><ul className="mt-3 space-y-2 list-disc pl-4">{snapshot.limits.map(t=><li key={t}>{t}</li>)}<li>Tenant changes, subscription billing, a global audit-event view and key operations are not provided by this page.</li></ul></details>
+  </>}
+ </div>;
 }

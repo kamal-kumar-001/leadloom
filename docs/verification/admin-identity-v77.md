@@ -1,0 +1,13 @@
+# Admin configuration and middleware identity, v77
+
+Two source integration defects were reproduced and corrected without choosing an operator identity or changing the existing access policy.
+
+Compose previously omitted LEADLOOM_PLATFORM_ADMIN_EMAIL from both web and API. Both now pass the same explicit setting through, default empty. Missing settings remain fail-closed. A pre-existing host environment identity that was formerly ignored would begin taking effect in a future deployment, so resolved configuration and authority must be reviewed before any release. No host environment was read or changed.
+
+The actual compiled native test then showed API200but web307for the matching verified fixture identity. Middleware creates its authentication layer from auth.config.ts, which lacked auth.ts's signed-session verification projection. The shared configuration now passes the strict boolean email_verified proof, identity-provider label and authentication time into the session. It does not expose engine credentials or infer verification from an address. Existing auth.ts callback and provider-verification rules remain unchanged.
+
+Proof: original missing-setting failure and pre-middleware native failure retained.33Compose positive/negative cases pass, including missing and fallback operator identities. Four new shared-projection tests pass; the full web suite passes134tests/28files. Node14passes. Engine/web builds pass. Actual compiled API and web pass empty-default denial, explicit matching verified identity acceptance, and different-identity denial. The full KeepCue CLI/browser/restart/discovery/zero-evidence-review case passes on the rebuilt runtime. Synthetic local verified sessions are used, not live OAuth/OTP delivery. Existing platform console includes demo content, so successful access is not proof of implemented operator CRUD.
+
+Compiled identity: faa4b313961281ca7a66ebd834e3393d57e69d64c3571dc3c5c3df494a5b297a,765included files. Unchanged v70 clean dependencies were reused, not a new npm-ci claim. Engine implementation/migration/dependencies are unchanged; earlier full engine/contracts/database/provider/restore coverage remains carried rather than repeated for this middleware/config change.
+
+No lab, host, production data, provider, push, deployment, external send or spend changed. No full-product readiness claim. Preferred current compiled tree remains /tmp/leadloom-fresh-v73/leadloom. Primary source /tmp/leadloom-full-current is current but its compiled outputs remain v73. Full source bytes/modes, clean-tree equivalence and extracted identity are checked at packaging.

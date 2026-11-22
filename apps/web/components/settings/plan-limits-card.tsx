@@ -1,114 +1,21 @@
 'use client';
-
-import React from 'react';
-import { Card, Badge } from '@leadloom/ui';
-import { Info, Gauge, Layers, Mail, Table2, Sparkles, Send } from 'lucide-react';
-import type { LimitKey } from '@leadloom/contracts';
-
-interface DefinedLimitItem {
-  key: LimitKey;
-  label: string;
-  description: string;
-  icon: React.ElementType;
-}
-
-const DEFINED_LIMITS: DefinedLimitItem[] = [
-  {
-    key: 'seats',
-    label: 'Workspace Seats',
-    description: 'Active team members allowed with collaborative workspace access.',
-    icon: Layers,
-  },
-  {
-    key: 'mailboxes',
-    label: 'Outbound Mailbox Senders',
-    description: 'Parallel inboxes in deliverability rotation with SPF/DKIM telemetry.',
-    icon: Mail,
-  },
-  {
-    key: 'tables',
-    label: 'Virtual Grid Loom Tables',
-    description: 'High-density spreadsheet tables supporting 50,000+ contact rows.',
-    icon: Table2,
-  },
-  {
-    key: 'enrichment_credits_per_month',
-    label: 'Monthly Waterfall Credits',
-    description: 'Allowance for executing multi-tier waterfall contact enrichment waterfalls.',
-    icon: Sparkles,
-  },
-  {
-    key: 'emails_per_month',
-    label: 'Monthly Outbound Emails',
-    description: 'Jittered sequence dispatch volume across connected mailboxes.',
-    icon: Send,
-  },
-];
-
-export function PlanLimitsCard() {
-  return (
-    <Card className="p-5 sm:p-6 space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-semibold text-text-primary tracking-tight">
-              Plan & System Limits
-            </h2>
-            <Badge variant="catchall" className="text-[10px] font-mono py-0 px-2">
-              not_enforced
-            </Badge>
-          </div>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Limits defined for this product. They are not enforced yet.
-          </p>
-        </div>
-      </div>
-
-      {/* Mandatory Notice */}
-      <div className="p-3.5 rounded-lg border border-signal-catchall/30 bg-signal-catchall/10 flex items-start gap-3">
-        <Info className="w-4 h-4 text-signal-catchall shrink-0 mt-0.5" />
-        <div className="text-xs text-text-primary space-y-0.5">
-          <p className="font-semibold text-signal-catchall">
-            Limits are defined but not enforced yet
-          </p>
-          <p className="text-text-muted leading-relaxed text-[11px]">
-            The core engine health telemetry reports entitlements as <code className="font-mono text-text-primary">not_enforced</code>. System boundaries are established contractually, but usage quotas are currently unrestricted in this deployment.
-          </p>
-        </div>
-      </div>
-
-      {/* Read-Only Limits List (No usage bars, no used/remaining numbers) */}
-      <div className="divide-y divide-border-subtle border-t border-border-subtle">
-        {DEFINED_LIMITS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <div
-              key={item.key}
-              className="py-3 first:pt-3.5 last:pb-1 flex items-start sm:items-center justify-between gap-3"
-            >
-              <div className="flex items-start sm:items-center gap-3 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-canvas-elevated border border-border-subtle flex items-center justify-center shrink-0 text-text-muted mt-0.5 sm:mt-0">
-                  <Icon className="w-3.5 h-3.5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-text-primary">
-                    {item.label}
-                  </div>
-                  <div className="text-[11px] text-text-muted leading-relaxed truncate sm:whitespace-normal">
-                    {item.description}
-                  </div>
-                </div>
-              </div>
-
-              <div className="shrink-0 self-center">
-                <Badge variant="subtle" className="font-mono text-[10px]">
-                  {item.key}
-                </Badge>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
+import React,{useEffect,useRef,useState} from 'react';
+import {Card,Button,Badge} from '@leadloom/ui';
+import {engineFetch} from '../../lib/engine-client';
+interface PlanStatus{enforcement:'enabled'|'disabled';asOf:string;plan:{id:string|null;known:boolean;billingStatus:string}|null;features:Array<{key:string;allowed:boolean;reason:string}>;limits:Array<{key:string;used:number;cap:number|null;capKnown:boolean;available:number|null;allowsOneMore:boolean;reason:string;measurement:string;period:string}>;notes:string[]}
+export function PlanLimitsCard(){
+ const [data,setData]=useState<PlanStatus|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');const sequence=useRef(0);
+ const load=async()=>{const seq=++sequence.current;setBusy(true);setData(null);setError('');try{const r=await engineFetch<PlanStatus>('/workspace/plan-status');if(seq!==sequence.current)return;if(r.data)setData(r.data);else setError(r.error||'Current plan policy unavailable');}catch{if(seq===sequence.current)setError('Current plan policy unavailable');}finally{if(seq===sequence.current)setBusy(false);}};
+ useEffect(()=>{void load();return()=>{sequence.current++;};},[]);
+ return <Card className="p-5 sm:p-6 space-y-4" data-testid="plan-status">
+  <div className="flex items-start justify-between gap-3"><div><h2 className="text-base font-semibold text-text-primary">Plan & System Limits</h2><p className="text-xs text-text-secondary mt-1">Current server policy for this workspace. No billing or plan changes are made here.</p></div><Button size="sm" variant="outline" disabled={busy} onClick={()=>void load()}>Reload policy</Button></div>
+  {busy&&<p className="text-xs text-text-muted">Loading current policy...</p>}{error&&<p role="alert" className="text-xs text-signal-failed">{error}. No plan or available quota is assumed.</p>}
+  {data&&<>
+   <Badge variant="subtle">{data.enforcement==='enabled'?'Policy checks enabled':'Plan enforcement disabled'}</Badge>
+   <p className="text-xs text-text-secondary">{data.plan?`Configured plan: ${data.plan.id??'none'}${data.plan.known?'':' (unknown)'}. Recorded billing status: ${data.plan.billingStatus}. Not a payment confirmation.`:'No plan or available quota is inferred while enforcement is disabled.'}</p>
+   {data.enforcement==='enabled'&&<><div className="overflow-x-auto"><table className="w-full text-xs text-left"><caption className="text-left text-text-secondary mb-2">Measured limits. Recorded counters are not proof of complete usage accounting.</caption><thead className="text-text-muted"><tr>{['Limit','Measured','Cap','Available now','One more'].map(h=><th key={h} className="p-2">{h}</th>)}</tr></thead><tbody>{data.limits.map(l=><tr key={l.key} className="border-t border-border-subtle"><td className="p-2 text-text-primary">{l.key}<span className="block text-[10px] text-text-muted">{l.measurement==='saved_rows'?'Current saved tables':'Recorded counter'} · {l.period}</span></td><td className="p-2">{l.used}</td><td className="p-2">{!l.capKnown?'Unknown':l.cap===null?'Unlimited':l.cap}</td><td className="p-2">{!l.capKnown?'Unknown':l.available===null?'Unlimited':l.available}</td><td className="p-2">{l.allowsOneMore?'Allowed by policy':l.reason.replaceAll('_',' ')}</td></tr>)}</tbody></table></div>
+   <details className="text-xs text-text-secondary"><summary className="cursor-pointer">Configured feature decisions</summary><ul className="mt-2 space-y-1">{data.features.map(f=><li key={f.key}>{f.key}: {f.allowed?'allowed by policy':f.reason.replaceAll('_',' ')}</li>)}</ul></details></>}
+   <ul className="space-y-1 text-[11px] text-text-muted">{data.notes.map(n=><li key={n}>{n}</li>)}</ul><p className="text-[10px] text-text-muted">Checked {new Date(data.asOf).toLocaleString()}. Reload for current state.</p>
+  </>}
+ </Card>;
 }

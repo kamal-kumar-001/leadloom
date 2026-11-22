@@ -26,11 +26,11 @@ export function CampaignStepsList({ steps }: { steps: WorkspaceCampaignStep[] })
               <span className="text-xs font-bold text-text-primary">Step {step.stepNumber}: Outbound Email</span>
               {step.delayHours > 0 ? (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-canvas-elevated text-brand-weave flex items-center gap-1 border border-border-subtle">
-                  <Clock className="w-3 h-3" /> Wait {step.delayHours}h after previous step
+                  <Clock className="w-3 h-3" /> Configured delay: {step.delayHours}h
                 </span>
               ) : (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-signal-verified/15 text-signal-verified border border-signal-verified/30">
-                  Sends after release
+                  Configured delay: 0h
                 </span>
               )}
             </div>

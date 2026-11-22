@@ -1,0 +1,78 @@
+import {createHash,randomUUID} from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
+import {z} from 'zod';
+import {WaterfallCellPayloadSchema,type WaterfallCellPayload} from '@leadloom/contracts';
+import type {TransactionalDatabase,SqlConnection} from '../outbound/atomic-dispatch.repository';
+import {validEmail} from './adapters/provider-transport';
+import type {ProviderExecutionInput} from './adapters/base-provider.adapter';
+const uuid=z.string().uuid();
+export const DurableWaterfallRequestSchema=z.object({requestId:uuid,columnId:uuid,rowIds:z.array(uuid).min(1).max(100).refine(v=>new Set(v).size===v.length,'Duplicate rows not allowed')}).strict();
+const Config=z.object({inputColumns:z.object({domain:uuid,firstName:uuid,lastName:uuid,companyName:uuid.optional(),title:uuid.optional()}).strict()}).strict();
+type Request=z.infer<typeof DurableWaterfallRequestSchema>;
+export class WaterfallRunConflict extends Error{}
+export class WaterfallRunInvalid extends Error{}
+/** A trusted execution port, not user-controlled HTTP options. Implementations own external authority,
+ * budget reservation, fixed provider routing and stable operation-ID reconciliation. None is wired by default. */
+export interface AuthorizedWaterfallExecutor{execute(input:ProviderExecutionInput,operationId:string):Promise<WaterfallCellPayload>}
+const canonical=(v:any):string=>v===null||typeof v!=='object'?JSON.stringify(v):Array.isArray(v)?'['+v.map(canonical).join(',')+']':'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}';
+const hash=(v:any)=>createHash('sha256').update(canonical(v)).digest('hex');
+const q=<T extends Record<string,unknown>=any>(tx:SqlConnection,sql:string,args:unknown[])=>tx.query<T>(sql,args);
+/** Persisted snapshot/execution/writeback foundation. No background loop, network or production route. */
+export class DurableWaterfallService{
+ constructor(private readonly db:TransactionalDatabase){}
+ private async snapshot(tx:SqlConnection,workspaceId:string,tableId:string,columnId:string,rowId:string,config:any){
+  const cols=await q(tx,'SELECT id,type,config FROM columns WHERE table_id=$1::uuid ORDER BY id FOR SHARE',[tableId]);
+  const output=cols.find(c=>c.id===columnId);if(!output||output.type!=='waterfall'||!isDeepStrictEqual(output.config,config))throw new WaterfallRunConflict('Destination configuration changed');
+  const parsed=Config.safeParse(config);if(!parsed.success)throw new WaterfallRunInvalid('Explicit input-column mapping required');
+  const mapping=parsed.data.inputColumns;const ids=Object.values(mapping);if(ids.includes(columnId)||new Set(ids).size!==ids.length)throw new WaterfallRunInvalid('Input mappings must be distinct from destination');
+  for(const id of ids)if(!cols.some(c=>c.id===id&&['text','url','email'].includes(c.type)))throw new WaterfallRunInvalid('Input column missing or unsupported');
+  if(!(await q(tx,'SELECT id FROM rows WHERE id=$1::uuid AND table_id=$2::uuid FOR SHARE',[rowId,tableId])).length)throw new WaterfallRunConflict('Source row no longer exists');
+  const cells=await q(tx,'SELECT column_id,value FROM cells WHERE table_id=$1::uuid AND row_id=$2::uuid AND column_id=ANY($3::uuid[]) ORDER BY column_id FOR UPDATE',[tableId,rowId,[...ids,columnId]]);
+  const input:any={domain:'',workspaceId},source:any={};for(const[key,id]of Object.entries(mapping)){const value=cells.find(c=>c.column_id===id)?.value;if(typeof value!=='string'||!value.trim()||value.length>255)throw new WaterfallRunInvalid('Mapped inputs must contain bounded nonempty text');source[id]=value;input[key]=value;}
+  input.domain=input.domain.trim().toLowerCase();if(!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(input.domain))throw new WaterfallRunInvalid('Mapped domain must be a hostname, not a URL');
+  return{input,source,destination:cells.find(c=>c.column_id===columnId)?.value??null};
+ }
+ async preview(workspaceId:string,tableId:string,columnId:string,rowIds:string[]){uuid.parse(tableId);const parsed=DurableWaterfallRequestSchema.parse({requestId:randomUUID(),columnId,rowIds});return this.db.transaction(async tx=>{if(!(await q(tx,'SELECT id FROM tables WHERE id=$1::uuid AND workspace_id=$2::uuid FOR UPDATE',[tableId,workspaceId])).length)return null;const column=(await q(tx,'SELECT id,type,config FROM columns WHERE id=$1::uuid AND table_id=$2::uuid',[columnId,tableId]))[0];if(!column||column.type!=='waterfall')throw new WaterfallRunInvalid('Saved waterfall column required');const rows=[];for(const rowId of parsed.rowIds){try{await this.snapshot(tx,workspaceId,tableId,columnId,rowId,column.config);rows.push({rowId,valid:true});}catch(e){if(e instanceof WaterfallRunInvalid||e instanceof WaterfallRunConflict)rows.push({rowId,valid:false,reason:e.message});else throw e;}}return{columnId,selected:rows.length,valid:rows.filter(r=>r.valid).length,rows,execution:'unavailable',queued:false,providerCalled:false,notice:'Input validation only. No provider quote, budget approval, queued work or completed enrichment.'};});}
+ async submit(workspaceId:string,userId:string,raw:Request){const request=DurableWaterfallRequestSchema.parse(raw),payloadHash=hash({...request,rowIds:[...request.rowIds].sort()});return this.db.transaction(async tx=>{
+  // A workspace lock makes concurrent receipt submission one create, not a unique-key failure.
+  if(!(await q(tx,'SELECT id FROM workspaces WHERE id=$1::uuid AND is_active=true FOR UPDATE',[workspaceId])).length)throw new WaterfallRunInvalid('Workspace unavailable');
+  const actor=await q(tx,'SELECT id FROM users WHERE id=$1::uuid AND workspace_id=$2::uuid AND disabled_at IS NULL AND role IN(\'admin\',\'member\') FOR SHARE',[userId,workspaceId]);if(!actor.length)throw new WaterfallRunInvalid('Current write access required');
+  const previous=(await q(tx,'SELECT id,payload_hash,requested_by FROM waterfall_runs WHERE workspace_id=$1::uuid AND request_id=$2::uuid',[workspaceId,request.requestId]))[0];if(previous){if(previous.payload_hash!==payloadHash||previous.requested_by!==userId)throw new WaterfallRunConflict('Request ID already used');return{runId:previous.id,created:false};}
+  // Locate without locking a child first. This service acquires parent before column/cell.
+  const candidate=(await q(tx,'SELECT c.table_id FROM columns c JOIN tables t ON t.id=c.table_id WHERE c.id=$1::uuid AND t.workspace_id=$2::uuid',[request.columnId,workspaceId]))[0];if(!candidate)throw new WaterfallRunInvalid('Workspace waterfall column required');
+  if(!(await q(tx,'SELECT id FROM tables WHERE id=$1::uuid AND workspace_id=$2::uuid FOR UPDATE',[candidate.table_id,workspaceId])).length)throw new WaterfallRunConflict('Table no longer exists');
+  const column=(await q(tx,'SELECT c.id,c.table_id,c.type,c.config FROM columns c WHERE c.id=$1::uuid AND c.table_id=$2::uuid FOR SHARE OF c',[request.columnId,candidate.table_id]))[0];if(!column||column.type!=='waterfall')throw new WaterfallRunInvalid('Workspace waterfall column required');
+  const runId=randomUUID(),rows=[];for(const rowId of [...request.rowIds].sort())rows.push({id:randomUUID(),rowId,snapshot:await this.snapshot(tx,workspaceId,column.table_id,column.id,rowId,column.config)});
+  await q(tx,'INSERT INTO waterfall_runs(id,workspace_id,table_id,column_id,request_id,requested_by,payload_hash,config_snapshot)VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7,$8::jsonb)RETURNING id',[runId,workspaceId,column.table_id,column.id,request.requestId,userId,payloadHash,JSON.stringify(column.config)]);
+  for(const row of rows)await q(tx,'INSERT INTO waterfall_run_rows(id,run_id,workspace_id,row_id,snapshot)VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::jsonb)RETURNING id',[row.id,runId,workspaceId,row.rowId,JSON.stringify(row.snapshot)]);
+  return{runId,created:true};
+ });}
+ async read(workspaceId:string,runId:string){return this.db.transaction(async tx=>{const run=(await q(tx,'SELECT id,table_id,column_id,created_at FROM waterfall_runs WHERE id=$1::uuid AND workspace_id=$2::uuid',[runId,workspaceId]))[0];if(!run)return null;const rows=await q(tx,'SELECT id,row_id,state,attempt_id,claimed_at,finished_at,result FROM waterfall_run_rows WHERE run_id=$1::uuid AND workspace_id=$2::uuid ORDER BY id',[runId,workspaceId]);return{...run,rows};});}
+ async claim(workspaceId:string){return this.db.transaction(async tx=>{
+  // Parent locks precede child locks, including the FK cascade path during table deletion.
+  if(!(await q(tx,'SELECT id FROM workspaces WHERE id=$1::uuid AND is_active=true FOR SHARE',[workspaceId])).length)return null;
+  const candidate=(await q(tx,"SELECT p.table_id,p.requested_by FROM waterfall_run_rows r JOIN waterfall_runs p ON p.id=r.run_id AND p.workspace_id=r.workspace_id JOIN users u ON u.id=p.requested_by AND u.workspace_id=r.workspace_id WHERE r.workspace_id=$1::uuid AND r.state='queued' AND u.disabled_at IS NULL AND u.role IN('admin','member') ORDER BY p.created_at,r.id LIMIT 1",[workspaceId]))[0];if(!candidate)return null;
+  if(!(await q(tx,"SELECT id FROM users WHERE id=$1::uuid AND workspace_id=$2::uuid AND disabled_at IS NULL AND role IN('admin','member') FOR SHARE",[candidate.requested_by,workspaceId])).length)return null;
+  if(!(await q(tx,'SELECT id FROM tables WHERE id=$1::uuid AND workspace_id=$2::uuid FOR UPDATE',[candidate.table_id,workspaceId])).length)return null;
+  // Reselect queued work after the parent lock. Another worker may have taken the candidate.
+  const row=(await q(tx,"SELECT r.id,r.run_id,r.row_id,r.snapshot,p.table_id,p.column_id,p.config_snapshot FROM waterfall_run_rows r JOIN waterfall_runs p ON p.id=r.run_id AND p.workspace_id=r.workspace_id WHERE r.workspace_id=$1::uuid AND p.table_id=$2::uuid AND p.requested_by=$3::uuid AND r.state='queued' ORDER BY p.created_at,r.id FOR UPDATE OF r SKIP LOCKED LIMIT 1",[workspaceId,candidate.table_id,candidate.requested_by]))[0];if(!row)return null;
+  let current:any;try{current=await this.snapshot(tx,workspaceId,row.table_id,row.column_id,row.row_id,row.config_snapshot);}catch(e){if(!(e instanceof WaterfallRunConflict||e instanceof WaterfallRunInvalid))throw e;}if(!current||!isDeepStrictEqual(current,row.snapshot)){await q(tx,"UPDATE waterfall_run_rows SET state='canceled',finished_at=clock_timestamp() WHERE id=$1::uuid RETURNING id",[row.id]);return{canceled:true,rowId:row.id};}const attemptId=randomUUID();await q(tx,"UPDATE waterfall_run_rows SET state='running',attempt_id=$2::uuid,claimed_at=clock_timestamp() WHERE id=$1::uuid RETURNING id",[row.id,attemptId]);return{...row,attemptId};
+ });}
+ async record(workspaceId:string,rowId:string,attemptId:string,raw:WaterfallCellPayload){const result=WaterfallCellPayloadSchema.strict().parse(raw);if(!['success','fallback_used','exhausted','error'].includes(result.status))throw new WaterfallRunInvalid('Only completed provider outcomes can be recorded');if((['success','fallback_used'].includes(result.status)&&(!validEmail(result.value)||typeof result.confidence!=='number'||result.confidence<0.8))||(['exhausted','error'].includes(result.status)&&result.value!==null))throw new WaterfallRunInvalid('Result status does not match completed evidence');if(Buffer.byteLength(JSON.stringify(result))>65536)throw new WaterfallRunInvalid('Result too large');return this.db.transaction(async tx=>{const row=(await q(tx,'SELECT state,attempt_id,result FROM waterfall_run_rows WHERE id=$1::uuid AND workspace_id=$2::uuid FOR UPDATE',[rowId,workspaceId]))[0];if(!row||row.attempt_id!==attemptId)return false;if(row.result){if(!isDeepStrictEqual(row.result,result))throw new WaterfallRunConflict('Result already recorded');return true;}if(!['running','uncertain'].includes(row.state))return false;await q(tx,"UPDATE waterfall_run_rows SET result=$2::jsonb WHERE id=$1::uuid RETURNING id",[rowId,JSON.stringify(result)]);return true;});}
+ async apply(workspaceId:string,rowId:string,attemptId:string){return this.db.transaction(async tx=>{
+  const candidate=(await q(tx,'SELECT p.table_id,p.requested_by FROM waterfall_run_rows r JOIN waterfall_runs p ON p.id=r.run_id AND p.workspace_id=r.workspace_id WHERE r.id=$1::uuid AND r.workspace_id=$2::uuid',[rowId,workspaceId]))[0];if(!candidate)return null;
+  const workspace=(await q(tx,'SELECT id,is_active FROM workspaces WHERE id=$1::uuid FOR SHARE',[workspaceId]))[0];if(!workspace)return null;
+  const actor=await q(tx,"SELECT id FROM users WHERE id=$1::uuid AND workspace_id=$2::uuid AND disabled_at IS NULL AND role IN('admin','member') FOR SHARE",[candidate.requested_by,workspaceId]);
+  if(!(await q(tx,'SELECT id FROM tables WHERE id=$1::uuid AND workspace_id=$2::uuid FOR UPDATE',[candidate.table_id,workspaceId])).length)return null;
+  const row=(await q(tx,'SELECT r.*,p.table_id,p.column_id,p.config_snapshot,p.requested_by FROM waterfall_run_rows r JOIN waterfall_runs p ON p.id=r.run_id AND p.workspace_id=r.workspace_id WHERE r.id=$1::uuid AND r.workspace_id=$2::uuid AND p.table_id=$3::uuid FOR UPDATE OF r',[rowId,workspaceId,candidate.table_id]))[0];if(!row||row.attempt_id!==attemptId)return null;if(['applied','conflict','failed'].includes(row.state))return row.state;if(!['running','uncertain'].includes(row.state)||!row.result)return null;
+  let state='failed';if(row.result.status!=='error'){
+   state='conflict';if(workspace.is_active&&actor.length&&row.requested_by===candidate.requested_by){let current:any;try{current=await this.snapshot(tx,workspaceId,row.table_id,row.column_id,row.row_id,row.config_snapshot);}catch(e){if(!(e instanceof WaterfallRunConflict||e instanceof WaterfallRunInvalid))throw e;}
+    if(current&&isDeepStrictEqual(current,row.snapshot)){const written=await q(tx,"INSERT INTO cells(id,table_id,row_id,column_id,value,updated_at)VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::jsonb,clock_timestamp())ON CONFLICT(row_id,column_id)DO UPDATE SET value=EXCLUDED.value,updated_at=EXCLUDED.updated_at WHERE coalesce(cells.value,'null'::jsonb)=$6::jsonb RETURNING id",[randomUUID(),row.table_id,row.row_id,row.column_id,JSON.stringify(row.result),JSON.stringify(row.snapshot.destination)]);if(written.length){state='applied';await q(tx,'UPDATE tables SET updated_at=clock_timestamp() WHERE id=$1::uuid RETURNING id',[row.table_id]);}}
+   }
+  }
+  await q(tx,'UPDATE waterfall_run_rows SET state=$2,finished_at=clock_timestamp() WHERE id=$1::uuid RETURNING id',[rowId,state]);return state;
+ });}
+ async markUncertain(workspaceId:string,rowId:string,attemptId:string){return this.db.transaction(tx=>q(tx,"UPDATE waterfall_run_rows SET state='uncertain',finished_at=clock_timestamp() WHERE id=$1::uuid AND workspace_id=$2::uuid AND attempt_id=$3::uuid AND state='running' RETURNING id",[rowId,workspaceId,attemptId]));}
+ async cancelQueued(workspaceId:string,runId:string){return this.db.transaction(tx=>q(tx,"UPDATE waterfall_run_rows SET state='canceled',finished_at=clock_timestamp() WHERE workspace_id=$1::uuid AND run_id=$2::uuid AND state='queued' RETURNING id",[workspaceId,runId]));}
+ async executeNext(workspaceId:string,executor:AuthorizedWaterfallExecutor){if(!executor?.execute)throw new WaterfallRunInvalid('Authorized executor required');const row=await this.claim(workspaceId);if(!row)return null;if('canceled'in row)return{rowId:row.rowId,state:'canceled'};let result:WaterfallCellPayload;try{result=await executor.execute(row.snapshot.input,row.attemptId);await this.record(workspaceId,row.id,row.attemptId,result);}catch{await this.markUncertain(workspaceId,row.id,row.attemptId);return{rowId:row.id,state:'uncertain'};}return{rowId:row.id,state:await this.apply(workspaceId,row.id,row.attemptId)};}
+}

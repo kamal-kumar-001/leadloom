@@ -1,0 +1,36 @@
+import {it,expect} from 'vitest';
+import {randomUUID} from 'node:crypto';
+import {PrismaClient} from '@leadloom/database';
+import {createApplication} from '../../../main';
+import {ProjectRegistryService,PrismaProjectRegistryStore} from '../../project-context/project-registry.service';
+import {AgentTokenService,PrismaAgentTokenStore} from '../../auth/agent-token.service';
+import {ProjectExperimentDraftService,ExperimentDraftDenied} from '../project-experiment-draft.service';
+import {issueSession} from '../../auth/issuer';
+const url=process.env.LEADLOOM_TEST_DATABASE_URL;
+it.skipIf(process.env.LEADLOOM_INTEGRATION!=='1'||!url)('native project private experiment drafts: exact authored words, atomic receipt retries, current-state replay and no publication/side effects',async()=>{
+ const db=new PrismaClient({datasources:{db:{url}}}),ws=randomUUID(),other=randomUUID(),p=randomUUID(),q=randomUUID(),foreign=randomUUID(),uid=randomUUID(),key=Buffer.alloc(32,7);let app:any;
+ try{
+  await db.workspace.createMany({data:[{id:ws,name:'Private page fixture'},{id:other,name:'Foreign page fixture'}]});await db.user.create({data:{id:uid,workspaceId:ws,email:uid+'@example.invalid',role:'admin'}});
+  for(const [id,w]of [[p,ws],[q,ws],[foreign,other]])await db.$executeRawUnsafe('INSERT INTO projects(id,workspace_id,slug,name)VALUES($1::uuid,$2::uuid,$3,$3)',id,w,id);
+  const tokens=new AgentTokenService(new PrismaAgentTokenStore(db)),writer=await tokens.issue(ws,uid,{name:'Private experiment drafts',projectId:p,scopes:['project:experiments:draft']}),reader=await tokens.issue(ws,uid,{name:'Only observation',projectId:p,scopes:['project:experiments:read']}),unbound=await tokens.issue(ws,uid,{name:'Unbound',scopes:['project:experiments:draft']}),wrong=await tokens.issue(ws,uid,{name:'Foreign binding',projectId:foreign,scopes:['project:experiments:draft']});
+  app=await createApplication({sessionKey:key,prisma:db,agentTokens:tokens,projectRegistry:new ProjectRegistryService(new PrismaProjectRegistryStore(db))} as any);const server=app.getHttpAdapter().getInstance();
+  const payload={requestId:randomUUID(),rawHypothesis:'Exact customer-authored hypothesis <script>inert</script>',preferredSlug:'synthetic-'+randomUUID(),pageCopy:{title:'Customer title',headline:'Specific customer headline',subheadline:'Exact ungenerated words <script>inert</script>',heroCtaText:'Register interest'},surveyQuestions:[{id:'need',type:'text',text:'What is your own need?'}]},post=(body:any=payload,t=writer.token,suffix='')=>server.inject({method:'POST',url:'/agent/project/experiment-drafts'+suffix,headers:{authorization:'Bearer '+t},payload:body});
+  const parallel=await Promise.all(Array.from({length:8},()=>post()));expect(parallel.map(r=>r.statusCode).sort()).toEqual([200,200,200,200,200,200,200,201]);const saved=parallel[0].json();expect(saved.projectId).toBe(p);expect(saved.pageCopy).toEqual(payload.pageCopy);expect(saved.surveyQuestions).toEqual(payload.surveyQuestions);expect(saved.status).toBe('draft');expect(saved.pageUrl).toBeUndefined();expect(parallel[0].headers['cache-control']).toBe('no-store');
+  const exp=await db.validationExperiment.findUnique({where:{id:saved.experimentId}});expect(exp?.hypothesis).toBe(payload.rawHypothesis);expect(exp?.icpSpec).toBeNull();expect(exp?.sequenceSubject).toBeNull();expect(exp?.sequenceBody).toBeNull();expect(exp?.projectId).toBe(p);expect(await db.validationExperiment.count({where:{workspaceId:ws}})).toBe(1);
+  expect((await post({...payload,rawHypothesis:'Different repeated hypothesis'})).statusCode).toBe(409);
+  for(const extra of [{projectId:q},{workspaceId:other},{status:'published'},{published:true},{recipients:[]},{pageCopy:{...payload.pageCopy,html:'not accepted'}}])expect((await post({...payload,...extra})).statusCode).toBe(400);
+  expect((await post(payload,writer.token,'?projectId='+q)).statusCode).toBe(400);
+  for(const t of [reader.token,unbound.token,issueSession({workspaceId:ws,userId:uid,role:'admin'},key,3600).token])expect((await post(payload,t)).statusCode).toBe(403);expect((await post(payload,wrong.token)).statusCode).toBe(404);
+  const service=new ProjectExperimentDraftService(db);
+  await db.smokeTestPage.updateMany({where:{experimentId:saved.experimentId},data:{headline:'Human saved new headline',status:'published'}});const replay=(await post()).json();expect(replay.status).toBe('published');expect(replay.pageCopy.headline).toBe('Human saved new headline');expect(replay.replayed).toBe(true);
+  for(const [method,path,body]of [['PUT','/validator/experiments/'+saved.experimentId+'/publish',{published:true}],['POST','/validator/generate',{rawHypothesis:payload.rawHypothesis}],['POST','/workspace/campaigns',{}],['POST','/outbound/release',{}]] as const){const r=await server.inject({method,url:path,headers:{authorization:'Bearer '+writer.token},payload:body});expect([403,404]).toContain(r.statusCode);}
+  const race=await Promise.allSettled([service.create(ws,p,uid,{...payload,requestId:randomUUID(),preferredSlug:'collision-'+p}),service.create(ws,q,uid,{...payload,requestId:randomUUID(),preferredSlug:'collision-'+p})]);expect(race.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(race.filter(r=>r.status==='rejected')).toHaveLength(1);
+  await db.user.update({where:{id:uid},data:{role:'read_only'}});expect((await post()).statusCode).toBe(403);await expect(service.create(ws,p,uid,payload as any)).rejects.toBeInstanceOf(ExperimentDraftDenied);await db.user.update({where:{id:uid},data:{role:'admin'}});
+  await db.validationExperiment.delete({where:{id:saved.experimentId}});expect((await post()).statusCode).toBe(409);expect(await db.validationExperiment.count({where:{workspaceId:ws}})).toBe(1);expect((await db.$queryRawUnsafe<any[]>('SELECT * FROM experiment_create_receipts WHERE workspace_id=$1::uuid',ws)).length).toBe(2);
+  for(const table of ['waitlist_leads','campaigns','outbound_jobs']){const r:any[]=await db.$queryRawUnsafe(table==='waitlist_leads'?'SELECT count(*)::int AS n FROM waitlist_leads l JOIN smoke_test_pages p ON p.id=l.page_id JOIN validation_experiments e ON e.id=p.experiment_id WHERE e.workspace_id=$1::uuid':'SELECT count(*)::int AS n FROM '+table+' WHERE workspace_id=$1::uuid',ws);expect(r[0].n).toBe(0);}
+  expect((await db.$queryRawUnsafe<any[]>('SELECT id FROM smoke_test_pages WHERE experiment_id IN (SELECT id FROM validation_experiments WHERE workspace_id=$1::uuid) AND visitors<>0',ws))).toEqual([]);
+  const transaction=db.$transaction.bind(db);(db as any).$transaction=async()=>{throw Error('Synthetic private SQL diagnostics');};const uncertain=await post({...payload,requestId:randomUUID(),preferredSlug:'failure-'+p});expect(uncertain.statusCode).toBe(503);expect(uncertain.body).not.toContain('diagnostics');(db as any).$transaction=transaction;
+  await tokens.revoke(ws,writer.id);expect((await post()).statusCode).toBe(401);
+  expect((await server.inject({method:'POST',url:'/agent-tokens',headers:{authorization:'Bearer '+issueSession({workspaceId:ws,userId:uid,role:'admin'},key,3600).token},payload:{name:'No project binding',scopes:['project:experiments:draft']}})).statusCode).toBe(400);
+ }finally{await app?.close();await db.workspace.deleteMany({where:{id:{in:[ws,other]}}});await db.$disconnect();}
+},30000);

@@ -10,13 +10,21 @@ import { Badge, Button } from '@leadloom/ui';
 import { ShieldAlert, RefreshCw, AlertCircle } from 'lucide-react';
 import { OfflineBanner } from '../../components/feedback';
 
+import { isPlatformAdmin } from '../../lib/platform-admin';
+
 export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [identity, setIdentity] = useState<ShellIdentity>({ email: null, workspaceId: null, role: null });
+  const [identity, setIdentity] = useState<ShellIdentity>({
+    name: null,
+    email: null,
+    workspaceId: null,
+    role: null,
+    isPlatformAdmin: false,
+  });
   const [engineState, setEngineState] = useState<{
     status: 'checking' | 'verified' | 'provisioning' | 'error';
     error?: string;
@@ -30,7 +38,7 @@ export default function AppLayout({
         let me = await fetchAuthMe();
         if (!mounted) return;
         if (me.data?.userId) {
-          setIdentity((i) => ({ ...i, workspaceId: me.data!.workspaceId, role: me.data!.role }));
+          setIdentity((i) => ({ ...i, workspaceId: me.data!.workspaceId, role: me.data!.role, name: me.data!.name ?? i.name }));
           setEngineState({ status: 'verified' });
           return;
         }
@@ -51,7 +59,7 @@ export default function AppLayout({
           me = await fetchAuthMe();
           if (!mounted) return;
           if (me.data?.userId) {
-            setIdentity((i) => ({ ...i, workspaceId: me.data!.workspaceId, role: me.data!.role }));
+            setIdentity((i) => ({ ...i, workspaceId: me.data!.workspaceId, role: me.data!.role, name: me.data!.name ?? i.name }));
             setEngineState({ status: 'verified' });
             return;
           }
@@ -76,7 +84,16 @@ export default function AppLayout({
     checkEngineIdentity();
     fetch('/api/auth/session')
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (mounted && j?.user?.email) setIdentity((i) => ({ ...i, email: j.user.email })); })
+      .then((j) => {
+        if (mounted && j?.user?.email) {
+          setIdentity((i) => ({
+            ...i,
+            name: i.name ?? j.user.name ?? null,
+            email: j.user.email,
+            isPlatformAdmin: isPlatformAdmin(j.user),
+          }));
+        }
+      })
       .catch(() => {});
     return () => {
       mounted = false;
@@ -124,7 +141,7 @@ export default function AppLayout({
   }
 
   return (
-    <IdentityProvider value={identity}>
+    <IdentityProvider value={{ ...identity, updateName: name => setIdentity(i => ({ ...i, name })) }}>
     <div className="flex h-screen bg-canvas overflow-hidden font-sans">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex">

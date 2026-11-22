@@ -64,6 +64,7 @@ export function LoginForm({ methods }: { methods: AuthMethods }) {
       if (res.error) {
         // Check for unverified email state per engine contract
         if (
+          res.code === 'email_not_verified' ||
           res.error === 'email_not_verified' ||
           res.error.toLowerCase().includes('not verified')
         ) {

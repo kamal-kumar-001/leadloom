@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../auth';
+import { currentWebAccess } from '../../../../lib/current-web-access';
 import {
   HnAlgoliaAdapter,
   PRODUCT_PROFILES,
@@ -17,9 +17,9 @@ import { acquireInFlight, checkRateLimit, releaseInFlight } from '../../../../li
  * Results are returned and forgotten; nothing is stored.
  */
 export async function GET(request: Request) {
-  const session = await auth();
-  const email = session?.user?.email;
-  if (!email) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  const access = await currentWebAccess(request);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status, headers: { 'Cache-Control': 'no-store' } });
+  const email = access.email;
 
   const rl = checkRateLimit(`live-hn:${email}`, 6, 60_000);
   if (!rl.allowed) {
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
             : null,
       };
     });
-    return NextResponse.json({ rows, fetchedAt: new Date().toISOString() });
+    return NextResponse.json({ rows, fetchedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'HN fetch failed.' },

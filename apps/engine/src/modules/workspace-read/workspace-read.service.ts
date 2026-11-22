@@ -1,8 +1,10 @@
+import {capturedTableSchemaRevision} from '../validator/captured-table-schema';
 /**
  * Read-only, tenant-scoped views over data that already exists in the database.
  * Every query is filtered by the workspace id taken from the verified session.
- * Selects are explicit allow-lists: mailbox token/DEK columns and campaign step
- * bodies are never read here. No writes, no derived or invented numbers.
+ * Selects are explicit allow-lists: mailbox token/DEK columns are never read.
+ * Campaign lists include their configured draft steps for the owner workbench.
+ * No writes, no invented numbers.
  */
 export interface WorkspaceReadDb {
   table: { count(a: any): Promise<number>; findMany(a: any): Promise<any[]>; findFirst(a: any): Promise<any> };
@@ -36,35 +38,39 @@ export class WorkspaceReadService {
     return { tables, mailboxes, campaigns, suppressions, experiments, providerKeys };
   }
 
-  listTables(workspaceId: string) {
+  listTables(workspaceId: string,projectId?:string) {
     return this.db.table.findMany({
-      where: { workspaceId },
-      select: { id: true, name: true, rowCount: true, createdAt: true, updatedAt: true },
+      where: { workspaceId,...projectId?{projectId}:{} },
+      select: { id: true, projectId:true,name: true, rowCount: true, createdAt: true, updatedAt: true },
       orderBy: { createdAt: 'desc' },
       take: LIMIT,
     });
   }
+
+  async tableSchema(workspaceId:string,tableId:string){const table=await this.db.table.findFirst({where:{id:tableId,workspaceId},select:{id:true,name:true}});if(!table)return null;const columns=await this.db.column.findMany({where:{tableId},orderBy:[{orderIndex:'asc'},{id:'asc'}],select:{id:true,name:true,type:true},take:101});if(columns.length>100)throw Error('Table schema exceeds preview limit');return{table,columns,revision:capturedTableSchemaRevision(columns)};}
 
   /**
    * Rows of one table with their cell values keyed by column name. The table
    * must belong to the session workspace; otherwise this returns null (404 at
    * the route) - never another tenant's data.
    */
-  async listTableRows(workspaceId: string, tableId: string) {
-    const table = await this.db.table.findFirst({ where: { id: tableId, workspaceId } });
+  async listTableRows(workspaceId: string, tableId: string, offset = 0,projectId?:string) {
+    const table = await this.db.table.findFirst({ where: { id: tableId, workspaceId,...projectId?{projectId}:{} } });
     if (!table) return null;
-    const [columns, rows] = await Promise.all([
+    const [columns, foundRows] = await Promise.all([
       this.db.column.findMany({ where: { tableId }, orderBy: { orderIndex: 'asc' } }),
-      this.db.row.findMany({ where: { tableId }, orderBy: { orderIndex: 'asc' }, take: LIMIT }),
+      this.db.row.findMany({ where: { tableId }, orderBy: [{ orderIndex: 'asc' }, { id: 'asc' }], skip: offset, take: LIMIT + 1 }),
     ]);
+    const rows=foundRows.slice(0,LIMIT);
     const cells = await this.db.cell.findMany({ where: { tableId, rowId: { in: rows.map((r: any) => r.id) } } });
-    const nameOf: Record<string, string> = {};
+    const nameOf: Record<string, string> = Object.create(null);
     for (const c of columns) nameOf[c.id] = c.name;
     return {
-      table: { id: table.id, name: table.name, rowCount: table.rowCount },
+      table: { id: table.id, projectId:table.projectId??null,name: table.name, rowCount: table.rowCount },
+      offset, limit: LIMIT, nextOffset: foundRows.length>LIMIT?offset+rows.length:null,
       columns: columns.map((c: any) => ({ id: c.id, name: c.name, type: c.type })),
       rows: rows.map((r: any) => {
-        const values: Record<string, unknown> = {};
+        const values: Record<string, unknown> = Object.create(null);
         for (const cell of cells.filter((c: any) => c.rowId === r.id)) {
           const name = nameOf[cell.columnId];
           if (name) values[name] = cell.value;
@@ -90,14 +96,15 @@ export class WorkspaceReadService {
 
   /**
    * Campaigns with real per-campaign send status, aggregated from the outbound
-   * job table and the G10 reply store. Counts only: no recipient addresses,
-   * message ids or step bodies. A campaign with no jobs reports zeroes.
+   * job table and the G10 reply store. Draft steps are included; aggregated
+   * statistics include no recipient addresses or provider message IDs.
+   * A campaign with no jobs reports zeroes.
    */
-  async listCampaigns(workspaceId: string) {
+  async listCampaigns(workspaceId: string, projectId?: string | null) {
     const [campaigns, jobGroups, replyGroups] = await Promise.all([
       this.db.campaign.findMany({
-        where: { workspaceId },
-        select: { id: true, name: true, status: true, steps: true, dailyLimitTotal: true, scheduleTimezone: true, createdAt: true, updatedAt: true },
+        where: { workspaceId, ...(projectId!==undefined?{projectId}:{}) },
+        select: { id: true, projectId: true, name: true, status: true, steps: true, dailyLimitTotal: true, scheduleTimezone: true, createdAt: true, updatedAt: true },
         orderBy: { createdAt: 'desc' },
         take: LIMIT,
       }),
@@ -156,10 +163,10 @@ export class WorkspaceReadService {
    * route) - never another tenant's rows. Job metadata only: no step
    * bodies, provider message ids, idempotency keys or recipient hashes.
    */
-  async listCampaignJobs(workspaceId: string, campaignId: string) {
+  async listCampaignJobs(workspaceId: string, campaignId: string, projectId?: string) {
     const campaign = await this.db.campaign.findFirst({
-      where: { id: campaignId, workspaceId },
-      select: { id: true, name: true, status: true },
+      where: { id: campaignId, workspaceId, ...(projectId?{projectId}:{}) },
+      select: { id: true, projectId: true, name: true, status: true },
     });
     if (!campaign) return null;
     const jobs = await this.db.outboundJob.findMany({
@@ -249,11 +256,11 @@ export class WorkspaceReadService {
   }
 
   /** Experiments: status metadata plus a truncated hypothesis. No ICP spec, sequence copy or page content. */
-  async listExperiments(workspaceId: string) {
+  async listExperiments(workspaceId: string, projectId?: string | null) {
     const rows = await this.db.validationExperiment.findMany({
-      where: { workspaceId },
+      where: { workspaceId, ...(projectId!==undefined?{projectId}:{}) },
       select: {
-        id: true, hypothesis: true, verdict: true, verdictScore: true, createdAt: true,
+        id: true, projectId: true, hypothesis: true, verdict: true, verdictScore: true, createdAt: true,
         smokeTestPages: { select: { slug: true, visitors: true, status: true, _count: { select: { waitlistLeads: true } } }, take: 1 },
       },
       orderBy: { createdAt: 'desc' },
@@ -261,6 +268,7 @@ export class WorkspaceReadService {
     });
     return rows.map((r: any) => ({
       id: r.id,
+      projectId: r.projectId ?? null,
       hypothesis: String(r.hypothesis).slice(0, 140),
       verdict: r.verdict,
       verdictScore: r.verdictScore,

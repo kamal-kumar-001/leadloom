@@ -1,0 +1,14 @@
+import {it,expect,vi,beforeEach} from 'vitest';
+const f=vi.hoisted(()=>({auth:vi.fn(),getToken:vi.fn(),call:vi.fn(),mint:vi.fn()}));
+vi.mock('../../../auth',()=>({auth:f.auth}));
+vi.mock('next-auth/jwt',()=>({getToken:f.getToken}));
+vi.mock('../../../lib/engine-server',()=>({engineCall:f.call,mintBridgeToken:f.mint}));
+import {PATCH} from './route';
+const req=(body:any={name:'New Name'},origin='https://fixture.invalid')=>new Request('https://fixture.invalid/api/profile',{method:'PATCH',headers:{host:'fixture.invalid',origin,'content-type':'application/json'},body:JSON.stringify(body)});
+beforeEach(()=>{vi.clearAllMocks();process.env.AUTH_SECRET='synthetic-profile-test-secret-at-least32';f.auth.mockResolvedValue({user:{email:'owner@example.invalid',idp:'credentials'}});f.getToken.mockResolvedValue({engineToken:'synthetic-engine-token',engineExp:Date.now()/1000+3600});f.call.mockResolvedValue(Response.json({ok:true,name:'New Name'}));f.mint.mockReturnValue('synthetic-provider-token');});
+it('blocks cross-origin requests before auth or persistence',async()=>{expect((await PATCH(req({},'https://foreign.invalid'))).status).toBe(403);expect(f.call).not.toHaveBeenCalled();});
+it('requires identity and nonexpired token',async()=>{f.auth.mockResolvedValue(null);expect((await PATCH(req())).status).toBe(401);f.auth.mockResolvedValue({user:{email:'owner@example.invalid',idp:'credentials'}});f.getToken.mockResolvedValue({engineToken:'old',engineExp:1});expect((await PATCH(req())).status).toBe(401);expect(f.call).not.toHaveBeenCalled();});
+it('forwards credentials only server side and requires stored name confirmation',async()=>{expect((await PATCH(req())).status).toBe(200);expect(f.call.mock.calls[0][1].headers.Authorization).toBe('Bearer synthetic-engine-token');for(const data of [{ok:false},{ok:true,name:'Wrong Name'},{}]){f.call.mockResolvedValue(Response.json(data));expect((await PATCH(req())).status).toBe(502);}});
+it('preserves provider original-signin proof',async()=>{const user={email:'owner@example.invalid',idp:'google',email_verified:true,authTime:1700000000};f.auth.mockResolvedValue({user});expect((await PATCH(req())).status).toBe(200);expect(f.mint).toHaveBeenCalledWith(user);});
+it('does not acknowledge rejection or network failure',async()=>{for(const status of [401,409,503]){f.call.mockResolvedValue(Response.json({error:'Rejected'},{status}));expect((await PATCH(req())).status).toBe(status===503?502:status);}f.call.mockRejectedValue(Error('fixture'));expect((await PATCH(req())).status).toBe(503);});
+it('rejects invalid names before writes',async()=>{for(const name of ['',null,'a'.repeat(256)])expect((await PATCH(req({name}))).status).toBe(400);expect(f.call).not.toHaveBeenCalled();});

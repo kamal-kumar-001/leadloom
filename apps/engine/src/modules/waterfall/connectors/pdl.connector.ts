@@ -109,7 +109,7 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
           company: input.company,
           website: input.website,
         }),
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -203,7 +203,7 @@ export class PdlConnector implements Connector<PdlInput, PdlOutput> {
           message: redactSecrets(err instanceof Error ? err.message : 'Unknown People Data Labs network error', [
             ctx.apiKey,
           ]),
-          retryable: true,
+          retryable: false,
         },
       };
     }

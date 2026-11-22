@@ -72,17 +72,20 @@ describe('outbound approval routes (G9)', () => {
       expect(json.sendingEnabled).toBe(false);
       expect(outbound.listPendingApprovals).toHaveBeenCalledWith(workspaceId, undefined);
 
-      // 4. POST /outbound/approvals/approve batch
+      // 4. Explicit bounded reviewed set, never unseen approve-all
+      const reviewedJobId=randomUUID(),revision='a'.repeat(64);
+      for(const payload of [{all:true},{jobIds:[reviewedJobId]},{jobIds:[reviewedJobId],expectedRevisions:{}},{jobIds:[reviewedJobId],expectedRevisions:{[reviewedJobId]:'invalid'}}])expect((await server.inject({method:'POST',url:'/outbound/approvals/approve',headers:{authorization:'Bearer '+token()},payload})).statusCode).toBe(400);
+      expect(outbound.approve).not.toHaveBeenCalled();
       const approveRes = await server.inject({
         method: 'POST',
         url: '/outbound/approvals/approve',
         headers: { authorization: 'Bearer ' + token() },
-        payload: { all: true },
+        payload: { jobIds:[reviewedJobId],expectedRevisions:{[reviewedJobId]:revision} },
       });
       expect(approveRes.statusCode).toBe(200);
       expect(approveRes.json().approvedCount).toBe(1);
       expect(approveRes.json().sendingEnabled).toBe(false);
-      expect(outbound.approve).toHaveBeenCalledWith(workspaceId, { all: true });
+      expect(outbound.approve).toHaveBeenCalledWith(workspaceId, { jobIds:[reviewedJobId],expectedRevisions:{[reviewedJobId]:revision} });
 
       // 5. POST /outbound/approvals/reject batch
       const rejectRes = await server.inject({
@@ -97,10 +100,12 @@ describe('outbound approval routes (G9)', () => {
 
       // 6. Single item approve & reject
       const testJobId = randomUUID();
+      expect((await server.inject({method:'POST',url:`/outbound/approvals/${testJobId}/approve`,headers:{authorization:'Bearer '+token()}})).statusCode).toBe(400);
       const singleApprove = await server.inject({
         method: 'POST',
         url: `/outbound/approvals/${testJobId}/approve`,
         headers: { authorization: 'Bearer ' + token() },
+        payload:{expectedRevision:revision},
       });
       expect(singleApprove.statusCode).toBe(200);
       expect(singleApprove.json().sendingEnabled).toBe(false);

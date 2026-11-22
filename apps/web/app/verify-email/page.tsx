@@ -8,6 +8,7 @@ import {
   AuthCard,
   AuthLayout,
   OtpInput,
+  PasswordInput,
   ResendCountdown,
   AuthAlert,
   callAuthFlow,
@@ -22,6 +23,7 @@ function VerifyEmailForm() {
 
   const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -49,11 +51,17 @@ function VerifyEmailForm() {
       return;
     }
 
+    if (password.length < 10 || password.length > 256) {
+      setErrorMessage('Enter the password you want to use, between 10 and 256 characters');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await callAuthFlow('verify-email', {
         email: cleanEmail,
         code: cleanCode,
+        password,
       });
 
       if (!res.ok) {
@@ -132,10 +140,28 @@ function VerifyEmailForm() {
           />
         </div>
 
+        <div className="space-y-2">
+          <PasswordInput
+            id="verify-password"
+            label="Password to activate"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={isSubmitting}
+            minLength={10}
+            maxLength={256}
+            required
+            aria-describedby="verify-password-hint"
+          />
+          <p id="verify-password-hint" className="text-[11px] text-text-secondary">
+            Enter the password you want to sign in with. The code proves your email, and this password becomes your sign-in credential.
+          </p>
+        </div>
+
         <Button
           type="submit"
           variant="primary"
-          disabled={isSubmitting || code.length !== 6}
+          disabled={isSubmitting || code.length !== 6 || password.length < 10}
           className="w-full justify-center py-2.5 text-xs font-medium h-11 transition-colors disabled:opacity-50"
         >
           {isSubmitting ? 'Verifying...' : 'Verify Email & Continue'}

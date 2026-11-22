@@ -3,6 +3,7 @@ import { getToken } from 'next-auth/jwt';
 import { auth } from '../../../../auth';
 import { engineCall, mintBridgeToken } from '../../../../lib/engine-server';
 import { trustedClientIp } from '../../../../lib/client-ip';
+import { isPlatformAdmin } from '../../../../lib/platform-admin';
 
 // Authenticated same-origin proxy to the engine. The browser never sees or sends an engine token:
 // this route attaches it from the server-side session. Fail closed on every doubt.
@@ -27,8 +28,15 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
   }
 
   const session = await auth();
-  const user = session?.user as (Record<string, unknown> & { email?: string | null }) | undefined;
+  const user = session?.user as (Record<string, unknown> & { email?: string | null; email_verified?: boolean }) | undefined;
   if (!user?.email) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+
+  // Strict server-side platform operator guard for administrative routes
+  if (path[0] === 'admin' || path[0] === 'tenants' || path[0] === 'audit') {
+    if (!isPlatformAdmin(user)) {
+      return NextResponse.json({ error: 'Platform admin privileges required' }, { status: 403 });
+    }
+  }
 
   // Credentials sessions carry an engine session token server-side; provider sessions get a bridge token.
   let token: string | null = null;
@@ -44,6 +52,7 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
       email: user.email,
       idp: user.idp as string | undefined,
       email_verified: user.email_verified as boolean | undefined,
+      authTime: user.authTime as number | undefined,
     });
   }
   if (!token) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"019b7e2a-demo-thread"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"{\"summary\":\"Demo research summary\",\"gaps\":[\"no offline mode\"],\"competitors\":[{\"name\":\"ToolA\",\"weakness\":\"pricey\"}],\"open_questions\":[\"Which niche first?\"],\"sources\":[\"https://example.com/market\"]}"}}
+{"type":"turn.completed","usage":{"input_tokens":24763,"cached_input_tokens":24448,"output_tokens":122,"reasoning_output_tokens":0}}

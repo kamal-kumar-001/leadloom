@@ -1,161 +1,21 @@
 'use client';
-
 import React from 'react';
 import Link from 'next/link';
-import { Card, Button, Badge } from '@leadloom/ui';
-import { Check, ArrowRight, ShieldCheck } from 'lucide-react';
-
-interface ChecklistStep {
-  id: string;
-  title: string;
-  description: string;
-  href: string;
-  actionText: string;
-  isComplete: boolean;
-  /** false when the engine has no endpoint that can prove this step, so no status is claimed. */
-  tracked: boolean;
-}
-
-interface GettingStartedChecklistProps {
-  hasProviderKeys: boolean;
-  hasMailboxes?: boolean;
-  hasTables?: boolean;
-}
-
-export function GettingStartedChecklist({
-  hasProviderKeys,
-  hasMailboxes = false,
-  hasTables = false,
-}: GettingStartedChecklistProps) {
-  const steps: ChecklistStep[] = [
-    {
-      id: 'keys',
-      title: 'Add a provider key',
-      description: 'Connect your Apollo, Hunter, or Dropcontact API key to enable waterfall enrichment at wholesale cost.',
-      href: '/app/settings',
-      actionText: 'Open settings',
-      isComplete: hasProviderKeys,
-      tracked: true,
-    },
-    {
-      id: 'mailboxes',
-      title: 'Add a mailbox',
-      description: 'Add a sending mailbox to this workspace. Adding one does not check its DNS or deliverability.',
-      href: '/app/mailboxes',
-      actionText: 'Open mailboxes',
-      isComplete: hasMailboxes,
-      tracked: true,
-    },
-    {
-      id: 'tables',
-      title: 'Create a table',
-      description: 'Import target prospect accounts into the high-density virtual grid loom.',
-      href: '/app/tables',
-      actionText: 'Open tables',
-      isComplete: hasTables,
-      tracked: true,
-    },
-  ];
-
-  const trackedSteps = steps.filter((s) => s.tracked);
-  const completedCount = trackedSteps.filter((s) => s.isComplete).length;
-  const progressPercent = Math.round((completedCount / trackedSteps.length) * 100);
-
-  return (
-    <Card className="p-5 sm:p-6 space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-semibold text-text-primary tracking-tight">
-              Get Started Checklist
-            </h2>
-            <Badge variant="subtle" className="text-[11px] font-mono">
-              {completedCount} of {trackedSteps.length} done
-            </Badge>
-          </div>
-          <p className="text-xs text-text-secondary mt-1">
-            Only steps the workspace can verify are counted. Others are not tracked yet.
-          </p>
-        </div>
-        <div className="w-full sm:w-36 space-y-1.5 self-center">
-          <div className="flex justify-between text-[10px] font-mono text-text-muted">
-            <span>Progress</span>
-            <span>{progressPercent}%</span>
-          </div>
-          <div className="w-full bg-canvas-elevated h-1.5 rounded-full overflow-hidden border border-border-subtle">
-            <div
-              className="bg-brand-loom h-full transition-all duration-500 rounded-full"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="divide-y divide-border-subtle border-t border-border-subtle">
-        {steps.map((step, idx) => (
-          <div
-            key={step.id}
-            className="py-3.5 first:pt-4 last:pb-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
-          >
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="mt-0.5">
-                {step.isComplete ? (
-                  <div
-                    aria-label="Completed"
-                    className="w-5 h-5 rounded-full bg-signal-verified/15 text-signal-verified border border-signal-verified/40 flex items-center justify-center shrink-0"
-                  >
-                    <Check className="w-3 h-3 stroke-[3]" />
-                  </div>
-                ) : (
-                  <div
-                    aria-label="Pending"
-                    className="w-5 h-5 rounded-full border border-border-muted bg-canvas-elevated flex items-center justify-center shrink-0 text-text-muted text-[10px] font-mono"
-                  >
-                    {idx + 1}
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-sm font-medium ${
-                      step.isComplete ? 'text-text-primary' : 'text-text-primary'
-                    }`}
-                  >
-                    {step.title}
-                  </span>
-                  {!step.tracked && (
-                    <Badge variant="muted" className="text-[10px] py-0 px-1.5 font-mono">
-                      Not tracked yet
-                    </Badge>
-                  )}
-                  {step.isComplete && (
-                    <Badge variant="verified" className="text-[10px] py-0 px-1.5 font-mono">
-                      Done
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-xs text-text-muted mt-0.5 max-w-xl leading-relaxed">
-                  {step.description}
-                </p>
-              </div>
-            </div>
-
-            <div className="self-end sm:self-center shrink-0">
-              <Link href={step.href}>
-                <Button
-                  variant={step.isComplete ? 'outline' : 'primary'}
-                  size="sm"
-                  className="text-xs"
-                >
-                  <span>{step.actionText}</span>
-                  <ArrowRight className="w-3 h-3" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
+import {Card,Button,Badge} from '@leadloom/ui';
+import {Check,ArrowRight} from 'lucide-react';
+import {setupRecordProgress,type RecordStatus} from '../../lib/dashboard-record-status';
+interface Props{projectStatus:RecordStatus;providerKeyStatus:RecordStatus;mailboxStatus:RecordStatus;tableStatus:RecordStatus;}
+export function GettingStartedChecklist({projectStatus,providerKeyStatus,mailboxStatus,tableStatus}:Props){
+ const steps=[
+  {id:'projects',title:'Create a project',description:'Save a project for persistent context. Issue and review a scoped agent token separately on Projects. This check confirms only a project record, not agent access.',href:'/app/projects',action:'Open projects',status:projectStatus},
+  {id:'keys',title:'Add a provider key, if needed',description:'A saved key does not verify a connection, confirm credits or current pricing, or enable execution.',href:'/app/settings',action:'Open settings',status:providerKeyStatus},
+  {id:'mailboxes',title:'Add a mailbox, if needed',description:'A stored mailbox does not confirm connection, DNS, deliverability or permission to send.',href:'/app/mailboxes',action:'Open mailboxes',status:mailboxStatus},
+  {id:'tables',title:'Create a table, if needed',description:'Import into a saved workspace table. A sample canvas is not persistent.',href:'/app/tables',action:'Open tables',status:tableStatus},
+ ];
+ const progress=setupRecordProgress(steps.map(s=>s.status));
+ const labels:Record<RecordStatus,string>={loading:'Loading',unavailable:'Unavailable',present:'Saved record',absent:'No saved record'};
+ return <Card className="p-5 sm:p-6 space-y-5" data-testid="workspace-record-checklist">
+  <header className="space-y-2"><h2 className="text-base font-semibold text-text-primary">Workspace setup records</h2><p className="text-xs text-text-secondary">Stored records, not a readiness score. Provider keys, mailboxes and tables are optional for projects that do not need them.</p><p data-testid="setup-record-progress" className="text-xs text-text-muted">{progress.present} of {progress.total} record types present.{progress.unknown>0?' '+progress.unknown+' unconfirmed; no completion percentage.':' All record checks loaded.'}</p>{progress.percent!==null&&<div role="progressbar" aria-label="Stored setup record types" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100} className="h-1.5 bg-canvas-elevated rounded-full overflow-hidden"><div className="h-full bg-brand-loom" style={{width:progress.percent+'%'}}/></div>}</header>
+  <div className="divide-y divide-border-subtle border-t border-border-subtle">{steps.map(step=><div key={step.id} data-testid={'setup-'+step.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-medium text-text-primary">{step.title}</span><Badge variant={step.status==='present'?'verified':'subtle'} className="text-[10px]">{step.status==='present'&&<Check className="w-3 h-3 inline mr-1"/>}{labels[step.status]}</Badge></div><p className="text-xs text-text-muted mt-1 max-w-xl leading-relaxed">{step.description}</p></div><Link href={step.href} className="self-end sm:self-center shrink-0"><Button variant="outline" size="sm" className="text-xs gap-1.5">{step.action}<ArrowRight className="w-3 h-3"/></Button></Link></div>)}</div>
+ </Card>;
 }

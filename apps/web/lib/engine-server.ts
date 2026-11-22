@@ -12,7 +12,7 @@ const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url')
  * Mint a short-lived bridge token. Only for a session whose email was proven by Google or GitHub.
  * Returns null when the session is not eligible or the secret is missing/short (fail closed).
  */
-export function mintBridgeToken(user: { email?: string | null; idp?: string; email_verified?: boolean }): string | null {
+export function mintBridgeToken(user: { email?: string | null; idp?: string; email_verified?: boolean; authTime?: number }): string | null {
   if (!user.email || (user.idp !== 'google' && user.idp !== 'github') || user.email_verified !== true) return null;
   const raw = process.env.LEADLOOM_NEXTAUTH_BRIDGE_SECRET;
   if (!raw) return null;
@@ -27,6 +27,7 @@ export function mintBridgeToken(user: { email?: string | null; idp?: string; ema
     email_verified: true,
     idp: user.idp,
     iat: now,
+    ...(Number.isSafeInteger(user.authTime) && user.authTime! > 0 ? { auth_time: user.authTime } : {}),
     exp: now + 900,
   });
   const sig = createHmac('sha256', key).update(`${header}.${payload}`).digest('base64url');

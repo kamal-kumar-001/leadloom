@@ -11,12 +11,9 @@ export interface TierEstimateConfig {
   estimatedHitRate: number;
 }
 
+export class PreFlightUnavailableError extends Error {readonly statusCode=503;constructor(){super('Live waterfall pricing and execution estimates are unavailable. No provider quote or completion time is established.');}}
+
 export class PreFlightEstimatorService {
-  private defaultTiers: TierEstimateConfig[] = [
-    { tierIndex: 1, provider: 'apollo', unitCostUSD: 0.001, estimatedHitRate: 0.58 },
-    { tierIndex: 2, provider: 'hunter', unitCostUSD: 0.003, estimatedHitRate: 0.28 },
-    { tierIndex: 3, provider: 'dropcontact', unitCostUSD: 0.02, estimatedHitRate: 0.10 },
-  ];
 
   /**
    * Computes early-exit cumulative cost estimation for requested batch of rows.
@@ -25,8 +22,11 @@ export class PreFlightEstimatorService {
     request: PreFlightEstimateRequest,
     customTiers?: TierEstimateConfig[]
   ): PreFlightEstimateResponse {
-    const totalRows = Math.max(1, request.rowIds.length);
-    const tiers = customTiers ?? this.defaultTiers;
+    if(!customTiers?.length)throw new PreFlightUnavailableError();
+    const totalRows = request.rowIds.length;
+    if(totalRows===0)throw new Error('Select at least one row');
+    const tiers = customTiers;
+    for(const tier of tiers)if(!Number.isFinite(tier.unitCostUSD)||tier.unitCostUSD<0||!Number.isFinite(tier.estimatedHitRate)||tier.estimatedHitRate<0||tier.estimatedHitRate>1)throw new Error('Invalid supplied simulation assumptions');
 
     // Cost only. No time estimate is emitted: there is no measured latency
     // model, and an invented one would read as a promise. Unit costs and hit
@@ -57,6 +57,7 @@ export class PreFlightEstimatorService {
         unitCostUSD: t.unitCostUSD,
         estimatedHitRate: t.estimatedHitRate,
       })),
+      guaranteeNotice: 'Simulation from caller-supplied assumptions only. Not a provider quote, measured hit rate, execution-time promise or spending authorization.',
     };
   }
 }

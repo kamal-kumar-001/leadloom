@@ -2,6 +2,7 @@ import {
   GenerateValidationRequestSchema,
   SubmitWaitlistLeadRequestSchema,
   ValidationScorecardResponse,
+  EditDraftPageCopy,
 } from '@leadloom/contracts';
 import { ValidatorService, PublicSmokePage } from './validator.service';
 
@@ -35,9 +36,13 @@ export class ValidatorController {
     return this.validatorService.getOwnerPage(experimentId, workspaceId);
   }
 
+  public async editDraftCopy(experimentId:string,workspaceId:string,body:EditDraftPageCopy){
+    return this.validatorService.editDraftCopy(experimentId,workspaceId,body);
+  }
+
   /** Owner-only publication boundary: draft -> published and back. */
-  public async setPublishStatus(experimentId: string, workspaceId: string, published: boolean): Promise<{ experimentId: string; slug: string; status: string }> {
-    return this.validatorService.setPublishStatus(experimentId, workspaceId, published);
+  public async setPublishStatus(experimentId: string, workspaceId: string, published: boolean,expectedRevision?:string): Promise<{ experimentId: string; slug: string; status: string }> {
+    return this.validatorService.setPublishStatus(experimentId, workspaceId, published,expectedRevision);
   }
 
   public async getScorecard(experimentId: string, workspaceId?: string): Promise<ValidationScorecardResponse> {
@@ -56,4 +61,10 @@ export class ValidatorController {
   public async getPublicPage(slug: string): Promise<PublicSmokePage | undefined> {
     return this.validatorService.getPublicPage(slug);
   }
+
+  /** Owner retrieval of captured waitlist leads for outreach */
+  public async getLeads(experimentId: string, workspaceId: string) {
+    return this.validatorService.getLeads(experimentId, workspaceId);
+  }
 }
+

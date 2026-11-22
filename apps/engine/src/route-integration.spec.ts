@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect,vi } from 'vitest';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { createApplication } from './main';
 import { WaterfallController } from './modules/waterfall/waterfall.controller';
@@ -52,14 +52,14 @@ describe('waterfall/validator route integration', () => {
 
       const auth = { authorization: 'Bearer ' + token() };
       const preFlight = await server.inject({ method: 'POST', url: '/waterfall/pre-flight', headers: auth, payload: body });
-      expect(preFlight.statusCode).toBe(200);
-      expect(preFlight.json().totalRows).toBe(2);
-      expect(preFlight.json().estimatedCostUSD).toBeGreaterThanOrEqual(0);
+      expect(preFlight.statusCode).toBe(503);
+      expect(preFlight.json().error).toContain('unavailable');expect(preFlight.json().estimatedCostUSD).toBeUndefined();
 
       // D2 honest posture: no durable queue is mounted, so dispatch is 503
       // unavailable with queued:false - never a fabricated job id.
       const dispatch = await server.inject({ method: 'POST', url: '/waterfall/dispatch', headers: auth, payload: body });
       expect(dispatch.statusCode).toBe(503);
+      expect(dispatch.json().error).toContain('No job was queued');expect(dispatch.json().jobId).toBeUndefined();expect(dispatch.json().totalQueued).toBeUndefined();
       expect(dispatch.json().queued).toBe(false);
       expect(dispatch.json().message).toContain('not implemented');
       expect(JSON.stringify(dispatch.json())).not.toContain('job-');
@@ -169,6 +169,16 @@ describe('waterfall/validator route integration', () => {
     }
   });
 
+  it('passes only authenticated workspace to dispatch and never accepts body-claimed tenant authority',async()=>{
+    const dispatch=vi.fn(async()=>{throw Object.assign(new Error('synthetic unavailable'),{statusCode:503});});
+    const app=await createApplication({...stubCore(),waterfall:{dispatch,getPreFlightEstimate:async()=>{throw Error('private provider token');}}} as never);
+    try{const server=app.getHttpAdapter().getInstance(),auth={authorization:'Bearer '+token()},body={columnId:randomUUID(),rowIds:[randomUUID()],workspaceId:randomUUID()};
+     expect((await server.inject({method:'POST',url:'/waterfall/dispatch',headers:auth,payload:body})).statusCode).toBe(503);expect(dispatch).toHaveBeenCalledWith(body,workspaceId);
+     const failed=await server.inject({method:'POST',url:'/waterfall/pre-flight',headers:auth,payload:body});expect(failed.statusCode).toBe(503);expect(failed.body).not.toContain('private provider token');
+     await expect(new WaterfallController(new WaterfallService()).dispatch(body)).rejects.toThrow();
+    }finally{await app.close();}
+  });
+
   it('mounts validator generation behind write role with a public lead endpoint', async () => {
     const app = await createApplication({ ...stubCore(), validator: new ValidatorController(new ValidatorService('https://app.test')) } as never);
     try {
@@ -205,7 +215,7 @@ describe('waterfall/validator route integration', () => {
       expect(outreach.json().metrics).toMatchObject({ outreachSent: 25, replies: 4, positiveReplies: 1 });
 
       // Owner publishes explicitly, then waitlist submission works with no session header.
-      const published = await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/publish`, headers: auth });
+      const published = await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/publish`, headers: auth,payload:{expectedRevision:(await server.inject({method:'GET',url:`/validator/experiments/${experimentId}/page`,headers:auth})).json().revision} });
       expect(published.statusCode).toBe(200);
       expect(published.json()).toMatchObject({ status: 'published', slug });
       const submitted = await server.inject({ method: 'POST', url: `/validator/pages/${slug}/leads`, payload: lead });
@@ -236,7 +246,7 @@ describe('waterfall/validator route integration', () => {
       const created = await server.inject({ method: 'POST', url: '/validator/experiments', headers: auth, payload: { rawHypothesis: 'DevOps teams will pay for zero-markup enrichment' } });
       const { experimentId, pageUrl } = created.json();
       const slug = pageUrl.split('/v/')[1];
-      await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/publish`, headers: auth });
+      await server.inject({ method: 'POST', url: `/validator/experiments/${experimentId}/publish`, headers: auth,payload:{expectedRevision:(await server.inject({method:'GET',url:`/validator/experiments/${experimentId}/page`,headers:auth})).json().revision} });
 
       const hit = () => server.inject({ method: 'GET', url: `/validator/pages/${slug}` });
       expect((await hit()).statusCode).toBe(200);

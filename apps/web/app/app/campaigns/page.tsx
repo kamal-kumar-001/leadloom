@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
-import { fetchWorkspaceCampaigns, type WorkspaceCampaignRow } from '../../../lib/engine-client';
+import { fetchWorkspaceCampaigns, fetchWorkspaceProjects, type WorkspaceCampaignRow } from '../../../lib/engine-client';
 import { notify } from '@/lib/notify';
 import { ApprovalQueue } from '../../../components/campaigns/approval-queue';
 import { CampaignCreateForm } from '../../../components/campaigns/campaign-create-form';
 import { ReleaseCampaignButton } from '../../../components/campaigns/release-campaign-button';
+import {PrivateCampaignEditor} from '../../../components/campaigns/private-campaign-editor';
 import { CampaignStepsList } from '../../../components/campaigns/campaign-steps-list';
 import { CampaignRecipients } from '../../../components/campaigns/campaign-recipients';
 import { CampaignJobs } from '../../../components/campaigns/campaign-jobs';
@@ -68,6 +69,11 @@ function renderStatusBadge(status: string) {
 }
 
 export default function CampaignsPage() {
+  const [projectFilter,setProjectFilter]=useState('');
+  const [projects,setProjects]=useState<import('@leadloom/contracts').ProjectResponse[]>([]);
+  const [projectError,setProjectError]=useState<string|null>(null);
+  const loadSequence=useRef(0);
+  useEffect(()=>{let active=true;fetchWorkspaceProjects().then(r=>{if(!active)return;if(r.error)setProjectError(r.error);else setProjects(r.projects);}).catch(()=>{if(active)setProjectError('Projects unavailable');});return()=>{active=false;loadSequence.current++;};},[]);
   const [campaigns, setCampaigns] = useState<WorkspaceCampaignRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,21 +85,25 @@ export default function CampaignsPage() {
   const [sendersOpenFor, setSendersOpenFor] = useState<string | null>(null);
 
   const loadCampaigns = useCallback(async () => {
+    const sequence=++loadSequence.current;
     setIsLoading(true);
+    setCampaigns([]);
     setError(null);
     try {
-      const res = await fetchWorkspaceCampaigns();
+      const res = await fetchWorkspaceCampaigns(projectFilter||undefined);
+      if(sequence!==loadSequence.current)return;
       if (res.data) {
         setCampaigns(res.data);
       } else {
         setError(res.error || 'Failed to fetch workspace campaigns');
       }
     } catch (err: unknown) {
+      if(sequence!==loadSequence.current)return;
       setError(err instanceof Error ? err.message : 'Engine connection error');
     } finally {
-      setIsLoading(false);
+      if(sequence===loadSequence.current)setIsLoading(false);
     }
-  }, []);
+  }, [projectFilter]);
 
   useEffect(() => {
     loadCampaigns();
@@ -172,6 +182,15 @@ export default function CampaignsPage() {
           )}
         </div>
 
+        <div className="space-y-2" data-testid="campaign-project-list">
+          <label htmlFor="campaign-project-filter" className="text-xs text-text-muted">Saved campaign project</label>
+          <select id="campaign-project-filter" aria-label="Campaign project filter" value={projectFilter} onChange={e=>{loadSequence.current++;setCampaigns([]);setProjectFilter(e.target.value);}} className="ml-3 rounded border border-border-subtle bg-canvas p-2 text-xs text-text-primary">
+            <option value="">All workspace campaigns</option><option value="unassigned">Unassigned</option>
+            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {projectError&&<p role="alert" className="text-xs text-signal-failed">Projects could not be loaded. Reload to see project filters.</p>}
+          <p className="text-xs text-text-muted">Filters only the saved campaigns below. Approval queue and recorded replies above remain workspace-wide. Workspace access remains broad; use a project-bound observation credential for one project's campaigns.</p>
+        </div>
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2].map((i) => (
@@ -215,6 +234,7 @@ export default function CampaignsPage() {
                     </div>
                     {renderStatusBadge(camp.status)}
                   </div>
+                  <p className="text-xs text-text-muted mt-2">Project: {camp.projectId?(projects.find(p=>p.id===camp.projectId)?.name||camp.projectId):'Unassigned'}</p>
                   <div className="mt-4 space-y-1.5 text-xs text-text-muted font-mono">
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5" />
@@ -332,6 +352,7 @@ export default function CampaignsPage() {
             <CampaignStepsList
               steps={campaigns.find((c) => c.id === stepsOpenFor)!.steps ?? []}
             />
+            <PrivateCampaignEditor key={stepsOpenFor} campaignId={stepsOpenFor} onSaved={()=>void loadCampaigns()}/>
           </div>
         )}
       </div>

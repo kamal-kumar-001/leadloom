@@ -21,14 +21,15 @@ export interface WaterfallEntitlementPort {
   checkLimit(workspaceId: string, limit: LimitKey, requested?: number): Promise<EntitlementDecision>;
 }
 
+export class WaterfallUnavailableError extends Error {readonly statusCode=503;constructor(){super('Durable waterfall dispatch is not implemented or unavailable. No job was queued and no provider was called.');}}
 /**
  * Durable dispatch is not built yet: dispatch must never fabricate a job id
  * that implies queued work when nothing is persisted (D2). A real queue port
  * is injected once the persistence path is reviewed and approved.
  */
-export class WaterfallDispatchUnavailableError extends Error {
+export class WaterfallDispatchUnavailableError extends WaterfallUnavailableError {
   constructor() {
-    super('Durable waterfall dispatch is not implemented: nothing was queued');
+    super();
     this.name = 'WaterfallDispatchUnavailableError';
   }
 }
@@ -60,6 +61,7 @@ export class WaterfallJobNotFoundError extends Error {
 }
 
 export class WaterfallEntitlementError extends Error {
+  readonly statusCode=403;
   constructor(message: string, public readonly decision: EntitlementDecision) {
     super(message);
     this.name = 'WaterfallEntitlementError';
@@ -158,10 +160,7 @@ export class WaterfallService {
 
     const totalQueued = request.rowIds.length;
     const { jobId } = await this.dispatchQueue.enqueue({ workspaceId, request });
-    const estSeconds = Math.ceil(totalQueued * 0.2);
-    const estimatedCompletionAt = new Date(Date.now() + estSeconds * 1000).toISOString();
-
-    return { jobId, totalQueued, estimatedCompletionAt };
+    return { jobId, totalQueued };
   }
 
   /** D3 read model: honest job status from the durable store. Without a
@@ -206,6 +205,6 @@ export class WaterfallService {
       { id: 'node-dropcontact', provider: 'dropcontact', tier: 3, costWeight: 2000 },
     ];
 
-    return this.runner.executeRow(input, nodeConfigs ?? defaultConfigs);
+    return this.runner.executeRow({...input,workspaceId}, nodeConfigs ?? defaultConfigs);
   }
 }

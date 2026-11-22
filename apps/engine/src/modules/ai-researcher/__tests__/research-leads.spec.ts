@@ -2,32 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ResearchLeadsService, RESEARCH_TABLE_NAME } from '../research-leads.service';
 
-function fakeDb() {
-  const tables: any[] = [];
-  const columns: any[] = [];
-  const rows: any[] = [];
-  const cells: any[] = [];
-  return {
-    table: {
-      findFirst: async ({ where }: any) => tables.find((t) => t.workspaceId === where.workspaceId && t.name === where.name) ?? null,
-      create: async ({ data }: any) => { const t = { id: randomUUID(), rowCount: 0, ...data }; tables.push(t); return t; },
-      update: async ({ where, data }: any) => { const t = tables.find((x) => x.id === where.id); if (data.rowCount?.increment) t.rowCount += data.rowCount.increment; return t; },
-    },
-    column: {
-      create: async ({ data }: any) => { const c = { id: randomUUID(), ...data }; columns.push(c); return c; },
-      findMany: async ({ where }: any) => columns.filter((c) => c.tableId === where.tableId),
-    },
-    row: {
-      count: async ({ where }: any) => rows.filter((r) => r.tableId === where.tableId).length,
-      create: async ({ data }: any) => { const r = { id: randomUUID(), ...data }; rows.push(r); return r; },
-      findMany: async ({ where, take }: any) => rows.filter((r) => r.tableId === where.tableId).sort((a, b) => b.orderIndex - a.orderIndex).slice(0, take ?? 50),
-    },
-    cell: {
-      create: async ({ data }: any) => { const c = { id: randomUUID(), ...data }; cells.push(c); return c; },
-      findMany: async ({ where }: any) => cells.filter((c) => c.tableId === where.tableId && where.rowId.in.includes(c.rowId)),
-    },
-  };
-}
+import {fakeResearchDb as fakeDb} from './research-db.fixture';
 
 const PAGE = 'Acme builds a developer API and SDK for Kubernetes cost management. We are hiring engineers - see careers. Pricing starts at $49 per seat. Built for B2B SaaS startups scaling on Docker and PostgreSQL.';
 

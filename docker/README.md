@@ -13,8 +13,7 @@ The `application` profile now has engine and standalone Next.js Dockerfiles.
 The engine is a real Nest/Fastify process. With DATABASE_URL, LEADLOOM_MASTER_KEY
 and LEADLOOM_SESSION_KEY configured it mounts tenant-scoped credential storage,
 pending-job creation and suppression routes. Those APIs require a signed session.
-There is no login/identity issuer yet. Health is not readiness: `/ready` stays 503
-until the full provider/worker runtime is connected. No SMTP transport starts.
+Login/identity, validator, research and mailbox features have separate configuration gates; a runnable container does not prove those account/provider workflows. Health is not send readiness: `/ready` stays503when the send worker is unmounted and200requires it mounted. Sending has its own independent gate. The web `/api/health` route checks web-to-engine liveness only. No feature/send gate is changed by a health check.
 The separate `scraper-unconfigured` profile still lacks a long-running scraper
 entrypoint/Dockerfile and must not be enabled as a working service.
 Dockerfiles are not build-tested here because Docker is unavailable.
@@ -55,3 +54,7 @@ Source: https://docs.bullmq.io/guide/going-to-production
 YAML/config checks are local static checks. Docker is unavailable in the current
 build environment: no image builds, container healthchecks, load tests, SMTP,
 IMAP, live DNS, paid APIs or production database changes were performed.
+
+## Release entrypoint
+
+`bash update.sh` is plan-only by default. It no longer pulls Git, applies migrations, deploys, contacts a public URL or prunes images on a plain invocation. The explicit execute mode requires an independently approved release and a verified-backup reference, validates resolved configuration and expected send/worker posture, checks migration/schema before replacement, then fails closed on engine/web/public probe failures. See [release checks](../scripts/ops/RELEASE.md) for exact effects, limits and partial-failure handling. Engine/web prebuild hooks embed the same source-derived identity; release probes reject a different/mixed source identity. That digest is not a full-image attestation. Synthetic tests do not establish that the Dockerfiles build or that production is ready.

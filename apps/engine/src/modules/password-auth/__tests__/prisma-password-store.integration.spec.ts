@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { hashPassword } from '../../auth/password';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaPasswordStore } from '../prisma-password-store';
 import { PasswordAccountService, MAX_OTP_ATTEMPTS } from '../password-account.service';
@@ -37,7 +38,7 @@ describe.runIf(RUN)('password OTP store on real Postgres (gated)', () => {
     const email = `par-right-${tag}@example.invalid`; emails.push(email);
     const svc = mk(); sent.length = 0; await svc.register(email, 'correct horse battery');
     const code = codeOf(sent[0]);
-    const results = await Promise.allSettled(Array.from({ length: 20 }, () => svc.verifyEmail(email, code)));
+    const results = await Promise.allSettled(Array.from({ length: 20 }, () => svc.verifyEmail(email, code, 'correct horse battery')));
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     const audit = await prisma.$queryRawUnsafe(`SELECT count(*)::int AS n FROM audit_log WHERE action = 'user.email_verified' AND target = (SELECT id::text FROM users WHERE email = $1)`, email);
     expect(audit[0].n).toBe(1);
@@ -47,17 +48,17 @@ describe.runIf(RUN)('password OTP store on real Postgres (gated)', () => {
     const email = `par-wrong-${tag}@example.invalid`; emails.push(email);
     const svc = mk(); sent.length = 0; await svc.register(email, 'correct horse battery');
     const code = codeOf(sent[0]); const wrong = code === '000000' ? '111111' : '000000';
-    await Promise.allSettled(Array.from({ length: 30 }, () => svc.verifyEmail(email, wrong)));
+    await Promise.allSettled(Array.from({ length: 30 }, () => svc.verifyEmail(email, wrong, 'correct horse battery')));
     const row = (await prisma.$queryRawUnsafe(`SELECT o.attempts FROM email_otps o JOIN users u ON u.id = o.user_id WHERE u.email = $1`, email))[0];
     expect(row.attempts).toBe(MAX_OTP_ATTEMPTS); // not 30, not fewer: attempts past the cap are refused, none lost
-    await expect(svc.verifyEmail(email, code)).rejects.toThrow();
+    await expect(svc.verifyEmail(email, code, 'correct horse battery')).rejects.toThrow();
   });
 
   it('a right guess racing wrong guesses never verifies after the cap is reached', async () => {
     const email = `par-mixed-${tag}@example.invalid`; emails.push(email);
     const svc = mk(); sent.length = 0; await svc.register(email, 'correct horse battery');
     const code = codeOf(sent[0]); const wrong = code === '000000' ? '111111' : '000000';
-    const ops = [...Array.from({ length: 10 }, () => svc.verifyEmail(email, wrong)), svc.verifyEmail(email, code)];
+    const ops = [...Array.from({ length: 10 }, () => svc.verifyEmail(email, wrong, 'correct horse battery')), svc.verifyEmail(email, code, 'correct horse battery')];
     const results = await Promise.allSettled(ops);
     const ok = results.filter((r) => r.status === 'fulfilled').length;
     expect(ok).toBeLessThanOrEqual(1);
@@ -74,6 +75,83 @@ describe.runIf(RUN)('password OTP store on real Postgres (gated)', () => {
     expect(n).toBe(1);
     expect(await liveCount(email, 'signup')).toBe(1);
     expect(sent).toHaveLength(1);
+  });
+
+  it('an older mailbox code activates only its holder-selected password, never an anonymous replacement', async () => {
+    const email = `signup-holder-${tag}@example.invalid`; emails.push(email);
+    const svc = mk(); sent.length = 0;
+    const ownerPassword = 'Mailbox holder password 907!';
+    const otherPassword = 'Anonymous replacement 318!';
+    await svc.register(email, ownerPassword);
+    const code = codeOf(sent[0]);
+    await svc.register(email, otherPassword);
+    expect(sent).toHaveLength(1);
+    await svc.verifyEmail(email, code, ownerPassword);
+    await expect(svc.authenticate(email, otherPassword)).rejects.toThrow();
+    await expect(svc.authenticate(email, ownerPassword)).resolves.toBeDefined();
+  });
+
+  it('10 competing code holders install only the winning request password', async () => {
+    const email = `signup-winner-${tag}@example.invalid`; emails.push(email);
+    const svc = mk(); sent.length = 0; await svc.register(email, 'Initial pending password');
+    const code = codeOf(sent[0]);
+    const passwords = Array.from({length: 10}, (_, i) => `Holder candidate password ${i}`);
+    const results = await Promise.allSettled(passwords.map(p => svc.verifyEmail(email, code, p)));
+    const winners = results.flatMap((r, i) => r.status === 'fulfilled' ? [i] : []);
+    expect(winners).toHaveLength(1);
+    for (let i = 0; i < passwords.length; i++) {
+      if (i === winners[0]) await expect(svc.authenticate(email, passwords[i])).resolves.toBeDefined();
+      else await expect(svc.authenticate(email, passwords[i])).rejects.toThrow();
+    }
+  });
+
+  it('verification audit failure rolls back the password, mailbox proof and activation together', async () => {
+    const email = `signup-rollback-${tag}@example.invalid`; emails.push(email);
+    const svc = mk(); sent.length = 0; await svc.register(email, 'Initial pending password');
+    const code = codeOf(sent[0]);
+    const before = await prisma.user.findUnique({where: {email}});
+    const failingStore = new PrismaPasswordStore({
+      $queryRawUnsafe: (...args: any[]) => prisma.$queryRawUnsafe(...args),
+      $transaction: (fn: any) => prisma.$transaction((tx: any) => fn(new Proxy(tx, {
+        get(target, prop) {
+          if (prop === '$executeRawUnsafe') return (sql: string, ...args: any[]) => {
+            if (sql.includes('user.email_verified')) throw new Error('synthetic verification audit failure');
+            return target.$executeRawUnsafe(sql, ...args);
+          };
+          const value = target[prop]; return typeof value === 'function' ? value.bind(target) : value;
+        },
+      }))),
+    });
+    // Use the original service HMAC, bypassing no persistence rule, to inject failure at the final write.
+    const user = await new PrismaPasswordStore(prisma).findByEmail(email);
+    const activationHash = await hashPassword('Mailbox holder failed-write password');
+    expect(activationHash).not.toBe(before.passwordHash);
+    await expect(failingStore.completeSignup(user!.id, svc.codeHash(user!.id, 'signup', code), activationHash, MAX_OTP_ATTEMPTS)).rejects.toThrow('synthetic verification audit failure');
+    const after = await prisma.user.findUnique({where: {email}});
+    expect(after.passwordHash).toBe(before.passwordHash);
+    expect(after.emailVerifiedAt).toBeNull();
+    expect(after.sessionVersion).toBe(before.sessionVersion);
+    expect(await liveCount(email, 'signup')).toBe(1);
+    await svc.verifyEmail(email, code, 'Mailbox holder final password');
+    await expect(svc.authenticate(email, 'Mailbox holder final password')).resolves.toBeDefined();
+  });
+
+  it('an old signup code cannot replace reset or provider-verified credentials', async () => {
+    for (const method of ['reset', 'provider']) {
+      const email = `signup-obsolete-${method}-${tag}@example.invalid`; emails.push(email);
+      const svc = mk(); sent.length = 0; await svc.register(email, 'Initial pending password');
+      const signup = codeOf(sent[0]);
+      if (method === 'reset') {
+        await svc.forgotPassword(email);
+        await svc.resetPassword(email, codeOf(sent[1]), 'Mailbox reset password');
+      } else await svc.claimByProvider(email);
+      const before = await prisma.user.findUnique({where: {email}});
+      await expect(svc.verifyEmail(email, signup, 'Obsolete signup password')).rejects.toThrow();
+      const after = await prisma.user.findUnique({where: {email}});
+      expect(after.passwordHash).toBe(before.passwordHash);
+      expect(after.sessionVersion).toBe(before.sessionVersion);
+      expect(await liveCount(email, 'signup')).toBe(1);
+    }
   });
 
   it('stored values and audit rows never contain the code or the password', async () => {

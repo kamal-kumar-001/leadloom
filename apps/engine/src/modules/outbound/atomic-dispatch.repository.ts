@@ -347,6 +347,7 @@ export class AtomicDispatchRepository implements DispatchRepository {
         campaignName: r.campaign_name,
         recipientEmail: r.recipient_email,
         stepNumber: r.step_number,
+        reviewRevision: stored ? approvalContentHash(stored) : null,
         subject,
         bodySnippet,
         bodyTemplate,
@@ -371,10 +372,11 @@ export class AtomicDispatchRepository implements DispatchRepository {
    * race) leaves the job in 'pending_approval', refreshes the stored snapshot
    * to the current content, and counts it as stale so the reviewer must
    * deliberately approve the changed content. 'approved' -> send-reservable
-   * 'pending' does not exist in code while dispatch is disabled; adding it is
-   * a separate gated release decision.
+   * 'pending' remains a separate gated release. HTTP callers always supply exact
+   * expectedRevisions from their displayed review. Legacy trusted internal callers
+   * omitting that field retain the old stored-vs-current comparison only.
    */
-  async approve(workspaceId: string, input: { jobIds?: string[]; all?: boolean; campaignId?: string }): Promise<{ approvedCount: number; staleCount: number }> {
+  async approve(workspaceId: string, input: { jobIds?: string[]; all?: boolean; campaignId?: string; expectedRevisions?: Record<string,string|null> }): Promise<{ approvedCount: number; staleCount: number }> {
     const jobIds = input.jobIds ?? [];
     if (!input.all && !jobIds.length) return { approvedCount: 0, staleCount: 0 };
     for (const id of jobIds) z.string().uuid().parse(id);
@@ -398,7 +400,8 @@ export class AtomicDispatchRepository implements DispatchRepository {
           `SELECT j.id, j.recipient_email, j.recipient_id, j.recipient_fields, j.step_number, j.approval_content_hash, c.steps, j.sender_mailbox_id
            FROM outbound_jobs j JOIN campaigns c ON c.id = j.campaign_id AND c.workspace_id = j.workspace_id
            WHERE j.workspace_id = $1::uuid AND j.id = $2::uuid AND j.status = 'pending_approval'
-             AND c.id = (SELECT id FROM campaigns WHERE workspace_id=$1::uuid AND id=$3::uuid FOR UPDATE)`,
+             AND c.id = (SELECT id FROM campaigns WHERE workspace_id=$1::uuid AND id=$3::uuid FOR UPDATE)
+           FOR UPDATE OF j`,
           [workspaceId, cand.id, cand.campaign_id]);
         const job = locked[0];
         if (!job) return 'skipped' as const; // raced with reject/suppress/another approve
@@ -406,7 +409,11 @@ export class AtomicDispatchRepository implements DispatchRepository {
         if (!cur.ok) return 'stale' as const; // no longer resolvable: keep held, reviewer sees the resolution error
         const current = cur.snapshot;
         const currentHash = cur.hash;
-        if (job.approval_content_hash === currentHash) {
+        // External callers must bind the exact snapshot their reviewer saw. A different
+        // reviewer may already have refreshed this job after a copy/sender edit.
+        const reviewed = input.expectedRevisions?.[job.id];
+        if (input.expectedRevisions && reviewed !== job.approval_content_hash) return 'stale' as const;
+        if (job.approval_content_hash === currentHash && (!input.expectedRevisions || reviewed !== null)) {
           await tx.query(
             `UPDATE outbound_jobs SET status='approved', approved_at=$3::timestamptz, updated_at=$3::timestamptz
              WHERE workspace_id=$1::uuid AND id=$2::uuid AND status='pending_approval'`,

@@ -35,7 +35,7 @@ export class PrismaMemberStore implements MemberStore {
       if (t.isOwner) return { ok: false, reason: 'owner_protected' };
       if ((role === 'admin' || t.role === 'admin') && !(await this.actorIsOwner(tx, workspaceId, actorId))) return { ok: false, reason: 'owner_only' };
       if (t.role === 'admin' && t.active && role !== 'admin' && others === 0) return { ok: false, reason: 'last_admin' };
-      await tx.$executeRawUnsafe(`UPDATE users SET role = $3, session_version = session_version + 1 WHERE id = $1::uuid AND workspace_id = $2::uuid`, targetId, workspaceId, role);
+      await tx.$executeRawUnsafe(`UPDATE users SET role = $3, session_version = session_version + 1, credentials_revoked_at = clock_timestamp() WHERE id = $1::uuid AND workspace_id = $2::uuid`, targetId, workspaceId, role);
       await tx.$executeRawUnsafe(`INSERT INTO audit_log (workspace_id, actor_user_id, action, target, metadata) VALUES ($1::uuid, $2::uuid, 'member.role_changed', $3, jsonb_build_object('from', $4::text, 'to', $5::text))`, workspaceId, actorId, targetId, t.role, role);
       return { ok: true };
     });
@@ -46,7 +46,7 @@ export class PrismaMemberStore implements MemberStore {
       if (t.isOwner) return { ok: false, reason: 'owner_protected' };
       if (t.role === 'admin' && !(await this.actorIsOwner(tx, workspaceId, actorId))) return { ok: false, reason: 'owner_only' };
       if (t.role === 'admin' && t.active && others === 0) return { ok: false, reason: 'last_admin' };
-      await tx.$executeRawUnsafe(`UPDATE users SET disabled_at = coalesce(disabled_at, now()), session_version = session_version + 1 WHERE id = $1::uuid AND workspace_id = $2::uuid`, targetId, workspaceId);
+      await tx.$executeRawUnsafe(`UPDATE users SET disabled_at = coalesce(disabled_at, now()), session_version = session_version + 1, credentials_revoked_at = clock_timestamp() WHERE id = $1::uuid AND workspace_id = $2::uuid`, targetId, workspaceId);
       await tx.$executeRawUnsafe(`INSERT INTO audit_log (workspace_id, actor_user_id, action, target, metadata) VALUES ($1::uuid, $2::uuid, 'member.removed', $3, '{}'::jsonb)`, workspaceId, actorId, targetId);
       return { ok: true };
     });

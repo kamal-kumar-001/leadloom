@@ -26,12 +26,12 @@ export class PrismaCredentialRepository implements CredentialRepository {
   }
 
   async findLatestByProvider(workspaceId: string, provider: BYOKProvider): Promise<StoredCredential | null> {
-    const row = await this.client.byokCredential.findFirst({ where: { workspaceId, provider }, orderBy: { createdAt: 'desc' } });
+    const row = await this.client.byokCredential.findFirst({ where: { workspaceId, provider }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
     return row ? this.fromRow(row) : null;
   }
 
   async list(workspaceId: string): Promise<StoredCredential[]> {
-    const rows = await this.client.byokCredential.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' } });
+    const rows = await this.client.byokCredential.findMany({ where: { workspaceId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
     return rows.map(row => this.fromRow(row));
   }
 

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { AuthMethods } from '@/components/auth/auth-methods';
+import { resolveAuthMethods } from './auth-method-policy';
 
 /**
  * Server-side sign-in method resolution, read once per request (no client round-trip).
@@ -8,13 +9,5 @@ import type { AuthMethods } from '@/components/auth/auth-methods';
  * set - placeholder env values alone never light up a button that cannot work.
  */
 export function getAuthMethods(): AuthMethods {
-  return {
-    github:
-      Boolean(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) &&
-      process.env.LEADLOOM_OAUTH_GITHUB_ENABLED === 'true',
-    google:
-      Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) &&
-      process.env.LEADLOOM_OAUTH_GOOGLE_ENABLED === 'true',
-    password: process.env.LEADLOOM_PASSWORD_AUTH_ENABLED === 'true',
-  };
+  return resolveAuthMethods(process.env);
 }

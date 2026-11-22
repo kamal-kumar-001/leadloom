@@ -290,7 +290,9 @@ describe('Documented Vendor Fixtures & Endpoint Contracts', () => {
     expect(res.data?.email).toBe('tim@apollo.io');
     expect(res.data?.emailStatus).toBe('verified');
     expect(res.data?.organizationName).toBe('Apollo.io');
-    expect(res.data?.confidence).toBe(0.95);
+    // This older tutorial fixture omits current person.match_confidence.
+    expect(res.data?.matchConfidence).toBe('unknown');
+    expect(res.data?.confidence).toBe(0);
   });
 
   it('Dropcontact: models async submit POST /v1/enrich/all followed by GET /v1/enrich/all/{id}', async () => {
@@ -959,7 +961,8 @@ describe('Documented Vendor Fixtures & Endpoint Contracts', () => {
       expect(rawStr).not.toContain(testApiKey);
       expect(res.raw).toEqual({
         emailStatus: 'verified',
-        confidence: 0.95,
+        matchConfidence: 'unknown',
+        confidence: 0,
       });
     });
 

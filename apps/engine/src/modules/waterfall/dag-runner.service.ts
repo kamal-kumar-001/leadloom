@@ -1,3 +1,5 @@
+import {validEmail} from './adapters/provider-transport';
+import {redactSecrets} from './connectors/security';
 import {
   BYOKProvider,
   WaterfallCellPayload,
@@ -118,7 +120,7 @@ export class DAGRunnerService {
     // A domain identifies a company, not a person. Cache complete lookup identity
     // inside the authenticated tenant. No tenant scope means no cache reuse.
     const cacheScope = input.workspaceId ? createHash('sha256').update(JSON.stringify([
-      input.workspaceId, input.firstName?.trim().toLowerCase() ?? '', input.lastName?.trim().toLowerCase() ?? '',
+      'verified-provider-boundary-v3-apollo-identity',input.workspaceId, input.firstName?.trim().toLowerCase() ?? '', input.lastName?.trim().toLowerCase() ?? '',
       input.companyName?.trim().toLowerCase() ?? '', input.title?.trim().toLowerCase() ?? '',
     ])).digest('hex') : undefined;
     const trace: WaterfallStepTrace[] = [];
@@ -182,24 +184,14 @@ export class DAGRunnerService {
           // needs_review, never a normalized known result, never blind-retried.
           if (err instanceof ProviderOutcomeUnknownError) throw err;
           // Do not expose raw provider errors which may contain credentials.
-          trace.push({ step: stepIndex, provider: node.provider, status: 'error', latency_ms: 0,
-            cost_microcents: 0, reason: 'Provider execution failed' });
-          continue;
+          throw new ProviderOutcomeUnknownError('Provider execution failed; outcome unconfirmed');
         }
 
-        // Store successful/deliverable payload in 30-day domain cache
-        if (cacheScope && output.status === 'hit' && output.email) {
-          await this.domainCache.set(
-            node.provider,
-            input.domain,
-            output,
-            output.costMicrocents,
-            undefined,
-            cacheScope
-          );
-        }
+
       }
 
+      if(!output||(output.email!==null&&!validEmail(output.email))||(output.status==='hit'&&!output.email)||(output.verification!==undefined&&!['deliverable','risky','catch_all','undeliverable'].includes(output.verification))||!['hit','miss','error','rate_limited'].includes(output.status)||typeof output.confidence!=='number'||!Number.isFinite(output.confidence)||output.confidence<0||output.confidence>1||!Number.isSafeInteger(output.costMicrocents)||output.costMicrocents<0||!Number.isSafeInteger(output.latencyMs)||output.latencyMs<0){throw new ProviderOutcomeUnknownError('Invalid provider result; outcome unconfirmed');}
+      if(!isCacheHit&&cacheScope&&output.status==='hit'&&output.email){await this.domainCache.set(node.provider,input.domain,output,output.costMicrocents,undefined,cacheScope);}
       totalCostMicrocents += output.costMicrocents;
       if (output.costAssumed) anyCostAssumed = true;
       totalLatencyMs += output.latencyMs;
@@ -213,7 +205,7 @@ export class DAGRunnerService {
         cost_microcents: output.costMicrocents,
         reason: isCacheHit
           ? 'FinOps 30-day domain cache hit ($0.00 external cost)'
-          : output.errorMessage ?? (output.status === 'hit' ? 'Match found' : 'No record found'),
+          : (output.errorMessage?redactSecrets(output.errorMessage,Object.values(apiKeys??{})):undefined) ?? (output.status === 'hit' ? 'Match found' : 'No record found'),
         verification: output.verification,
         score: Math.round(output.confidence * 100),
       };
@@ -266,6 +258,7 @@ export class DAGRunnerService {
       };
     }
 
+    if(trace.some(t=>t.status==='error'||t.status==='rate_limited'))return{value:null,status:'error',trace,telemetry:{latency_ms:totalLatencyMs,cost_microcents:totalCostMicrocents},error_payload:{code:'PROVIDER_INCOMPLETE',message:'Provider execution did not establish a complete lookup. No verified match is claimed.',retryable:trace.some(t=>t.status==='rate_limited')}};
     return {
       value: null,
       status: 'exhausted',

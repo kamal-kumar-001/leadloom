@@ -33,6 +33,9 @@ export const metadata: Metadata = {
   title: 'LeadLoom — Find the accounts already showing buying signals',
   description:
     'LeadLoom is the early access workspace for founders and small GTM teams: save lead research in tables, store your own provider keys with AES-256-GCM encryption, and pay providers directly. Enrichment, approval review and sending ship next, clearly labeled until they are live.',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     title: 'LeadLoom — Find the accounts already showing buying signals',
     description:

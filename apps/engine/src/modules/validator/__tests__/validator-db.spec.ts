@@ -59,6 +59,8 @@ function pglitePrisma(pg: PGlite) {
     (await pg.query(`SELECT ${LEAD_COLS} FROM waitlist_leads WHERE page_id=$1 ORDER BY created_at`, [pageId])).rows as any[];
   const withLeads = async (p: any) => ({ ...p, waitlistLeads: await leadsFor(p.id) });
   return {
+    $queryRawUnsafe: async (sql:string,...params:any[]) => (await pg.query(sql,params)).rows,
+    $transaction: async (fn:any) => pg.transaction(async (tx:any) => fn(pglitePrisma(tx))),
     validationExperiment: {
       findFirst: async ({ where, include }: any) => {
         const conds: string[] = []; const params: any[] = [];
@@ -98,6 +100,7 @@ function pglitePrisma(pg: PGlite) {
       },
     },
     smokeTestPage: {
+      findUnique:async ({where}:any)=>(await pg.query(`SELECT ${PAGE_COLS} FROM smoke_test_pages WHERE id=$1`,[where.id])).rows[0]??null,
       findMany: async ({ where, select }: any) => {
         const res = await pg.query(`SELECT slug FROM smoke_test_pages WHERE slug LIKE $1`, [where.slug.startsWith + '%']);
         return res.rows as any[];
@@ -126,6 +129,8 @@ function pglitePrisma(pg: PGlite) {
       },
     },
     waitlistLead: {
+      findFirst:async ({where}:any)=>(await pg.query(`SELECT ${LEAD_COLS} FROM waitlist_leads WHERE page_id=$1 AND lower(email)=lower($2) LIMIT 1`,[where.pageId,where.email.equals])).rows[0]??null,
+      count:async ({where}:any)=>Number((await pg.query<{count:number}>(`SELECT count(*) AS count FROM waitlist_leads WHERE page_id=$1`,[where.pageId])).rows[0].count),
       create: async ({ data }: any) => {
         await pg.query(
           `INSERT INTO waitlist_leads (id, page_id, email, name, company, survey_responses) VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -170,7 +175,9 @@ describe('ValidatorService on real SQL (PGlite isolated fixture)', () => {
     const svc = new ValidatorService('http://localhost:3000', pglitePrisma(pg));
     const gen = await svc.generate(WS_A, { rawHypothesis: 'Draft boundary over SQL' });
     expect(await svc.getPublicPage(gen.decomposed.slug)).toBeUndefined();
-    await svc.setPublishStatus(gen.experimentId, WS_A, true);
+    const reviewed = await svc.getOwnerPage(gen.experimentId, WS_A);
+    await expect(svc.setPublishStatus(gen.experimentId, WS_A, true)).rejects.toThrow(/review|changed/i);
+    await svc.setPublishStatus(gen.experimentId, WS_A, true, reviewed!.revision);
     const pub = await svc.getPublicPage(gen.decomposed.slug);
     expect(pub?.slug).toBe(gen.decomposed.slug);
     await svc.recordTraffic(gen.decomposed.slug);
@@ -182,7 +189,9 @@ describe('ValidatorService on real SQL (PGlite isolated fixture)', () => {
     const svc = new ValidatorService('http://localhost:3000', pglitePrisma(pg));
     const gen = await svc.generate(WS_A, { rawHypothesis: 'Lead capture over SQL' });
     await expect(svc.submitLead(gen.decomposed.slug, { email: 'a@b.co', surveyResponses: {} })).rejects.toThrow(/not found/i);
-    await svc.setPublishStatus(gen.experimentId, WS_A, true);
+    const reviewed = await svc.getOwnerPage(gen.experimentId, WS_A);
+    await expect(svc.setPublishStatus(gen.experimentId, WS_A, true)).rejects.toThrow(/review|changed/i);
+    await svc.setPublishStatus(gen.experimentId, WS_A, true, reviewed!.revision);
     const first = await svc.submitLead(gen.decomposed.slug, { email: 'First@Example.com', surveyResponses: { q1: 'yes' } });
     expect(first.totalWaitlist).toBe(1);
     const dup = await svc.submitLead(gen.decomposed.slug, { email: 'first@example.COM', surveyResponses: {} });

@@ -1,4 +1,5 @@
 import React from 'react';
+import {ProjectDiscovery} from './project-discovery';
 import { Card, Badge } from '@leadloom/ui';
 import { Radar, ExternalLink, AlertTriangle, Database, Hand, PlugZap } from 'lucide-react';
 import {
@@ -140,6 +141,9 @@ export function SignalsView({
         ))}
       </div>
 
+      <ProjectDiscovery />
+
+      <h2 className="text-sm font-semibold">Seeded demo products and legacy session queue</h2>
       <LiveHnButton />
 
       {queue && queue.length > 0 && (

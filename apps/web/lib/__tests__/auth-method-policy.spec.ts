@@ -1,0 +1,7 @@
+import {expect,it} from 'vitest';
+import {resolveAuthMethods} from '../auth-method-policy';
+const credentials={AUTH_GOOGLE_ID:'synthetic-google',AUTH_GOOGLE_SECRET:'synthetic-google-secret',AUTH_GITHUB_ID:'synthetic-github',AUTH_GITHUB_SECRET:'synthetic-github-secret'};
+it('defaults off even when credentials exist',()=>{expect(resolveAuthMethods({})).toEqual({google:false,github:false,password:false});expect(resolveAuthMethods(credentials)).toEqual({google:false,github:false,password:false});});
+it.each(['false','TRUE','1','yes',''])('only exact explicit true enables a method, not %s',flag=>{expect(resolveAuthMethods({...credentials,LEADLOOM_OAUTH_GOOGLE_ENABLED:flag,LEADLOOM_OAUTH_GITHUB_ENABLED:flag,LEADLOOM_PASSWORD_AUTH_ENABLED:flag})).toEqual({google:false,github:false,password:false});});
+it('independently enables each configured method without changing the others',()=>{expect(resolveAuthMethods({...credentials,LEADLOOM_OAUTH_GOOGLE_ENABLED:'true'})).toEqual({google:true,github:false,password:false});expect(resolveAuthMethods({...credentials,LEADLOOM_OAUTH_GITHUB_ENABLED:'true',LEADLOOM_PASSWORD_AUTH_ENABLED:'true'})).toEqual({google:false,github:true,password:true});});
+it.each(['GOOGLE','GITHUB'])('refuses enabled %s if either credential is absent',provider=>{for(const field of ['ID','SECRET']){expect(resolveAuthMethods({...credentials,LEADLOOM_OAUTH_GOOGLE_ENABLED:'true',LEADLOOM_OAUTH_GITHUB_ENABLED:'true',['AUTH_'+provider+'_'+field]:''})[provider.toLowerCase() as 'google'|'github']).toBe(false);}});

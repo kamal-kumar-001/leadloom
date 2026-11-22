@@ -112,7 +112,7 @@ export class SerperConnector implements Connector<SerperInput, SerperOutput> {
           gl: input.country,
           hl: input.language,
         }),
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -192,7 +192,7 @@ export class SerperConnector implements Connector<SerperInput, SerperOutput> {
           message: redactSecrets(err instanceof Error ? err.message : 'Unknown Serper error', [
             ctx.apiKey,
           ]),
-          retryable: true,
+          retryable: false,
         },
       };
     }

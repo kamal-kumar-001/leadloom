@@ -33,7 +33,6 @@ describe('Cross-team integration regressions',()=>{
  });
  it('contains adapter failures and does not expose raw errors',async()=>{
   const {runner,adapter}=setup(); adapter.execute=async()=>{throw new Error('synthetic-secret-in-provider-error');};
-  const result=await runner.executeRow({domain:'example.invalid'},nodes);
-  expect(result.trace[0].status).toBe('error'); expect(JSON.stringify(result)).not.toContain('synthetic-secret');
+  await expect(runner.executeRow({domain:'example.invalid'},nodes)).rejects.toMatchObject({name:'ProviderOutcomeUnknownError',message:'Provider execution failed; outcome unconfirmed'});
  });
 });

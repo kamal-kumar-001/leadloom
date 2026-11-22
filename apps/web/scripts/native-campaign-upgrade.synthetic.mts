@@ -1,0 +1,30 @@
+import pg from 'pg';
+import {mkdtempSync,mkdirSync,cpSync,readdirSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import assert from 'node:assert/strict';
+const root=new URL('../../../',import.meta.url).pathname,name='leadloom_campaign_upgrade_'+Date.now(),user=process.env.USER,socket='/tmp/leadloom-pg-race/socket';
+const admin=new pg.Client({host:socket,port:56539,database:'postgres',user});await admin.connect();await admin.query('CREATE DATABASE '+name);
+const url='postgresql://'+user+'@localhost:56539/'+name+'?host='+encodeURIComponent(socket),tmp=mkdtempSync('/tmp/leadloom-campaign-upgrade-');mkdirSync(tmp+'/migrations');
+cpSync(root+'packages/database/prisma/schema.prisma',tmp+'/schema.prisma');cpSync(root+'packages/database/prisma/migrations/migration_lock.toml',tmp+'/migrations/migration_lock.toml');
+for(const dir of readdirSync(root+'packages/database/prisma/migrations').filter(d=>/^\d{8}_/.test(d)&&d<'20261208_campaign_project'))cpSync(root+'packages/database/prisma/migrations/'+dir,tmp+'/migrations/'+dir,{recursive:true});
+let db:pg.Client|undefined;
+try{
+ const baseline=execFileSync('sh',['scripts/bootstrap-fresh.sh'],{cwd:root+'packages/database',env:{...process.env,DATABASE_URL:url,SCHEMA:tmp+'/schema.prisma'},encoding:'utf8',timeout:90000});
+ db=new pg.Client({connectionString:url});await db.connect();const ws=randomUUID(),project=randomUUID(),campaign=randomUUID(),mailbox=randomUUID(),job=randomUUID();
+ await db.query('INSERT INTO workspaces(id,name,updated_at)VALUES($1,$2,now())',[ws,'Synthetic old campaign']);
+ await db.query("INSERT INTO projects(id,workspace_id,slug,name)VALUES($1,$2,'alpha','Alpha')",[project,ws]);
+ await db.query("INSERT INTO campaigns(id,workspace_id,name,status,steps,daily_limit_total,updated_at)VALUES($1,$2,'Existing old campaign','active','[{\"stepNumber\":1,\"delayHours\":0,\"subject\":\"Existing subject\",\"bodyTemplate\":\"Existing body\"}]',12,now())",[campaign,ws]);
+ await db.query("INSERT INTO mailboxes(id,workspace_id,email,smtp_host,updated_at)VALUES($1,$2,'sender@example.invalid','smtp.example.invalid',now())",[mailbox,ws]);
+ await db.query('INSERT INTO campaign_mailboxes(campaign_id,mailbox_id,workspace_id)VALUES($1,$2,$3)',[campaign,mailbox,ws]);
+ await db.query("INSERT INTO outbound_jobs(id,workspace_id,campaign_id,recipient_email,recipient_hash,idempotency_key,step_number,status,scheduled_at,updated_at)VALUES($1,$2,$3,'existing@example.invalid',$4,$5,1,'pending_approval',now(),now())",[job,ws,campaign,'b'.repeat(64),randomUUID()]);
+ const before=(await db.query('SELECT row_to_json(c) AS data FROM campaigns c WHERE id=$1',[campaign])).rows[0].data;
+ const jobBefore=(await db.query('SELECT row_to_json(j) AS data FROM outbound_jobs j WHERE id=$1',[job])).rows[0].data;
+ const poolBefore=(await db.query('SELECT * FROM campaign_mailboxes WHERE campaign_id=$1',[campaign])).rows;
+ const migrated=execFileSync('npx',['prisma','migrate','deploy'],{cwd:root+'packages/database',env:{...process.env,DATABASE_URL:url},encoding:'utf8',timeout:90000});
+ const after=(await db.query('SELECT row_to_json(c) AS data FROM campaigns c WHERE id=$1',[campaign])).rows[0].data;assert.equal(after.project_id,null);delete after.project_id;assert.deepEqual(after,before);
+ assert.deepEqual((await db.query('SELECT row_to_json(j) AS data FROM outbound_jobs j WHERE id=$1',[job])).rows[0].data,jobBefore);assert.deepEqual((await db.query('SELECT * FROM campaign_mailboxes WHERE campaign_id=$1',[campaign])).rows,poolBefore);
+ assert.equal((await db.query('SELECT count(*)::int AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL')).rows[0].n,34);
+ await db.query('UPDATE campaigns SET project_id=$1 WHERE id=$2',[project,campaign]);await assert.rejects(db.query('DELETE FROM projects WHERE id=$1',[project]));await db.query('DELETE FROM workspaces WHERE id=$1',[ws]);
+ console.log(baseline.slice(-400));console.log(migrated);console.log('PASS actual 29-to-31 native Prisma upgrade: old campaign JSON/status/copy/limit/timestamps, sender pool and held job unchanged, ownership NULL, same-workspace assignment works, owned project deletion blocked, workspace cascade works. Disposable DB removed.');
+}finally{await db?.end();await admin.query('DROP DATABASE '+name);await admin.end();}

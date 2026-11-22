@@ -60,7 +60,7 @@ export async function callAuthFlow<T = Record<string, unknown>>(
       return {
         ok: false,
         status: 503,
-        error: 'Email sign-up is not available yet',
+        error: 'Authentication service is temporarily unavailable. Try again shortly.',
       };
     }
 

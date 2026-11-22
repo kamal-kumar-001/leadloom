@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from 'next-auth';
+import { isPlatformAdmin } from './lib/platform-admin';
 
 export const authConfig = {
   pages: {
@@ -6,6 +7,17 @@ export const authConfig = {
     error: '/login',
   },
   callbacks: {
+    session({session, token}) {
+      // Middleware and server layouts must see the same signed identity proof.
+      // Never infer verification from an address or forward engine credentials.
+      if (session.user) {
+        const user = session.user as unknown as Record<string, unknown>;
+        user.email_verified = token.email_verified === true;
+        user.idp = token.idp;
+        user.authTime = token.authTime;
+      }
+      return session;
+    },
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const isApp = nextUrl.pathname.startsWith('/app');
@@ -17,13 +29,8 @@ export const authConfig = {
 
       if (isAdmin) {
         if (!isLoggedIn) return false;
-        // Platform privileges must never come from a self-asserted email string.
-        // Admin access is decided by the engine from its own tables.
-        // Until a platform-admin table exists, /admin stays closed (deny) outside an explicit dev flag.
-        if (process.env.LEADLOOM_DEV_ADMIN_ENABLED === 'true' && process.env.NODE_ENV !== 'production') {
-          return true;
-        }
-        return false;
+        // Authenticated provider-verified account ownership check for designated platform admin
+        return isPlatformAdmin(auth?.user as { email?: string | null; email_verified?: boolean });
       }
 
       return true;

@@ -1,0 +1,3 @@
+import {it,expect} from 'vitest';
+import {resolveEnginePath} from '../agent-gateway';
+it('allows only private draft GET and PUT without widening lifecycle or dispatch routes',()=>{const p=['project','campaign-drafts','11111111-1111-4111-8111-111111111111'];for(const method of ['GET','PUT'])expect(resolveEnginePath(method,p)).toBe('/agent/project/campaign-drafts/'+p[2]);for(const method of ['POST','PATCH','DELETE'])expect(resolveEnginePath(method,p)).toBeNull();expect(resolveEnginePath('PUT',[...p,'status'])).toBeNull();expect(resolveEnginePath('PUT',['project','campaign-drafts','bad'])).toBeNull();});

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { createApplication } from '../../../main';
 import { CampaignRecipientsRepository } from '../campaign-recipients.repository';
-import type { SqlConnection } from '../atomic-dispatch.repository';
+import type { SqlConnection, TransactionalDatabase } from '../atomic-dispatch.repository';
 
 let pg: PGlite, campaignId: string, mailboxId: string;
 const key = randomBytes(32);
@@ -43,7 +43,8 @@ afterEach(async () => { await pg?.close(); });
 
 describe('campaign lifecycle routes', () => {
   const boot = async () => {
-    const app = await createApplication({ ...stubCore(), recipients: new CampaignRecipientsRepository(connection(pg)) } as never);
+    const database: TransactionalDatabase = { ...connection(pg), transaction: operation => pg.transaction(tx => operation(connection(tx))) };
+    const app = await createApplication({ ...stubCore(), recipients: new CampaignRecipientsRepository(database) } as never);
     return app.getHttpAdapter().getInstance();
   };
   const put = (server: any, body: unknown, role = 'admin') =>

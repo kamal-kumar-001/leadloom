@@ -5,6 +5,9 @@ import {
   ValidationScorecardMetrics,
   ValidationScorecardResponse,
   SmokePageConfig,
+  ValidationLeadsResponse,
+  EditDraftPageCopy,
+  DraftPageCopy,
 } from '@leadloom/contracts';
 import { DecomposedHypothesisOutput, HypothesisDecomposerService } from './hypothesis-decomposer.service';
 import { ScorecardService } from './scorecard.service';
@@ -16,6 +19,7 @@ export interface StoredExperiment {
   decomposed: DecomposedHypothesisOutput;
   metrics: ValidationScorecardMetrics;
   leads: Array<{
+    id?: string;
     email: string;
     name?: string;
     company?: string;
@@ -34,10 +38,17 @@ export interface PublicSmokePage {
   surveyQuestions: SmokePageConfig['surveyQuestions'];
 }
 
+export class PagePublicationConflict extends Error {}
+export class ExperimentNotFound extends Error {constructor(){super('Experiment not found');}}
+export class DraftPageConflict extends Error {}
+export type OwnerSmokePage = PublicSmokePage & {status:string;revision:string};
+const copyOf=(page:PublicSmokePage):DraftPageCopy=>({title:page.title,headline:page.headline,subheadline:page.subheadline,heroCtaText:page.heroCtaText});
+const pageRevision=(page:PublicSmokePage):string=>crypto.createHash('sha256').update(JSON.stringify({...copyOf(page),surveyQuestions:page.surveyQuestions})).digest('hex');
+
 const INITIAL_METRICS: ValidationScorecardMetrics = {
   visitors: 0,
   pageConversions: 0,
-  pageConversionRate: 0,
+  pageConversionRate: null,
   outreachSent: 0,
   replies: 0,
   replyRate: 0,
@@ -75,13 +86,13 @@ export class ValidatorService {
     return new URL(`/v/${slug}`, this.publicOrigin).href;
   }
 
-  /** Rates are derived from raw counters; visitors is clamped to conversions so the contract's 0..1 rates hold even if leads arrive without a page load. */
+  /** Preserve measured loads. Missing or incomparable denominators do not create traffic. */
   private metricsFrom(parts: { visitors: number; leadCount: number; outreachSent: number; replies: number; positiveReplies: number }): ValidationScorecardMetrics {
-    const visitors = Math.max(parts.visitors, parts.leadCount);
+    const visitors = parts.visitors;
     return {
       visitors,
       pageConversions: parts.leadCount,
-      pageConversionRate: visitors > 0 ? parts.leadCount / visitors : 0,
+      pageConversionRate: visitors > 0 && parts.leadCount <= visitors ? parts.leadCount / visitors : null,
       outreachSent: parts.outreachSent,
       replies: parts.replies,
       replyRate: parts.outreachSent > 0 ? parts.replies / parts.outreachSent : 0,
@@ -109,6 +120,11 @@ export class ValidatorService {
     scorecard: ValidationScorecardResponse;
   }> {
     const decomposed = this.decomposer.decompose(request);
+    // The customer's coding agent or founder supplies the words. Leadloom
+    // stores them as plain text in an unpublished draft, never rewrites them
+    // into a domain template and never treats them as executable markup.
+    if (request.pageCopy) Object.assign(decomposed.smokePage, request.pageCopy);
+    if (request.surveyQuestions !== undefined) decomposed.smokePage.surveyQuestions = structuredClone(request.surveyQuestions);
     const baseSlug = decomposed.slug;
 
     if (this.prisma) {
@@ -122,6 +138,7 @@ export class ValidatorService {
         data: {
           id: experimentId,
           workspaceId,
+          ...(request.projectId?{projectId:request.projectId}:{}),
           hypothesis: request.rawHypothesis,
           icpSpec: decomposed.icp as any,
           sequenceSubject: decomposed.sequenceSubject,
@@ -143,6 +160,7 @@ export class ValidatorService {
       return { experimentId, pageUrl: this.pageUrl(decomposed.slug), decomposed, scorecard: this.scorecardFor(exp) };
     }
 
+    if(request.projectId)throw new Error('Project-owned experiments require persistent storage');
     if (request.preferredSlug && this.slugToId.has(baseSlug)) throw new Error('Requested page slug is already in use');
     while (this.slugToId.has(decomposed.slug)) decomposed.slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
     decomposed.smokePage.slug = decomposed.slug;
@@ -168,6 +186,7 @@ export class ValidatorService {
     const experiment = row.smokeTestPages ? row : (row.experiment ?? undefined);
     if (!experiment || !page) return undefined;
     const leads = (page.waitlistLeads ?? []).map((l: any) => ({
+      id: l.id,
       email: l.email,
       name: l.name ?? undefined,
       company: l.company ?? undefined,
@@ -238,24 +257,50 @@ export class ValidatorService {
     const exp = await this.getExperimentBySlug(slug);
     if (!exp) return undefined;
     exp.metrics.visitors += 1;
-    exp.metrics.pageConversionRate = exp.metrics.visitors > 0 ? exp.metrics.pageConversions / exp.metrics.visitors : 0;
+    exp.metrics.pageConversionRate = exp.metrics.visitors > 0 && exp.metrics.pageConversions <= exp.metrics.visitors ? exp.metrics.pageConversions / exp.metrics.visitors : null;
     const sp = exp.decomposed.smokePage;
     return { slug: exp.decomposed.slug, title: sp.title, headline: sp.headline, subheadline: sp.subheadline, heroCtaText: sp.heroCtaText, surveyQuestions: sp.surveyQuestions };
   }
 
   /** Owner-only preview of the exact page copy (any status). Never increments visitors: previews are not page loads. */
-  public async getOwnerPage(experimentId: string, workspaceId: string): Promise<(PublicSmokePage & { status: string }) | undefined> {
+  public async getOwnerPage(experimentId: string, workspaceId: string): Promise<OwnerSmokePage | undefined> {
     if (this.prisma) {
       const exp = await this.prisma.validationExperiment.findFirst({ where: { id: experimentId, workspaceId } });
       if (!exp) return undefined;
       const page = await this.prisma.smokeTestPage.findFirst({ where: { experimentId } });
       if (!page) return undefined;
-      return { slug: page.slug, title: page.title, headline: page.headline, subheadline: page.subheadline, heroCtaText: page.heroCtaText, surveyQuestions: page.surveyQuestions as SmokePageConfig['surveyQuestions'], status: page.status };
+      return { slug: page.slug, title: page.title, headline: page.headline, subheadline: page.subheadline, heroCtaText: page.heroCtaText, surveyQuestions: page.surveyQuestions as SmokePageConfig['surveyQuestions'], status: page.status, revision: pageRevision(page) };
     }
     const exp = await this.getExperiment(experimentId, workspaceId);
     if (!exp) return undefined;
     const sp = exp.decomposed.smokePage;
-    return { slug: exp.decomposed.slug, title: sp.title, headline: sp.headline, subheadline: sp.subheadline, heroCtaText: sp.heroCtaText, surveyQuestions: sp.surveyQuestions, status: this.pageStatus.get(exp.decomposed.slug) ?? 'draft' };
+    return { slug: exp.decomposed.slug, title: sp.title, headline: sp.headline, subheadline: sp.subheadline, heroCtaText: sp.heroCtaText, surveyQuestions: sp.surveyQuestions, status: this.pageStatus.get(exp.decomposed.slug) ?? 'draft', revision:pageRevision(sp) };
+  }
+
+  /** Draft-only compare-and-set. Public pages must first be explicitly unpublished.
+   * Copy alone changes: slug, survey, ownership, metrics and captured leads stay intact.
+   */
+  public async editDraftCopy(experimentId:string,workspaceId:string,input:EditDraftPageCopy):Promise<(OwnerSmokePage&{saved:true;changed:boolean})|undefined>{
+    const apply=(page:any)=>{
+      if(page.status!=='draft')throw new DraftPageConflict('Unpublish this page before editing its copy');
+      const unchanged=JSON.stringify(copyOf(page))===JSON.stringify(input.pageCopy);
+      if(!unchanged&&pageRevision(page)!==input.expectedRevision)throw new DraftPageConflict('Page copy changed since you opened it. Reload before saving; your draft has not been applied');
+      return !unchanged;
+    };
+    if(this.prisma){
+      return this.prisma.$transaction(async(tx:any)=>{
+        const pages=await tx.$queryRawUnsafe(`SELECT p.id FROM smoke_test_pages p JOIN validation_experiments e ON e.id=p.experiment_id WHERE e.id=$1::uuid AND e.workspace_id=$2::uuid FOR UPDATE OF p`,experimentId,workspaceId);
+        if(pages.length!==1)return undefined;
+        const page=await tx.smokeTestPage.findUnique({where:{id:pages[0].id}});if(!page)return undefined;
+        const changed=apply(page);
+        const saved=changed?await tx.smokeTestPage.update({where:{id:page.id},data:input.pageCopy}):page;
+        return{slug:saved.slug,...copyOf(saved),surveyQuestions:saved.surveyQuestions,status:saved.status,revision:pageRevision(saved),saved:true as const,changed};
+      });
+    }
+    const exp=await this.getExperiment(experimentId,workspaceId);if(!exp)return undefined;
+    const page=exp.decomposed.smokePage,status=this.pageStatus.get(page.slug)??'draft';
+    const changed=apply({...page,status});if(changed)Object.assign(page,input.pageCopy);
+    return{...page,status,revision:pageRevision(page),saved:true,changed};
   }
 
   public async recordTraffic(slug: string): Promise<void> {
@@ -265,22 +310,33 @@ export class ValidatorService {
   public async submitLead(slug: string, lead: SubmitWaitlistLeadRequest): Promise<{ success: boolean; totalWaitlist: number }> {
     const email = lead.email.toLowerCase();
     if (this.prisma) {
-      const page = await this.prisma.smokeTestPage.findFirst({ where: { slug, status: 'published' }, include: { waitlistLeads: true } });
-      if (!page) throw new Error(`Smoke test page not found for slug: ${slug}`);
-      if (!page.waitlistLeads.some((l: any) => l.email.toLowerCase() === email)) {
-        await this.prisma.waitlistLead.create({
-          data: { id: crypto.randomUUID(), pageId: page.id, email, name: lead.name ?? null, company: lead.company ?? null, surveyResponses: (lead.surveyResponses ?? {}) as any },
+      // Serialize on the page itself. A pre-read followed by create is not a
+      // dedupe boundary: parallel submissions can all observe an empty list.
+      // This lock also orders capture with unpublish/delete, which update or
+      // remove the same row. No existing leads are overwritten on a retry.
+      return this.prisma.$transaction(async (tx: any) => {
+        const pages: Array<{ id: string }> = await tx.$queryRawUnsafe(
+          `SELECT id::text AS id FROM smoke_test_pages WHERE slug=$1 AND status='published' FOR UPDATE`, slug,
+        );
+        const page = pages[0];
+        if (!page) throw new Error(`Smoke test page not found for slug: ${slug}`);
+        const existing = await tx.waitlistLead.findFirst({
+          where: { pageId: page.id, email: { equals: email, mode: 'insensitive' } }, select: { id: true },
         });
-        return { success: true, totalWaitlist: page.waitlistLeads.length + 1 };
-      }
-      return { success: true, totalWaitlist: page.waitlistLeads.length };
+        if (!existing) {
+          await tx.waitlistLead.create({
+            data: { id: crypto.randomUUID(), pageId: page.id, email, name: lead.name ?? null, company: lead.company ?? null, surveyResponses: (lead.surveyResponses ?? {}) as any, referrer: lead.referrer ?? null },
+          });
+        }
+        return { success: true, totalWaitlist: await tx.waitlistLead.count({ where: { pageId: page.id } }) };
+      });
     }
     if (this.pageStatus.get(slug) !== 'published') throw new Error(`Smoke test page not found for slug: ${slug}`);
     const exp = await this.getExperimentBySlug(slug);
     if (!exp) throw new Error(`Smoke test page not found for slug: ${slug}`);
     const alreadyExists = exp.leads.some((l) => l.email.toLowerCase() === email);
     if (!alreadyExists) {
-      exp.leads.push({ email: lead.email, name: lead.name, company: lead.company, surveyResponses: lead.surveyResponses ?? {}, createdAt: new Date() });
+      exp.leads.push({ id: crypto.randomUUID(), email: lead.email, name: lead.name, company: lead.company, surveyResponses: lead.surveyResponses ?? {}, createdAt: new Date() });
       exp.metrics = this.metricsFrom({ visitors: exp.metrics.visitors, leadCount: exp.leads.length, outreachSent: exp.metrics.outreachSent, replies: exp.metrics.replies, positiveReplies: exp.metrics.positiveReplies });
     }
     return { success: true, totalWaitlist: exp.leads.length };
@@ -291,20 +347,20 @@ export class ValidatorService {
    * explicit owner publish action. Tenant-scoped; public routes only serve
    * published pages (drafts are indistinguishable from unknown slugs).
    */
-  public async setPublishStatus(experimentId: string, workspaceId: string, published: boolean): Promise<{ experimentId: string; slug: string; status: string }> {
-    const status = published ? 'published' : 'draft';
-    if (this.prisma) {
-      const owned = await this.getExperiment(experimentId, workspaceId);
-      if (!owned) throw new Error(`Experiment not found: ${experimentId}`);
-      const page = await this.prisma.smokeTestPage.findFirst({ where: { experimentId } });
-      if (!page) throw new Error(`Experiment not found: ${experimentId}`);
-      await this.prisma.smokeTestPage.update({ where: { id: page.id }, data: { status } });
-      return { experimentId, slug: page.slug, status };
+  public async setPublishStatus(experimentId:string,workspaceId:string,published:boolean,expectedRevision?:string):Promise<{experimentId:string;slug:string;status:string}>{
+    const status=published?'published':'draft';
+    const check=(page:PublicSmokePage)=>{if(published&&(!expectedRevision||pageRevision(page)!==expectedRevision))throw new PagePublicationConflict('Saved page changed or was not reviewed. Load and review the current copy before publishing.');};
+    if(this.prisma){
+      return this.prisma.$transaction(async(tx:any)=>{
+        const owned=await tx.$queryRawUnsafe('SELECT p.id FROM smoke_test_pages p JOIN validation_experiments e ON e.id=p.experiment_id WHERE e.id=$1::uuid AND e.workspace_id=$2::uuid FOR UPDATE OF p',experimentId,workspaceId);
+        if(owned.length!==1)throw new ExperimentNotFound();
+        const page=await tx.smokeTestPage.findUnique({where:{id:owned[0].id}});if(!page)throw new ExperimentNotFound();check(page);
+        if(page.status!==status)await tx.smokeTestPage.update({where:{id:page.id},data:{status}});
+        return{experimentId,slug:page.slug,status};
+      });
     }
-    const exp = await this.getExperiment(experimentId, workspaceId);
-    if (!exp) throw new Error(`Experiment not found: ${experimentId}`);
-    this.pageStatus.set(exp.decomposed.slug, status);
-    return { experimentId, slug: exp.decomposed.slug, status };
+    const exp=await this.getExperiment(experimentId,workspaceId);if(!exp)throw new ExperimentNotFound();check(exp.decomposed.smokePage);
+    this.pageStatus.set(exp.decomposed.slug,status);return{experimentId,slug:exp.decomposed.slug,status};
   }
 
   public async updateOutreachMetrics(
@@ -337,4 +393,26 @@ export class ValidatorService {
     }
     return this.scorecardFor(exp);
   }
+
+  /**
+   * Retrieves captured waitlist leads for an experiment. Tenant-scoped; caller
+   * must have experiments:read scope for the owning workspace.
+   */
+  public async getLeads(experimentId: string, workspaceId: string): Promise<ValidationLeadsResponse> {
+    const exp = await this.getExperiment(experimentId, workspaceId);
+    if (!exp) throw new Error(`Experiment not found: ${experimentId}`);
+    return {
+      experimentId,
+      totalLeads: exp.leads.length,
+      leads: exp.leads.map((l, idx) => ({
+        id: l.id ?? `lead-${idx + 1}`,
+        email: l.email,
+        name: l.name ?? null,
+        company: l.company ?? null,
+        surveyResponses: l.surveyResponses ?? {},
+        createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : String(l.createdAt),
+      })),
+    };
+  }
 }
+

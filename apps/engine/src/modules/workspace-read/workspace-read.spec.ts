@@ -196,3 +196,10 @@ describe('listTableRows', () => {
     expect(await svc.listTableRows('ws-2', 't1')).toBeNull();
   });
 });
+
+
+it('pages persisted rows in stable order without reading a foreign workspace or prototype-backed names',async()=>{
+ const all=Array.from({length:205},(_,i)=>({id:'row-'+i,orderIndex:i}));const calls:any[]=[];
+ const db:any={table:{findFirst:async({where}:any)=>where.workspaceId==='own'?{id:'table',name:'Paged',rowCount:205}:null},column:{findMany:async()=>[{id:'col',name:'__proto__',type:'text'}]},row:{findMany:async(args:any)=>{calls.push(args);return all.slice(args.skip,args.skip+args.take);}},cell:{findMany:async({where}:any)=>where.rowId.in.map((id:string)=>({rowId:id,columnId:'col',value:id}))}};
+ const svc=new WorkspaceReadService(db);const first=await svc.listTableRows('own','table');expect(first!.rows).toHaveLength(100);expect(first!.nextOffset).toBe(100);const last=await svc.listTableRows('own','table',200);expect(last!.rows).toHaveLength(5);expect(last!.nextOffset).toBeNull();expect(Object.getPrototypeOf(last!.rows[0].values)).toBeNull();expect(last!.rows[0].values.__proto__).toBe('row-200');expect(calls[0].orderBy).toEqual([{orderIndex:'asc'},{id:'asc'}]);expect(await svc.listTableRows('foreign','table',200)).toBeNull();expect(calls).toHaveLength(2);
+});

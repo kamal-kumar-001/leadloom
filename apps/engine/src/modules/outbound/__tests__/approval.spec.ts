@@ -387,3 +387,35 @@ describe('G9 Approval-before-send queue behavior', () => {
     expect(row.rows[0].status).toBe('pending_approval');
   });
 });
+
+it('binds approval to this reviewer snapshot even after another reviewer refreshes changed copy',async()=>{
+ const id=await repo.enqueue({workspaceId,campaignId,recipientEmail:'review-race@example.invalid',idempotencyKey:'review-race',stepNumber:1,recipient:{firstName:'Ada',companyName:'Acme'},scheduledAt:now});
+ const first=(await pg.query<{approval_content_hash:string}>('SELECT approval_content_hash FROM outbound_jobs WHERE id=$1',[id])).rows[0].approval_content_hash;
+ await pg.query('UPDATE campaigns SET steps=$2::jsonb WHERE id=$1',[campaignId,JSON.stringify([{stepNumber:1,subject:'New unseen subject',bodyTemplate:'New unseen body'}])]);
+ expect((await repo.approve(workspaceId,{jobIds:[id]})).staleCount).toBe(1);
+ const stale=await repo.approve(workspaceId,{jobIds:[id],expectedRevisions:{[id]:first}});
+ expect(stale.approvedCount).toBe(0);expect(stale.staleCount).toBe(1);
+ expect((await pg.query<{status:string}>('SELECT status FROM outbound_jobs WHERE id=$1',[id])).rows[0].status).toBe('pending_approval');
+ const second=(await repo.listPendingApprovals(workspaceId))[0];expect(second.reviewRevision).toMatch(/^[a-f0-9]{64}$/);expect(second.subject).toBe('New unseen subject');
+ expect((await repo.approve(workspaceId,{jobIds:[id],expectedRevisions:{[id]:second.reviewRevision}})).approvedCount).toBe(1);
+ expect((await pg.query<{status:string}>('SELECT status FROM outbound_jobs WHERE id=$1',[id])).rows[0].status).toBe('approved');
+});
+
+it('old reviewer cannot approve a concurrently pinned sender; null/missing reviewed revisions never approve',async()=>{
+ const id=await repo.enqueue({workspaceId,campaignId,recipientEmail:'sender-review@example.invalid',idempotencyKey:'sender-review',stepNumber:1,recipient:{firstName:'Ada',companyName:'Acme'},scheduledAt:now});
+ const first=(await repo.listPendingApprovals(workspaceId))[0].reviewRevision;
+ const other=randomUUID();await pg.query('INSERT INTO mailboxes(id,workspace_id,email,smtp_host,updated_at)VALUES($1,$2,$3,$4,$5)',[other,workspaceId,'other@example.invalid','smtp.example.invalid',now]);await pg.query('INSERT INTO campaign_mailboxes(campaign_id,mailbox_id,workspace_id)VALUES($1,$2,$3)',[campaignId,other,workspaceId]);
+ expect((await repo.setSenderMailbox(workspaceId,id,other)).ok).toBe(true);
+ for(const expectedRevisions of [{[id]:first},{[id]:null},{}]){const r=await repo.approve(workspaceId,{jobIds:[id],expectedRevisions});expect(r.approvedCount).toBe(0);expect(r.staleCount).toBe(1);}
+ const current=(await repo.listPendingApprovals(workspaceId))[0];expect(current.senderMailboxIds).toEqual([other]);expect(current.reviewRevision).not.toBe(first);
+ expect((await repo.approve(workspaceId,{jobIds:[id],expectedRevisions:{[id]:current.reviewRevision}})).approvedCount).toBe(1);
+ expect((await repo.releaseApproved(workspaceId,campaignId)).released).toBe(0);
+});
+it('a legacy job without saved review can only refresh with null, then needs the newly displayed revision',async()=>{
+ const id=await repo.enqueue({workspaceId,campaignId,recipientEmail:'legacy-review@example.invalid',idempotencyKey:'legacy-review',stepNumber:1,recipient:{firstName:'Ada',companyName:'Acme'},scheduledAt:now});
+ await pg.query('UPDATE outbound_jobs SET approval_snapshot=NULL,approval_content_hash=NULL WHERE id=$1',[id]);
+ expect((await repo.listPendingApprovals(workspaceId))[0].reviewRevision).toBeNull();
+ expect((await repo.approve(workspaceId,{jobIds:[id],expectedRevisions:{[id]:null}}))).toEqual({approvedCount:0,staleCount:1});
+ expect((await repo.approve(workspaceId,{jobIds:[id],expectedRevisions:{[id]:null}}))).toEqual({approvedCount:0,staleCount:1});
+ const reviewed=(await repo.listPendingApprovals(workspaceId))[0];expect((await repo.approve(workspaceId,{jobIds:[id],expectedRevisions:{[id]:reviewed.reviewRevision}})).approvedCount).toBe(1);
+});

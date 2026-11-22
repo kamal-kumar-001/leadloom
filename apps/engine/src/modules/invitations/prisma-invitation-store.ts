@@ -111,7 +111,7 @@ export class PrismaInvitationStore implements InvitationStore {
         const c: any[] = await tx.$queryRawUnsafe(`SELECT 1 FROM "${t.table_name}" WHERE workspace_id = $1::uuid LIMIT 1`, me.workspaceId);
         if (c.length > 0) return { ok: false, reason: 'has_workspace_data' };
       }
-      await tx.$executeRawUnsafe(`UPDATE users SET workspace_id = $2::uuid, role = $3, session_version = session_version + 1 WHERE id = $1::uuid`, userId, inv[0].workspace_id, inv[0].role);
+      await tx.$executeRawUnsafe(`UPDATE users SET workspace_id = $2::uuid, role = $3, session_version = session_version + 1, credentials_revoked_at = clock_timestamp() WHERE id = $1::uuid`, userId, inv[0].workspace_id, inv[0].role);
       await tx.$executeRawUnsafe(`UPDATE workspaces SET is_active = false WHERE id = $1::uuid`, me.workspaceId);
       await tx.$executeRawUnsafe(`UPDATE workspace_invitations SET accepted_at = now(), accepted_user_id = $2::uuid WHERE id = $1::uuid`, invitationId, userId);
       await tx.$executeRawUnsafe(

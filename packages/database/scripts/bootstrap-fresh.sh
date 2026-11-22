@@ -8,9 +8,12 @@ set -eu
 SCHEMA="${SCHEMA:-prisma/schema.prisma}"
 MIG="$(dirname "$SCHEMA")/migrations"
 : "${DATABASE_URL:?DATABASE_URL required}"
-# Refuse unless the database has no migration history at all.
-if echo "select 1 from _prisma_migrations limit 1" | npx prisma db execute --stdin --schema "$SCHEMA" >/dev/null 2>&1; then
-  echo "refusing: _prisma_migrations already exists; use 'prisma migrate deploy'" >&2; exit 2
+# Fail closed before baseline SQL. Missing migration history does not prove an
+# empty database, and connection/auth errors must never count as emptiness.
+SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+if ! npx prisma db execute --file "$SCRIPT_DIR/assert-fresh-database.sql" --schema "$SCHEMA"; then
+  echo "refusing: target was not verified empty; no baseline SQL was run. Review the target and use the existing-install migration procedure only for an identified Leadloom database." >&2
+  exit 2
 fi
 for m in 20261110_init_v2 20261110_integrity; do
   npx prisma db execute --file "$MIG/$m/migration.sql" --schema "$SCHEMA"

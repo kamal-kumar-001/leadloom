@@ -21,6 +21,7 @@ export interface CredentialRepository {
   find(workspaceId: string, credentialId: string): Promise<StoredCredential | null>;
   /** Latest stored credential for a provider, or null. */
   findLatestByProvider(workspaceId: string, provider: BYOKProvider): Promise<StoredCredential | null>;
+  /** Native createdAt DESC, id DESC order. Consumers must preserve it. */
   list(workspaceId: string): Promise<StoredCredential[]>;
   delete(workspaceId: string, credentialId: string): Promise<boolean>;
   /** Records the outcome of a live test-connection. ok=false marks the key unverified. */

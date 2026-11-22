@@ -1,8 +1,10 @@
 'use client';
+import {SavedWaterfallConfig} from '../../../components/grid/saved-waterfall-config';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button, Badge, Card, EmptyState } from '@leadloom/ui';
 import {
+  fetchAuthMe,
   fetchWorkspaceTables,
   fetchWorkspaceTableRows,
   dispatchWaterfall,
@@ -14,6 +16,8 @@ import { mergeRefreshedCells } from '../../../lib/waterfall-cell-refresh';
 import { createJobLifecycle, type JobLifecycle } from '../../../lib/waterfall-job-lifecycle';
 import { type WaterfallJobView } from '../../../lib/waterfall-job-view-model';
 import { WaterfallJobStatusLine } from '../../../components/grid/waterfall-job-status-line';
+import {SavedTableExport} from '../../../components/grid/saved-table-export';
+import {PersistedCsvImport} from '../../../components/grid/persisted-csv-import';
 import { LoomVirtualGrid } from '../../../components/grid/loom-virtual-grid';
 import { PreFlightBar } from '../../../components/grid/pre-flight-bar';
 import { ThreadInspector } from '../../../components/grid/drawers/thread-inspector';
@@ -35,20 +39,29 @@ import {
 } from 'lucide-react';
 
 export default function TablesPage() {
+  const [canEdit,setCanEdit]=useState(false);
+  useEffect(()=>{void fetchAuthMe().then(r=>setCanEdit(r.data?.role==='admin'||r.data?.role==='member'));},[]);
   const [tables, setTables] = useState<WorkspaceTableRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openTable, setOpenTable] = useState<WorkspaceTableRows | null>(null);
   const [openTableError, setOpenTableError] = useState<string | null>(null);
 
-  async function openPersistedTable(tableId: string) {
-    setOpenTable(null);
+  const [rowsLoading,setRowsLoading]=useState(false);
+  const openSequence=useRef(0);
+  async function openPersistedTable(tableId: string,offset=0) {
+    const seq=++openSequence.current;
+    setRowsLoading(true);
+    if(openTable?.table.id!==tableId)setOpenTable(null);
     setOpenTableError(null);
     setTableSelection(new Set());
     setPersistedJobView(null);
     setPersistedOutcome(null);
+    lifecycleRef.current?.stop();
     snapshotRef.current = { tableId: null, loadedAt: Date.now() };
-    const res = await fetchWorkspaceTableRows(tableId);
+    const res = await fetchWorkspaceTableRows(tableId,offset);
+    if(seq!==openSequence.current)return;
+    setRowsLoading(false);
     if (res.data) {
       setOpenTable(res.data);
       snapshotRef.current = { tableId: res.data.table.id, loadedAt: Date.now() };
@@ -175,6 +188,8 @@ export default function TablesPage() {
         </div>
       </div>
 
+      <PersistedCsvImport onImported={(id)=>{void loadTables();void openPersistedTable(id);}} />
+
       {/* 1. Real Workspace Tables List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -219,6 +234,7 @@ export default function TablesPage() {
             {tables.map((tbl) => (
               <Card
                 key={tbl.id}
+                data-testid={'persisted-table-'+tbl.id}
                 className="p-5 flex flex-col justify-between hover:border-border-muted transition-all shadow-sm"
               >
                 <div>
@@ -231,8 +247,8 @@ export default function TablesPage() {
                       {tbl.rowCount.toLocaleString()} rows
                     </Badge>
                   </div>
-                  <p className="text-[11px] text-text-muted mt-3 font-mono">
-                    Created: {new Date(tbl.createdAt).toLocaleDateString(undefined, {
+                  <p className="text-[11px] text-text-muted mt-3 font-mono break-all">
+                    {tbl.projectId?'Project: '+tbl.projectId+' · ':''}Created: {new Date(tbl.createdAt).toLocaleDateString(undefined, {
                       year: 'numeric',
                       month: 'short',
                       day: 'numeric',
@@ -252,23 +268,27 @@ export default function TablesPage() {
       </div>
 
       {/* 1b. Real persisted table contents (read-only) */}
-      {(openTable || openTableError) && (
+      {(openTable || openTableError || rowsLoading) && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-text-primary">
               {openTable ? `Table: ${openTable.table.name}` : 'Table'}
             </h2>
-            <button className="text-xs text-text-muted underline" onClick={() => { setOpenTable(null); setOpenTableError(null); snapshotRef.current = { tableId: null, loadedAt: Date.now() }; }}>
+            <button className="text-xs text-text-muted underline" onClick={() => { openSequence.current++; lifecycleRef.current?.stop(); snapshotRef.current = { tableId: null, loadedAt: Date.now() }; setRowsLoading(false); setOpenTable(null); setOpenTableError(null); }}>
               Close
             </button>
           </div>
+          {rowsLoading&&<p className="text-xs text-text-muted">Loading saved rows...</p>}
           {openTableError && (
             <Card className="p-4 border-signal-failed/30 bg-signal-failed/5 text-sm text-signal-failed">{openTableError}</Card>
           )}
           {openTable && (
             <>
               <PersistedTableView
+                key={openSequence.current}
                 data={openTable}
+                canEdit={canEdit&&!rowsLoading}
+                onSaved={()=>void openPersistedTable(openTable.table.id,openTable.offset??0)}
                 selection={waterfallColumn ? { selected: tableSelection, onToggle: togglePersistedRow } : undefined}
               />
               {waterfallColumn && (
@@ -277,7 +297,7 @@ export default function TablesPage() {
                     size="sm"
                     variant="outline"
                     className="text-xs gap-1.5"
-                    disabled={tableSelection.size === 0 || persistedDispatching}
+                    disabled={!canEdit || rowsLoading || tableSelection.size === 0 || persistedDispatching}
                     onClick={runWaterfallOnPersisted}
                   >
                     <Play className="w-3.5 h-3.5" />
@@ -295,6 +315,9 @@ export default function TablesPage() {
               {persistedOutcome && (
                 <p className="text-xs text-text-muted leading-snug break-words">{persistedOutcome}</p>
               )}
+          <SavedWaterfallConfig key={JSON.stringify(openTable)} tableId={openTable.table.id} columns={openTable.columns} rowIds={openTable.rows.map(r=>r.rowId)} canEdit={canEdit&&!rowsLoading} onSaved={()=>void openPersistedTable(openTable.table.id,openTable.offset??0)} />
+          <SavedTableExport key={openTable.table.id} tableId={openTable.table.id} />
+          <div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={rowsLoading} onClick={()=>void openPersistedTable(openTable.table.id,openTable.offset??0)}>Reload saved rows</Button><Button size="sm" variant="outline" disabled={rowsLoading||!(openTable.offset??0)} onClick={()=>void openPersistedTable(openTable.table.id,Math.max(0,(openTable.offset??0)-100))}>Previous saved rows</Button><Button size="sm" variant="outline" disabled={rowsLoading||openTable.nextOffset==null} onClick={()=>void openPersistedTable(openTable.table.id,openTable.nextOffset!)}>Next saved rows</Button></div>
             </>
           )}
         </div>
@@ -306,7 +329,7 @@ export default function TablesPage() {
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-text-primary">Interactive Grid Canvas</h2>
             <Badge variant="subtle" className="text-[10px] font-mono">
-              Sample preview
+              Sample preview, not saved
             </Badge>
           </div>
           <p className="text-xs text-text-muted">
@@ -354,7 +377,7 @@ export default function TablesPage() {
                 className="text-xs py-1.5 gap-1.5 border-border-subtle hover:border-border-strong"
               >
                 <UploadCloud className="w-3.5 h-3.5 text-signal-verified" />
-                <span>Import CSV</span>
+                <span>Import CSV to demo</span>
               </Button>
 
               {/* Outbound Sequencer Drawer Toggle */}
@@ -392,7 +415,7 @@ export default function TablesPage() {
             ) : (
               <>
                 <LoomVirtualGrid />
-                <PreFlightBar />
+                {!openTable&&!openTableError&&!rowsLoading&&<PreFlightBar />}
                 <ThreadInspector />
                 <LoomViewDrawer />
               </>

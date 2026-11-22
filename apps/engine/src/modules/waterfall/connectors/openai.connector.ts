@@ -111,7 +111,7 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
           max_tokens: input.maxTokens,
           response_format: input.responseFormat,
         }),
-      });
+      },ctx.timeoutMs);
 
       const latencyMs = Date.now() - start;
 
@@ -200,7 +200,7 @@ export class OpenAiConnector implements Connector<OpenAiInput, OpenAiOutput> {
           message: redactSecrets(err instanceof Error ? err.message : 'Unknown OpenAI error', [
             ctx.apiKey,
           ]),
-          retryable: true,
+          retryable: false,
         },
       };
     }

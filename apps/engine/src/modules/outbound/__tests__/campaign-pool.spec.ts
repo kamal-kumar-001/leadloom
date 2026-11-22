@@ -28,7 +28,7 @@ const stubCore = () => ({
 
 beforeEach(async () => {
   pg = new PGlite({ extensions: { vector } });
-  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261118_mailbox_password_auth', '20261124_campaign_recipients'])
+  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261118_mailbox_password_auth', '20261120_outbound_approval_status','20261121_outbound_approval_hardening','20261124_campaign_recipients'])
     await pg.exec(readFileSync(fileURLToPath(new URL(`../../../../../../packages/database/prisma/migrations/${migration}/migration.sql`, import.meta.url)), 'utf8'));
   campaignId = randomUUID();
   mailboxA = randomUUID(); mailboxB = randomUUID(); foreignMailbox = randomUUID();
@@ -44,7 +44,8 @@ afterEach(async () => { await pg?.close(); });
 
 describe('campaign sender pool routes', () => {
   const boot = async () => {
-    const app = await createApplication({ ...stubCore(), recipients: new CampaignRecipientsRepository(connection(pg)) } as never);
+    const database={...connection(pg),transaction:async(operation:any)=>pg.transaction(tx=>operation(connection(tx)))};
+    const app = await createApplication({ ...stubCore(), recipients: new CampaignRecipientsRepository(database) } as never);
     return app.getHttpAdapter().getInstance();
   };
 

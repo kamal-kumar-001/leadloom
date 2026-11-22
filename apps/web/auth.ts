@@ -6,6 +6,7 @@ import { engineBase } from './lib/engine-server';
 import GitHub from 'next-auth/providers/github';
 import Google from 'next-auth/providers/google';
 import { authConfig } from './auth.config';
+import { resolveAuthMethods } from './lib/auth-method-policy';
 
 // Fail closed: secret is strictly required and must be >= 32 bytes at runtime
 const isBuild =
@@ -21,9 +22,10 @@ if (!authSecret || authSecret.length < 32) {
 }
 
 const providers: NextAuthConfig['providers'] = [];
+const methods = resolveAuthMethods(process.env);
 
 // Real identity only: Google and GitHub OAuth providers
-if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
+if (methods.google) {
   providers.push(
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,
@@ -32,7 +34,7 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
   );
 }
 
-if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
+if (methods.github) {
   providers.push(
     GitHub({
       clientId: process.env.AUTH_GITHUB_ID,
@@ -51,7 +53,7 @@ class BadCredentials extends CredentialsSignin {
 
 // Email and password: the ENGINE checks the password and issues its own session.
 // The web app never verifies passwords or codes and a credentials session can never mint a bridge token.
-if (process.env.LEADLOOM_PASSWORD_AUTH_ENABLED === 'true') {
+if (methods.password) {
   providers.push(
     Credentials({
       credentials: { email: {}, password: {} },
@@ -132,6 +134,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     async jwt({ token, user, account, profile }) {
       if (account) {
+        if (account.provider === 'google' || account.provider === 'github') token.authTime = Math.floor(Date.now() / 1000);
         token.idp = account.provider; // 'google' | 'github' | 'credentials'
         if (account.provider === 'google') {
           token.email_verified = Boolean((profile as Record<string, unknown> | undefined)?.email_verified);
@@ -150,11 +153,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.email = user.email.toLowerCase().trim();
         token.id = user.id;
       }
+      if (user?.name) {
+        token.name = user.name;
+      }
       return token;
     },
     session({ session, token }) {
       if (token?.email && session.user) {
         session.user.email = token.email as string;
+        (session.user as unknown as Record<string, unknown>).authTime = token.authTime;
+        if (token.name) session.user.name = token.name as string;
         (session.user as unknown as Record<string, unknown>).idp = token.idp as string;
         (session.user as unknown as Record<string, unknown>).email_verified = Boolean(
           token.email_verified

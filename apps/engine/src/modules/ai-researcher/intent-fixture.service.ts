@@ -1,3 +1,5 @@
+import {ProjectResearchArchive} from './project-research-archive';
+import type {ProjectResearchIndexQuery} from '@leadloom/contracts';
 /**
  * G5 intent signals, fixture-first increment: parse a hiring-board-shaped
  * JSON fixture (Greenhouse public board response shape: { company, jobs: [...] })
@@ -12,6 +14,7 @@
  * Team-B-reported). Keyword-free: this module only normalizes what the fixture
  * literally contains.
  */
+import { appendResearchRow, findResearchTable, researchSaveIdentity, listProjectResearch } from './research-row-store';
 import { z } from 'zod';
 
 export const INTENT_TABLE_NAME = 'Intent signals (fixture)';
@@ -55,7 +58,7 @@ export interface IntentFixtureAnalysis {
 /** Normalize a validated fixture into the stored analysis. No inference beyond counting and listing what the fixture contains. */
 export function analyzeHiringBoardFixture(fixture: HiringBoardFixture): IntentFixtureAnalysis {
   const titles = fixture.jobs.map((j) => j.title);
-  const locations = [...new Set(fixture.jobs.map((j) => (typeof j.location === 'string' ? j.location : (j.location?.name ?? '')).trim()).filter(Boolean))];
+  const locations = Array.from(new Set(fixture.jobs.map((j) => (typeof j.location === 'string' ? j.location : (j.location?.name ?? '')).trim()).filter(Boolean)));
   const dates = fixture.jobs
     .map((j) => j.updated_at)
     .filter((d): d is string => Boolean(d))
@@ -104,26 +107,12 @@ export class IntentFixtureService {
     return { ok: true, analysis: analyzeHiringBoardFixture(parsed.data) };
   }
 
-  private async ensureTable(workspaceId: string): Promise<{ tableId: string; columnIds: Record<string, string> }> {
-    let table = await this.db.table.findFirst({ where: { workspaceId, name: INTENT_TABLE_NAME } });
-    if (!table) {
-      table = await this.db.table.create({ data: { workspaceId, name: INTENT_TABLE_NAME } });
-      for (let i = 0; i < COLUMNS.length; i++) {
-        await this.db.column.create({ data: { tableId: table.id, name: COLUMNS[i].name, type: COLUMNS[i].type, orderIndex: i } });
-      }
-    }
-    const cols = await this.db.column.findMany({ where: { tableId: table.id } });
-    const columnIds: Record<string, string> = {};
-    for (const c of cols) columnIds[c.name] = c.id;
-    return { tableId: table.id, columnIds };
-  }
 
   /** Persist an engine-computed fixture analysis; the client never supplies computed values. */
-  public async saveAnalysis(workspaceId: string, raw: unknown): Promise<{ ok: true; tableId: string; rowId: string } | { ok: false; error: string }> {
+  public async saveAnalysis(workspaceId: string, raw: unknown,requestId?:string,projectId?:string): Promise<{ ok: true; tableId: string; rowId: string; replayed:boolean } | { ok: false; error: string }> {
     const result = this.analyze(raw);
     if (!result.ok) return result;
     const a = result.analysis;
-    const { tableId, columnIds } = await this.ensureTable(workspaceId);
     const values: Record<string, unknown> = {
       Company: a.company,
       Signal: 'hiring (fixture)',
@@ -135,27 +124,23 @@ export class IntentFixtureService {
       Caveat: a.caveat,
       'Saved at': new Date().toISOString(),
     };
-    const count = await this.db.row.count({ where: { tableId } });
-    const row = await this.db.row.create({ data: { tableId, orderIndex: count } });
-    for (const [name, value] of Object.entries(values)) {
-      const columnId = columnIds[name];
-      if (!columnId) continue;
-      await this.db.cell.create({ data: { tableId, rowId: row.id, columnId, value: value as any } });
-    }
-    await this.db.table.update({ where: { id: tableId }, data: { rowCount: { increment: 1 } } });
-    return { ok: true, tableId, rowId: row.id };
+    return {ok:true,...await appendResearchRow(this.db,workspaceId,INTENT_TABLE_NAME,COLUMNS,values,researchSaveIdentity(requestId,{kind:'intent-fixture',fixture:HiringBoardFixtureSchema.parse(raw),...(projectId?{projectId}:{})}),projectId?{projectId,kind:'intent-fixture'}:undefined)};
   }
 
-  public async listAnalyses(workspaceId: string): Promise<SavedIntentRow[]> {
-    const table = await this.db.table.findFirst({ where: { workspaceId, name: INTENT_TABLE_NAME } });
+  public searchProjectAnalyses(workspaceId:string,projectId:string,query:ProjectResearchIndexQuery){return new ProjectResearchArchive(this.db,'intent-fixture',COLUMNS).search(workspaceId,projectId,query);}
+  public getProjectAnalysis(workspaceId:string,projectId:string,rowId:string){return new ProjectResearchArchive(this.db,'intent-fixture',COLUMNS).get(workspaceId,projectId,rowId);}
+
+  public async listAnalyses(workspaceId: string,projectId?:string): Promise<SavedIntentRow[]> {
+    if(projectId)return listProjectResearch(this.db,workspaceId,projectId,'intent-fixture',INTENT_TABLE_NAME);
+    const table = await findResearchTable(this.db,workspaceId,INTENT_TABLE_NAME);
     if (!table) return [];
     const cols = await this.db.column.findMany({ where: { tableId: table.id } });
-    const nameOf: Record<string, string> = {};
+    const nameOf: Record<string, string> = Object.create(null);
     for (const c of cols) nameOf[c.id] = c.name;
     const rows = await this.db.row.findMany({ where: { tableId: table.id }, orderBy: { orderIndex: 'desc' }, take: 50 });
     const cells = await this.db.cell.findMany({ where: { tableId: table.id, rowId: { in: rows.map((r: any) => r.id) } } });
     return rows.map((r: any) => {
-      const values: Record<string, unknown> = {};
+      const values: Record<string, unknown> = Object.create(null);
       for (const cell of cells.filter((c: any) => c.rowId === r.id)) {
         const name = nameOf[cell.columnId];
         if (name) values[name] = cell.value;

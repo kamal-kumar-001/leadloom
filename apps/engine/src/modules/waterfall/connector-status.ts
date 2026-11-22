@@ -32,7 +32,7 @@ export interface ConnectorStatusRow {
   configured: boolean;
   maskedKey: string | null;
   label: string | null;
-  /** True only after a successful test-connection; a stored-but-unverified key stays false. */
+  /** Stored successful-test record with a timestamp, never a live connection check. */
   verified: boolean;
   lastVerifiedAt: string | null;
   updatedAt: string | null;
@@ -41,12 +41,14 @@ export interface ConnectorStatusRow {
 
 export function reconcileConnectorStatus(
   connectors: RegisteredConnectorInfo[],
+  /** Canonical native repository order, newest-created first with id DESC ties. */
   credentials: StoredConnectorCredential[],
 ): ConnectorStatusRow[] {
   const byProvider = new Map<string, StoredConnectorCredential>();
   for (const cred of credentials) {
-    const existing = byProvider.get(cred.provider);
-    if (!existing || cred.updatedAt > existing.updatedAt) byProvider.set(cred.provider, cred);
+    // Caller supplies the repository's native createdAt DESC, id DESC order.
+    // Never re-rank by updatedAt: rotating an older envelope does not select it.
+    if (!byProvider.has(cred.provider)) byProvider.set(cred.provider, cred);
   }
   return connectors.map((c) => {
     const cred = byProvider.get(c.id);
@@ -57,7 +59,7 @@ export function reconcileConnectorStatus(
       configured: Boolean(cred),
       maskedKey: cred?.maskedKey ?? null,
       label: cred?.label ?? null,
-      verified: Boolean(cred?.isValid),
+      verified: Boolean(cred?.isValid && cred.lastVerifiedAt),
       lastVerifiedAt: cred?.lastVerifiedAt ? cred.lastVerifiedAt.toISOString() : null,
       updatedAt: cred ? cred.updatedAt.toISOString() : null,
       testable: c.testable,

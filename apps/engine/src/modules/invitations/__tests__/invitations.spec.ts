@@ -17,7 +17,12 @@ class MemStore implements InvitationStore {
   owners = new Set<string>();
   async isWorkspaceOwner(_w: string, u: string) { return this.owners.has(u); }
   async listForUser() { return []; }
-  async accept() { return { ok: false as const, reason: 'not_found' as const }; }
+  async accept(_userId: string, id: string): Promise<AcceptResult> {
+    const r = this.rows.find((x) => x.id === id);
+    if (!r || r.status !== 'pending') return { ok: false, reason: 'not_found' };
+    r.status = 'accepted';
+    return { ok: true, workspaceId: r.workspaceId, role: r.role };
+  }
   async list(w: string) { return this.rows.filter((r) => r.workspaceId === w); }
   async revoke(w: string, id: string) { const r = this.rows.find((x) => x.id === id && x.workspaceId === w && x.status === 'pending'); if (!r) return false; r.status = 'revoked'; return true; }
 }
@@ -112,6 +117,30 @@ describe('invitation routes', () => {
       expect((await f.inject({ method: 'GET', url: '/workspace/invitations', headers: h })).json()).toHaveLength(1);
       expect((await f.inject({ method: 'DELETE', url: `/workspace/invitations/${id}`, headers: h })).statusCode).toBe(200);
       expect((await f.inject({ method: 'DELETE', url: `/workspace/invitations/${id}`, headers: h })).statusCode).toBe(404);
+    } finally { await app.close(); }
+  });
+  it('accepts pending invitation, rejects reuse, unauthenticated and invalid UUID', async () => {
+    const { app, h, wid } = await mk('admin');
+    const f = app.getHttpAdapter().getInstance();
+    try {
+      const made = await f.inject({ method: 'POST', url: '/workspace/invitations', headers: h, payload: { email: 'accept@y.example', role: 'member' } });
+      expect(made.statusCode).toBe(201);
+      const inviteId = made.json().invitation.id;
+
+      // Unauthenticated accept -> 401
+      expect((await f.inject({ method: 'POST', url: `/me/invitations/${inviteId}/accept` })).statusCode).toBe(401);
+
+      // Invalid UUID -> 400
+      expect((await f.inject({ method: 'POST', url: '/me/invitations/not-a-uuid/accept', headers: h })).statusCode).toBe(400);
+
+      // Accept with session -> 200
+      const accepted = await f.inject({ method: 'POST', url: `/me/invitations/${inviteId}/accept`, headers: h });
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).toEqual({ accepted: true, role: 'member', reauthenticate: true });
+
+      // Reuse attempt -> 404 (already accepted / not pending)
+      const reused = await f.inject({ method: 'POST', url: `/me/invitations/${inviteId}/accept`, headers: h });
+      expect(reused.statusCode).toBe(404);
     } finally { await app.close(); }
   });
 });

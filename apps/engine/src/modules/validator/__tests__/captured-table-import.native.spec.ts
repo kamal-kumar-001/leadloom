@@ -1,0 +1,11 @@
+import {it,expect} from 'vitest';
+import {randomUUID} from 'node:crypto';
+import pg from 'pg';
+import {importCapturedLeadsToTable} from '../captured-table-import';
+it.skipIf(process.env.LEADLOOM_NATIVE_TABLE_TEST!=='true')('serializes concurrent importers across real PostgreSQL connections',async()=>{
+ const schema='table_'+randomUUID().replaceAll('-','');const pool=new pg.Pool({host:'/tmp/leadloom-pg-race/socket',port:56539,database:'postgres',user:process.env.USER,max:4,options:'-c search_path='+schema});
+ try{await pool.query('CREATE SCHEMA '+schema);await pool.query('CREATE TABLE tables(id uuid PRIMARY KEY,workspace_id uuid,name text,row_count int DEFAULT 0,updated_at timestamptz);CREATE TABLE columns(id uuid PRIMARY KEY,table_id uuid,name text,type text,order_index int);CREATE TABLE rows(id uuid PRIMARY KEY,table_id uuid,order_index int,UNIQUE(table_id,order_index));CREATE TABLE cells(id uuid PRIMARY KEY,table_id uuid,row_id uuid,column_id uuid,value jsonb,updated_at timestamptz)');const ws=randomUUID(),table=randomUUID();await pool.query('INSERT INTO tables(id,workspace_id,name)VALUES($1,$2,$3)',[table,ws,'Concurrent']);await pool.query('INSERT INTO columns(id,table_id,name,type,order_index)VALUES($1,$2,$3,$4,0)',[randomUUID(),table,'Email','text']);
+ const db:any={query:async(sql:string,p:any[]=[]) =>(await pool.query(sql,p)).rows,transaction:async(fn:any)=>{const c=await pool.connect();try{await c.query('BEGIN');const res=await fn({query:async(sql:string,p:any[]=[]) =>(await c.query(sql,p)).rows});await c.query('COMMIT');return res;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}};
+ const results=await Promise.all([importCapturedLeadsToTable(db,ws,table,[{email:'one@example.invalid'},{email:'two@example.invalid'}]),importCapturedLeadsToTable(db,ws,table,[{email:'three@example.invalid'}])]);expect(results.map(x=>x?.importedCount).sort()).toEqual([1,2]);expect((await pool.query('SELECT order_index FROM rows ORDER BY order_index')).rows).toEqual([{order_index:0},{order_index:1},{order_index:2}]);expect((await pool.query('SELECT row_count FROM tables')).rows[0].row_count).toBe(3);expect((await pool.query('SELECT count(*)::int AS n FROM cells')).rows[0].n).toBe(3);
+ }finally{await pool.query('DROP SCHEMA '+schema+' CASCADE');await pool.end();}
+});

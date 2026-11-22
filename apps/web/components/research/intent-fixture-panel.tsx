@@ -29,17 +29,19 @@ const SAMPLE_FIXTURE = {
   ],
 };
 
-export function IntentFixturePanel() {
+export function IntentFixturePanel({projectId}:{projectId?:string}) {
   const [raw, setRaw] = useState('');
   const [analysis, setAnalysis] = useState<IntentFixtureAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [rows, setRows] = useState<SavedResearchRow[]>([]);
+  const [requestId,setRequestId]=useState<string|null>(null);
   const [fixture, setFixture] = useState<unknown | null>(null);
 
   React.useEffect(() => {
-    fetchIntentSignals().then((res) => {
+    fetchIntentSignals(projectId).then((res) => {
+      if(res.error)setError(res.error);
       if (res.data?.items) setRows(res.data.items);
     });
   }, []);
@@ -47,7 +49,7 @@ export function IntentFixturePanel() {
   async function analyze() {
     setBusy(true);
     setError(null);
-    setAnalysis(null);
+    setAnalysis(null);setRequestId(null);
     setSaved(null);
     let parsed: unknown;
     try {
@@ -68,20 +70,22 @@ export function IntentFixturePanel() {
       setError(res.data.message ?? 'The fixture did not match the expected hiring-board shape.');
       return;
     }
-    setAnalysis(res.data.analysis);
+    setAnalysis(res.data.analysis);setRequestId(crypto.randomUUID());
   }
 
   async function save() {
-    if (fixture === null) return;
+    if (fixture === null||!requestId) return;
+    setError(null);
     setBusy(true);
-    const res = await saveIntentFixture(fixture);
+    const res = await saveIntentFixture(fixture,requestId,projectId);
     setBusy(false);
-    if (res.error || !res.data || res.data.status !== 'SAVED') {
+    if (res.error || !res.data || res.data.status !== 'SAVED'||!res.data.rowId) {
       setError(res.data?.message ?? res.error ?? 'Could not save.');
       return;
     }
     setSaved(res.data.rowId ?? null);
-    const list = await fetchIntentSignals();
+    const list = await fetchIntentSignals(projectId);
+    if(list.error)setError('Save succeeded, but saved-list reload failed. '+list.error);
     if (list.data?.items) setRows(list.data.items);
   }
 
@@ -181,6 +185,8 @@ export function IntentFixturePanel() {
         </Card>
       )}
 
+      <p className="text-xs text-text-secondary">A normalized fixture keeps one save request ID for safe retries in this page session. Normalize again to deliberately append a new row. Reload after an uncertain response. Reloading or leaving this page loses that ID, so inspect the saved list before starting again. New rows use the selected project or remain unassigned in Workspace mode. Workspace access stays broad.</p>
+      <Button variant="outline" disabled={busy} onClick={async()=>{setError(null);const r=await fetchIntentSignals(projectId);if(r.error)setError(r.error);else if(r.data)setRows(r.data.items);}}>Reload saved fixture signals</Button>
       {rows.length > 0 && (
         <Card className="p-4 space-y-2">
           <h3 className="font-semibold text-sm">Saved fixture signals ({rows.length})</h3>

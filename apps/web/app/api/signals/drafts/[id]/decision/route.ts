@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { currentWebAccess } from '../../../../../../lib/current-web-access';
 import { getDraftStoreForUser } from '../../../../../../lib/signals-drafts-store';
 import { checkRateLimit } from '../../../../../../lib/signals-rate-limit';
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const origin = req.headers.get('origin');
   const host = req.headers.get('host');
-  if (!origin || !host || new URL(origin).host !== host) {
+  let sameOrigin = false;
+  try { sameOrigin = Boolean(origin && host && new URL(origin).host === host); } catch {}
+  if (!sameOrigin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const session = await auth();
-  const email = session?.user?.email;
-  if (!email) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  const access = await currentWebAccess(req);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status, headers: { 'Cache-Control': 'no-store' } });
+  const email = access.email;
 
   const rl = checkRateLimit(`decisions:${email}`, 60, 60_000);
   if (!rl.allowed) {
@@ -37,7 +39,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       destinationUrl: payload.destinationUrl,
       identity: payload.identity ?? null,
     });
-    return NextResponse.json({ draft });
+    return NextResponse.json({ draft }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Decision failed' }, { status: 422 });
   }

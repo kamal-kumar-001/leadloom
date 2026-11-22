@@ -32,4 +32,12 @@ describe('entitlements', () => {
     expect(() => mk('xx', 'active', 0, [{ id: 'BAD ID' }])).toThrow();
     await expect(mk('free').checkLimit('w', 'seats', 0)).rejects.toThrow();
   });
+  it('reports policy and current available quota without a reservation or commercial price',async()=>{
+    const current=await mk('free','active',2).status('w');expect(current.limits.find(l=>l.key==='tables')).toMatchObject({used:2,cap:3,available:1,allowsOneMore:true});expect(JSON.stringify(current)).not.toContain('priceMonthly');
+    const none=await mk(null).status('w');expect(none.plan.known).toBe(false);expect(none.limits.every(l=>!l.capKnown&&!l.allowsOneMore&&l.available===null&&l.reason==='no_plan')).toBe(true);
+    expect((await mk('pro','past_due').status('w')).features.every(f=>!f.allowed&&f.reason==='billing_inactive')).toBe(true);
+    const custom=[{id:'xx',name:'X',priceMonthlyUsd:null,features:{},limits:{tables:null}}];expect((await mk('xx','active',500,custom).status('w')).limits.find(l=>l.key==='tables')).toMatchObject({cap:null,capKnown:true,available:null,allowsOneMore:true});
+    await expect(mk('free','active',-1).status('w')).rejects.toThrow();
+  });
+
 });

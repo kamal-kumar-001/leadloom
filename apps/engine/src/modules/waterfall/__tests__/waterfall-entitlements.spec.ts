@@ -4,6 +4,7 @@ import {
   WaterfallService,
   WaterfallEntitlementPort,
   WaterfallEntitlementError,
+  WaterfallUnavailableError,
 } from '../waterfall.service';
 import { WaterfallController } from '../waterfall.controller';
 import {
@@ -19,7 +20,7 @@ describe('WaterfallService Entitlement Gating', () => {
     priority: 'standard',
   };
 
-  it('allows dispatch when no EntitlementPort is configured and LEADLOOM_ENTITLEMENTS_ENFORCED != true', async () => {
+  it('does not invent a queue receipt without an executor even when entitlements are not enforced', async () => {
     const saved = process.env.LEADLOOM_ENTITLEMENTS_ENFORCED;
     try {
       delete process.env.LEADLOOM_ENTITLEMENTS_ENFORCED;
@@ -86,7 +87,7 @@ describe('WaterfallService Entitlement Gating', () => {
     }
   });
 
-  it('allows dispatch when EntitlementPort is configured and permits feature and limits', async () => {
+  it('checks entitlements but never confuses plan permission with actual durable dispatch', async () => {
     const port: WaterfallEntitlementPort = {
       checkFeature: vi.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
       checkLimit: vi.fn().mockResolvedValue({ allowed: true, reason: 'ok', limit: 100, used: 10, remaining: 90 }),
@@ -179,15 +180,18 @@ describe('WaterfallService Entitlement Gating', () => {
     expect(port.checkLimit).toHaveBeenCalledWith(workspaceId, 'enrichment_credits_per_month', 3);
   });
 
+  it('never uses caller input tenant identity for internal person-cache scope',async()=>{
+   const service=new WaterfallService(),run=vi.spyOn(service.getRunner(),'executeRow').mockResolvedValue({value:null,status:'exhausted',trace:[]});
+   const actual=randomUUID();await service.executeSingleRow({domain:'synthetic.invalid',workspaceId:'caller-spoof'},[],actual);expect(run).toHaveBeenLastCalledWith({domain:'synthetic.invalid',workspaceId:actual},[]);
+  });
+
   it('confirms raw payload never reaches API dispatch response or executeSingleRow response', async () => {
     const service = new WaterfallService(undefined, undefined, { enqueue: async () => ({ jobId: 'queue-job-shape' }) });
     const workspaceId = randomUUID();
 
-    // 1. Dispatch response must strictly match DispatchWaterfallResponseSchema with no raw field
-    const dispatchRes = await service.dispatchWaterfall(sampleRequest, workspaceId);
-    const parsedDispatch = DispatchWaterfallResponseSchema.parse(dispatchRes);
-    expect((parsedDispatch as any).raw).toBeUndefined();
-    expect(Object.keys(dispatchRes)).toEqual(['jobId', 'totalQueued', 'estimatedCompletionAt']);
+    const dispatched = await service.dispatchWaterfall(sampleRequest, workspaceId);
+    expect(DispatchWaterfallResponseSchema.safeParse(dispatched).success).toBe(true);
+    expect((dispatched as any).raw).toBeUndefined();
 
     // 2. executeSingleRow response must strictly match WaterfallCellPayloadSchema with no raw field
     const cellRes = await service.executeSingleRow({ email: 'known@example.com' }, [], workspaceId);

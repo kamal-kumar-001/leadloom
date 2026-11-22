@@ -15,6 +15,7 @@
     "test": "npm run build --workspace @leadloom/contracts && npm run build --workspace @leadloom/database && npm test --workspace @leadloom/contracts && npm test --workspace @leadloom/engine && npm test --workspace @leadloom/database && npm test --workspace @leadloom/worker-scraper"
   },
   "devDependencies": {
+    "pg": "8.23.1",
     "turbo": "^2.0.0",
     "typescript": "^5.4.5",
     "vitest": "^3.2.4"

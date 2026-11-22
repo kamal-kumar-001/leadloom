@@ -47,13 +47,18 @@ describe('G6 connector status reconcile', () => {
     expect(rows.every((r) => !r.configured)).toBe(true);
   });
 
-  it('uses the newest credential row when a provider has several', () => {
+  it('preserves native selected-key order rather than promoting a later-updated older key', () => {
     const creds: StoredConnectorCredential[] = [
-      { provider: 'apollo', maskedKey: '••••••••old1', label: 'old', isValid: false, lastVerifiedAt: null, updatedAt: new Date('2026-11-01T00:00:00Z') },
-      { provider: 'apollo', maskedKey: '••••••••new2', label: 'new', isValid: true, lastVerifiedAt: new Date('2026-11-10T00:00:00Z'), updatedAt: new Date('2026-11-10T00:00:00Z') },
+      { provider: 'apollo', maskedKey: 'new2', label: 'new', isValid: false, lastVerifiedAt: null, updatedAt: new Date('2026-11-10T00:00:00Z') },
+      { provider: 'apollo', maskedKey: 'old1', label: 'old', isValid: true, lastVerifiedAt: new Date('2026-11-11T00:00:00Z'), updatedAt: new Date('2026-11-11T00:00:00Z') },
     ];
     const apollo = reconcileConnectorStatus(connectors, creds).find((r) => r.id === 'apollo')!;
-    expect(apollo.maskedKey).toBe('••••••••new2');
-    expect(apollo.verified).toBe(true);
+    expect(apollo.maskedKey).toBe('new2');
+    expect(apollo.verified).toBe(false);
+    expect(apollo.lastVerifiedAt).toBeNull();
+  });
+  it('does not call a flag without a test timestamp verified', () => {
+    const rows = reconcileConnectorStatus(connectors, [{provider:'apollo',maskedKey:'masked',label:null,isValid:true,lastVerifiedAt:null,updatedAt:new Date()}]);
+    expect(rows.find(row=>row.id==='apollo')?.verified).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import {SavedTextCell} from './saved-text-cell';
 import { Card } from '@leadloom/ui';
 import { WaterfallCellPayloadSchema } from '@leadloom/contracts';
 import { WaterfallCell } from './cells/waterfall-cell';
@@ -19,7 +20,7 @@ export interface PersistedTableSelection {
   onToggle: (rowId: string) => void;
 }
 
-export function PersistedTableView({ data, selection }: { data: WorkspaceTableRows; selection?: PersistedTableSelection }) {
+export function PersistedTableView({ data, selection, canEdit=false, onSaved }: { data: WorkspaceTableRows; selection?: PersistedTableSelection; canEdit?:boolean; onSaved?:()=>void }) {
   const colSpan = data.columns.length + (selection ? 1 : 0);
   return (
     <Card className="p-0 overflow-auto border border-border-subtle">
@@ -78,7 +79,7 @@ export function PersistedTableView({ data, selection }: { data: WorkspaceTableRo
                       className="px-3 py-2 text-text-secondary align-top max-w-[280px] truncate"
                       title={String(r.values[c.name] ?? '')}
                     >
-                      {r.values[c.name] === true ? 'yes' : r.values[c.name] === false ? 'no' : String(r.values[c.name] ?? '')}
+                      {c.type==='text'?<SavedTextCell tableId={data.table.id} rowId={r.rowId} columnId={c.id} columnName={c.name} value={r.values[c.name]} editable={canEdit} onSaved={onSaved??(()=>{})} />:r.values[c.name] === true ? 'yes' : r.values[c.name] === false ? 'no' : String(r.values[c.name] ?? '')}
                     </td>
                   );
                 })}

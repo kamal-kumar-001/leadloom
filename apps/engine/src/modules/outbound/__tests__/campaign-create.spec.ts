@@ -16,7 +16,8 @@ const token = (role = 'admin', ws = workspaceId) => {
   const payload = Buffer.from(JSON.stringify({ sub: randomUUID(), workspaceId: ws, role, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
   return payload + '.' + createHmac('sha256', key).update(payload).digest('base64url');
 };
-const connection = (d: any): SqlConnection => ({
+const connection = (d: any): import('../atomic-dispatch.repository').TransactionalDatabase => ({
+  transaction: async operation => d.transaction((tx:any)=>operation(connection(tx))),
   query: async <T extends Record<string, unknown>>(sql: string, params: unknown[] = []) =>
     (await d.query(sql, params)).rows as T[],
 });
@@ -38,7 +39,7 @@ const validBody = () => ({
 
 beforeEach(async () => {
   pg = new PGlite({ extensions: { vector } });
-  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261118_mailbox_password_auth', '20261124_campaign_recipients'])
+  for (const migration of ['20261110_init_v2', '20261110_integrity', '20261118_mailbox_password_auth', '20261124_campaign_recipients','20261203_projects_registry','20261205_project_entries','20261208_campaign_project'])
     await pg.exec(readFileSync(fileURLToPath(new URL(`../../../../../../packages/database/prisma/migrations/${migration}/migration.sql`, import.meta.url)), 'utf8'));
   const now = new Date();
   await pg.query('INSERT INTO workspaces (id,name,updated_at) VALUES ($1,$2,$3),($4,$5,$6)', [workspaceId, 'Tenant A', now, otherWorkspaceId, 'Tenant B', now]);

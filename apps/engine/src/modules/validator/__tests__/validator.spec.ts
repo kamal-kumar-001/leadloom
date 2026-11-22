@@ -147,7 +147,7 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
     expect(generated.scorecard.verdict).toBe('pending');
 
     // 1b. Owner publishes the page (draft by default)
-    await service.setPublishStatus(generated.experimentId, 'ws-test', true);
+    await service.setPublishStatus(generated.experimentId,'ws-test',true,(await service.getOwnerPage(generated.experimentId,'ws-test'))?.revision);
 
     // 2. Public user submits waitlist form
     const leadResult = await service.submitLead('leadloom-gtm', {
@@ -159,6 +159,17 @@ describe('Idea Validator Module — PRD Epic 6 Deep Dive', () => {
 
     expect(leadResult.success).toBe(true);
     expect(leadResult.totalWaitlist).toBe(1);
+
+    // 2a. Owner queries captured waitlist leads for outreach
+    const leadsData = await service.getLeads(generated.experimentId, 'ws-test');
+    expect(leadsData.totalLeads).toBe(1);
+    expect(leadsData.leads[0].email).toBe('founder@scaleup.io');
+    expect(leadsData.leads[0].name).toBe('Sarah Chen');
+    expect(leadsData.leads[0].company).toBe('ScaleUp Inc');
+    expect(leadsData.leads[0].surveyResponses).toEqual({ q1: '$1,500/mo' });
+
+    // 2a-fenced: foreign workspace cannot read leads
+    await expect(service.getLeads(generated.experimentId, 'ws-other')).rejects.toThrow('Experiment not found');
 
     // 2b. Public traffic reaches the minimum sample for a verdict
     for (let i = 0; i < 30; i++) await service.getPublicPage('leadloom-gtm');

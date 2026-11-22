@@ -112,6 +112,15 @@ describe('schema.prisma <-> migrations consistency', () => {
       'inbound_replies', // reply ingest, raw SQL
       'workspace_invitations', // prisma-invitation-store uses raw SQL for the table
       'campaign_recipients', // campaign-recipients.repository, raw SQL
+      'agent_tokens', // agent API tokens, raw SQL
+      'project_contexts', // project-scoped agent context (Slice B), raw SQL
+      'projects', // canonical workspace-owned projects registry, raw SQL
+      'project_assets', // project-local private draft heads, raw transactional writer
+      'project_asset_versions', // append-only draft versions, raw transactional writer
+      'research_save_receipts','campaign_create_receipts','research_row_projects', // raw transactional request receipts/tombstones, no ORM mutation path
+      'table_import_receipts', // idempotent durable table imports, raw SQL
+      'project_entries', // append-only bounded project work record, raw SQL
+      'project_growth_watches', // current-role/owned-source locks plus atomic append/bookkeeping, raw SQL only
     ]);
     const RAW_ONLY_COLUMNS = new Set([
       // Atomic dispatch + approval integrity run through raw SQL in

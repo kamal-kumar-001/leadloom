@@ -5,6 +5,7 @@ import { ProvisioningService } from '../../provisioning/provisioning.service';
 import { PrismaPasswordStore } from '../../password-auth/prisma-password-store';
 import { InvitationService } from '../invitation.service';
 import { PrismaInvitationStore } from '../prisma-invitation-store';
+import {PrismaAccessGuard} from '../../auth/access-guard';
 
 /** Gated: LEADLOOM_INTEGRATION=1 + LEADLOOM_TEST_DATABASE_URL on a migrated DB (throwaway data only). */
 const URL = process.env.LEADLOOM_TEST_DATABASE_URL;
@@ -35,12 +36,14 @@ describe.runIf(RUN)('invitations on real Postgres (gated)', () => {
   });
   it('explicit accept by the verified invitee moves a pristine account, deactivates the empty workspace, bumps the session', async () => {
     const o = await owner(); const email = `acc-${tag}@example.invalid`; await invite(o, email, 'read_only'); const g = await accountVia(email);
+    const guard=new PrismaAccessGuard(prisma);const oldAuth=Math.floor(Date.now()/1000)-60;expect(await guard.isActive(g.userId,g.workspaceId,{kind:'provider',authTime:oldAuth})).toBe(true);
     const mine = await inv().mine(g.userId); expect(mine).toHaveLength(1); expect(mine[0]).toMatchObject({ role: 'read_only' });
     const before: any[] = await prisma.$queryRawUnsafe(`SELECT session_version v FROM users WHERE id=$1::uuid`, g.userId);
     expect(await inv().accept(g.userId, mine[0].id)).toMatchObject({ ok: true, role: 'read_only', workspaceId: o.workspaceId });
     const u: any[] = await prisma.$queryRawUnsafe(`SELECT workspace_id::text w, role, session_version v FROM users WHERE id=$1::uuid`, g.userId);
     expect(u[0]).toMatchObject({ w: o.workspaceId, role: 'read_only' }); expect(u[0].v).toBe(before[0].v + 1);
     const old: any[] = await prisma.$queryRawUnsafe(`SELECT is_active a FROM workspaces WHERE id=$1::uuid`, g.workspaceId); expect(old[0].a).toBe(false);
+    expect(await guard.isActive(g.userId,o.workspaceId,{kind:'provider',authTime:oldAuth})).toBe(false);expect(await guard.isActive(g.userId,o.workspaceId,{kind:'engine',ver:before[0].v})).toBe(false);expect(await guard.isActive(g.userId,o.workspaceId,{kind:'engine',ver:before[0].v+1})).toBe(true);const cutoff:any[] = await prisma.$queryRawUnsafe('SELECT credentials_revoked_at FROM users WHERE id=$1::uuid',g.userId);expect(cutoff[0].credentials_revoked_at).toBeInstanceOf(Date);
     expect(await inv().accept(g.userId, mine[0].id)).toMatchObject({ ok: false }); // single use
   });
   it('another account, a different address, a revoked or an expired invitation can never be accepted', async () => {
@@ -114,10 +117,11 @@ describe.runIf(RUN)('members on real Postgres (gated)', () => {
     expect((await svc.list(o.workspaceId)).map((x) => x.role).sort()).toEqual(['admin', 'member']);
     expect(await svc.setRole(o.workspaceId, o.userId, stranger.userId, 'member')).toEqual({ ok: false, reason: 'not_found' });
     expect(await svc.setRole(o.workspaceId, o.userId, o.userId, 'member')).toEqual({ ok: false, reason: 'owner_protected' });
+    const guard=new PrismaAccessGuard(prisma),oldAuth=Math.floor(Date.now()/1000)-60;
     const before: any[] = await prisma.$queryRawUnsafe(`SELECT session_version v FROM users WHERE id=$1::uuid`, m.userId);
     expect(await svc.setRole(o.workspaceId, o.userId, m.userId, 'admin')).toEqual({ ok: true });
     const after: any[] = await prisma.$queryRawUnsafe(`SELECT session_version v FROM users WHERE id=$1::uuid`, m.userId);
-    expect(after[0].v).toBe(before[0].v + 1);
+    expect(after[0].v).toBe(before[0].v + 1);expect(await guard.isActive(m.userId,o.workspaceId,{kind:'provider',authTime:oldAuth})).toBe(false);expect(await guard.isActive(m.userId,o.workspaceId,{kind:'engine',ver:before[0].v})).toBe(false);expect(await guard.isActive(m.userId,o.workspaceId,{kind:'engine',ver:after[0].v})).toBe(true);
     // m is an admin but not the owner: cannot touch the owner, cannot grant or take admin.
     expect(await svc.setRole(o.workspaceId, m.userId, o.userId, 'member')).toEqual({ ok: false, reason: 'owner_protected' });
     expect(await svc.remove(o.workspaceId, m.userId, o.userId)).toEqual({ ok: false, reason: 'owner_protected' });
