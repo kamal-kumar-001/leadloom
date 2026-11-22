@@ -195,6 +195,8 @@ Usage:
   node cli.mjs project-experiments create-draft-file <JSON-file>
     Project-bound LEADLOOM_AGENT_TOKEN with project:experiments:read scope for list/page.
     create-draft-file <JSON-file> separately needs project:experiments:draft. Keep requestId UUID unchanged for retries; supply rawHypothesis, preferredSlug, complete pageCopy and surveyQuestions (possibly []). Private storage only, never publication or lead capture.
+  node cli.mjs reviews intake-file <JSON-file>
+  node cli.mjs reviews get <report UUID> [version]
   node cli.mjs founder init-file <JSON-file>
   node cli.mjs founder get <workspace UUID>
   node cli.mjs founder task-file <workspace UUID> <JSON-file>
@@ -342,6 +344,16 @@ Environment (.env.local):
     process.exit(res.ok?0:1);
   }
 
+  if(domain==='reviews'){
+    ensureConfiguredApiUrl();if(!AGENT_TOKEN||AGENT_TOKEN.includes('YOUR_')||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(PROJECT_ID||''))throw new Error('Canonical project UUID and explicitly selected project:assets:read/write scopes required');
+    let url=API_URL+(API_URL.endsWith('/api/agent')?'/project/reviews':'/agent/project/reviews'),method='GET',body;
+    if(action==='intake-file'&&args.length===1){url+='/intake';method='POST';body=fs.readFileSync(args[0],'utf8');JSON.parse(body);if(Buffer.byteLength(body)>262144)throw new Error('Intake exceeds 256KB. Submit a smaller batch.');}
+    else if(action==='get'&&args.length>=1&&args.length<=2&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(args[0])&&(!args[1]||/^[1-9][0-9]{0,6}$/.test(args[1])))url+='/'+args[0]+(args[1]?'?version='+args[1]:'');
+    else throw new Error('Use reviews intake-file <JSON-file> or reviews get <report UUID> [version]');
+    const res=await fetch(url,{method,headers:{Authorization:'Bearer '+AGENT_TOKEN,...(body?{'Content-Type':'application/json'}:{})},body,redirect:'error',signal:AbortSignal.timeout(30000)}),data=await res.json();
+    if(res.ok&&(data.projectId!==PROJECT_ID||data.state!=='complete'||data.rawRecordsOmitted!==true||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(data.assetId||'')||!Number.isSafeInteger(data.version)||data.version<2||!Number.isSafeInteger(data.currentVersion)||data.currentVersion<data.version||data.historicalSnapshot!==(data.version!==data.currentVersion)||action==='get'&&(data.assetId!==args[0]||args[1]&&data.version!==Number(args[1]))))throw new Error('Review receipt identity/version or bounded summary did not match the request');
+    console.log(JSON.stringify(data,null,2));process.exit(res.ok?0:1);
+  }
   if(domain==='founder'){
     ensureConfiguredApiUrl();if(!AGENT_TOKEN||AGENT_TOKEN.includes('YOUR_')||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(PROJECT_ID||''))throw new Error('Canonical project UUID and project:assets:read/write credential required');
     const prefix=API_URL+(API_URL.endsWith('/api/agent')?'/project/founder':'/agent/project/founder');let endpoint=prefix,method='GET',input;

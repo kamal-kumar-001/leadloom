@@ -1,4 +1,5 @@
 'use client';
+import {ReviewReportPreview} from './review-report-preview';
 import {FounderWorkspacePreview} from './founder-workspace-preview';
 import {DmpilotHandoffPreview} from './dmpilot-handoff-preview';
 import React,{useEffect,useRef,useState} from 'react';
@@ -48,6 +49,7 @@ function ProjectAssetsEditor({project}:{project:ProjectResponse}){
  const download=()=>{if(!active)return;const link=document.createElement('a'),url=URL.createObjectURL(new Blob([active.body],{type:'text/plain;charset=utf-8'}));link.href=url;link.download='project-draft-'+active.id+'-v'+active.version+'.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  return <Card className="p-5 sm:p-6 space-y-4" data-testid="project-assets">
   <div><h2 className="text-base font-semibold text-text-primary">Project drafts and pitch materials</h2><p className="text-xs text-text-secondary mt-1">{project.name}: store caller-written product briefs, research, launch copy, outreach drafts and investor pitches. Visible to authorized workspace members and this project's asset credentials. No AI, send, sharing link or publishing runs here. Do not store secrets.</p></div>
+  {active&&<ReviewReportPreview asset={active}/>}
   <FounderWorkspacePreview asset={active}/>
   <DmpilotHandoffPreview asset={active}/>
   <form onSubmit={save} className="space-y-2">
