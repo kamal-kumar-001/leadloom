@@ -22,7 +22,9 @@ Source-linked pain reporting is available through `reviews intake-file` and comp
 
 The synthetic stress path now generates explicit bounded Cartesian case matrices and ingests caller-reported evaluations, with distinct missing/unevaluated coverage, immutable result chunks and a checked compact report. It does not generate responses or call models. `stress plan-file`, compact `stress plan`, explicit exact-version `stress cases`, `stress report-file` and compact `stress report` are documented in the founder pack. A1000-case matrix is not1000 independent people or evidence of demand.
 
-This is not automatic App Store/Play Store/Reddit/X scraping or a thousand independent simulated people. Source collection is still caller-driven; synthetic stress cases are not demand. Read `skills/founder-workspace/SKILL.md` for exact commands and remaining boundaries.
+A narrow one-shot public Apple feed reader is available as `apple-reviews fetch-file` in the downloaded CLI. It accepts a selected app/storefront, inspects one bounded fixed-origin feed page, returns incomplete source-linked excerpts without author identity and does not automatically store or analyze them. It is best-effort RSS, not official authenticated competitor API support. Google Play/Reddit/X collectors are not implemented; platform/account/commercial/cost restrictions cannot be inferred away. See `docs/verification/review-platform-access-v97.md`.
+
+This is not automatic all-platform App Store/Play Store/Reddit/X scraping or a thousand independent simulated people. Source collection is still caller-driven; synthetic stress cases are not demand. Read `skills/founder-workspace/SKILL.md` for exact commands and remaining boundaries.
 
 ## Build prerequisites
 
