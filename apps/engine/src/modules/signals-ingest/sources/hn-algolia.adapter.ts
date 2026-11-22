@@ -132,14 +132,17 @@ export class HnAlgoliaAdapter {
     return out;
   }
 
-  async search(query: string, opts: { tags?: string; hitsPerPage?: number } = {}): Promise<IncomingPost[]> {
+  async search(query: string, opts: { tags?: string; hitsPerPage?: number; postedAfter?: number; sort?: 'relevance'|'recent' } = {}): Promise<IncomingPost[]> {
     if (!this.fetchImpl) {
       throw new Error('HnAlgoliaAdapter.search needs a fetch implementation; tests must inject one.');
     }
+    if(opts.postedAfter!==undefined&&!Number.isSafeInteger(opts.postedAfter)||opts.sort!==undefined&&!['relevance','recent'].includes(opts.sort))throw new Error('Invalid HN search date/sort options');
+    const endpoint=opts.sort==='recent'?'search_by_date':'search';
     const url =
-      `${HnAlgoliaAdapter.API_BASE}/search?query=${encodeURIComponent(query)}` +
+      `${HnAlgoliaAdapter.API_BASE}/${endpoint}?query=${encodeURIComponent(query)}` +
       `&tags=${encodeURIComponent(opts.tags ?? 'comment')}` +
-      `&hitsPerPage=${opts.hitsPerPage ?? 20}`;
+      `&hitsPerPage=${opts.hitsPerPage ?? 20}`+
+      (opts.postedAfter===undefined?'':'&numericFilters='+encodeURIComponent('created_at_i>='+opts.postedAfter));
     const res = await this.fetchImpl(url);
     if (!res.ok) throw new Error(`HN Algolia request failed: HTTP ${res.status}`);
     const body = (await res.json()) as unknown;

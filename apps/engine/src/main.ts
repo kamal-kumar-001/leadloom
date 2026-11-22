@@ -1,3 +1,5 @@
+import {ProjectHnSearchSchema} from '@leadloom/contracts';
+import {HnResearchInvalid} from './modules/signals-ingest/project-hn-research.service';
 import {PrepareDmpilotPostSchema,RecordDmpilotPreviewSchema} from '@leadloom/contracts';
 import {DmpilotPostHandoffService,DmpilotHandoffConflict} from './modules/project-context/dmpilot-post-handoff.service';
 import {PlatformOverviewService,InvalidPlatformCursor} from './modules/platform-admin/platform-overview.service';
@@ -1253,13 +1255,13 @@ export async function createApplication(services?:RuntimeServices) {
     const session=await authorize(request,reply,false,HN_SEARCH_SCOPE);if(!session)return;
     reply.header('Cache-Control','no-store');
     if(!session.isAgentToken||!session.projectId||!session.scopes?.includes(HN_SEARCH_SCOPE))return reply.code(403).send({error:'Explicit project-bound project:research:search scope required for queries sent to public HN search; wildcard is not consent'});
-    const parsed=z.object({query:z.string().trim().min(1).max(120).regex(/^[^\u0000-\u001f\u007f]+$/)}).strict().safeParse(request.body);
-    if(!parsed.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Supply only one public HN query of1..120 characters. Project comes from the credential. Do not include private or secret information.'});
+    const parsed=ProjectHnSearchSchema.safeParse(request.body);
+    if(!parsed.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Supply one public HN query of 1..120 characters, optional offset-bearing postedAfter and relevance/recent sort only. Project comes from the credential. Do not include private or secret information.'});
     if(!await services.projectRegistry!.findByIdOrSlug(session.workspaceId,session.projectId))return reply.code(404).send({error:'Project not found'});
     if(!services.projectHnResearch)return reply.code(503).send({error:'Public HN agent search is not enabled. No upstream query was made.'});
     if(!await allowed(reply,session.workspaceId,'ai_researcher'))return;
-    try{return await services.projectHnResearch.search(session.workspaceId,session.projectId,parsed.data.query);}
-    catch(error){if(error instanceof HnResearchLimited)return reply.header('Retry-After','60').code(429).send({error:'Public HN query limit reached. Wait before a new request.'});if(error instanceof HnResearchBusy)return reply.code(409).send({error:'A public HN query is already running. No new query was started.'});return reply.code(502).send({error:'Public HN search unavailable. No result or saved research is confirmed.'});}
+    try{return await services.projectHnResearch.search(session.workspaceId,session.projectId,parsed.data.query,{postedAfter:parsed.data.postedAfter,sort:parsed.data.sort});}
+    catch(error){if(error instanceof HnResearchInvalid)return reply.code(400).send({error:'Invalid public HN query/date/sort. Future cutoffs are refused before upstream access.'});if(error instanceof HnResearchLimited)return reply.header('Retry-After','60').code(429).send({error:'Public HN query limit reached. Wait before a new request.'});if(error instanceof HnResearchBusy)return reply.code(409).send({error:'A public HN query is already running. No new query was started.'});return reply.code(502).send({error:'Public HN search unavailable. No result or saved research is confirmed.'});}
    });
   }
   if(services.projectRegistry&&services.researchLeads&&services.intentFixture){
