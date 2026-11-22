@@ -1,0 +1,11 @@
+# v98 explicit founder credential setup, 2026-11-23
+
+Adds an opt-in Project Founder preset to the existing credential issuer. Default remains Project Context with only context:read/write. Founder explicitly selects context:read/write and project:assets:read/write, requires a canonical project and offers no unbound option. Payload enforces the preset scope list, not incidental UI state. Custom and workspace tools remain separate; empty-state guidance no longer recommends both credentials as necessary for private founder workflows. No existing credential is broadened automatically. This is capability issuance, not permission to run external effects.
+
+One focused scope/default test, engine compile, clean web typecheck and documented Next compile/generate passed. No normal combined-build pass or real account sign-in claimed.
+
+Actual compiled app/fresh disposable PostgreSQL/browser: checked unchanged context default, explicitly selected Founder, inspected exact project/no-unbound selector, submitted the real form and verified actual response/post scopes. The new fixture credential worked with the actual downloaded CLI to create a founder workspace; context-only credential was refused. Zero jobs/campaigns/mailboxes/pages. No production token or user account changed; fixture removed. Inspected actual screenshot: all four scope badges, opt-in labels, project binding and submit action readable, no clipping in the form. Existing narrow table may horizontally constrain long token rows, not changed or certified by this form task.
+
+Source identity79387cbd5e115147bb829e43c4061e4833d1924671c08723fd4e4f7668f1d535,901 included files. Both engine/web rebuilt to same identity. No Mac, shared lab/live operation, push, deployment, paid call, provider/source request or send.
+
+Morning route improves: after separately approved actual engine/web release and verified account access, he can select Project Founder instead of manually finding four custom scopes, download bundle, configure privately and use Node on demand. The current host still has not been upgraded by this work; release/live-auth/container/backup/database checks and approval remain separate. No background Mac agent is proposed.

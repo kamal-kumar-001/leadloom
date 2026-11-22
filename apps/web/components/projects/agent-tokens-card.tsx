@@ -20,10 +20,11 @@ import { ConfirmDialog } from '../feedback/confirm-dialog';
 import { notify } from '../../lib/notify';
 import { issueWorkspaceAgentToken, revokeWorkspaceAgentToken } from '../../lib/engine-client';
 import { IssueAgentTokenRequestSchema } from '@leadloom/contracts';
+import {FOUNDER_PROJECT_SCOPES} from '../../lib/founder-credential';
 import {credentialScopeRecord} from '../../lib/agent-connection-config';
 import type { AgentTokenListItem, AgentTokenResponse, ProjectResponse } from '@leadloom/contracts';
 
-export type TokenPreset = 'project-context' | 'workspace-tools' | 'custom';
+export type TokenPreset = 'project-context' | 'project-founder' | 'workspace-tools' | 'custom';
 
 export interface AgentTokensCardProps {
   tokens: AgentTokenListItem[];
@@ -60,11 +61,11 @@ export function AgentTokensCard({
 
   // Synchronize default boundProjectId with selectedProject when it changes
   React.useEffect(() => {
-    if (preset === 'project-context') {
+    if (preset === 'project-context'||preset === 'project-founder') {
       if (selectedProject) {
         setBoundProjectId(selectedProject.id);
-        if (!name || name.includes('Context Agent') || name.includes('Tools')) {
-          setName(`${selectedProject.name} Context Agent`);
+        if (!name || name.includes('Context Agent') || name.includes('Founder Agent') || name.includes('Tools')) {
+          setName(`${selectedProject.name} ${preset==='project-founder'?'Founder':'Context'} Agent`);
         }
       } else if (projects.length > 0) {
         setBoundProjectId((prev) => prev || projects[0].id);
@@ -84,6 +85,8 @@ export function AgentTokensCard({
       setScopes(['context:read', 'context:write']);
       const p = projects.find((x) => x.id === targetProjId) || selectedProject;
       setName(p ? `${p.name} Context Agent` : 'Project Context Agent');
+    } else if(nextPreset==='project-founder'){
+      const targetProjId=selectedProject?.id||projects[0]?.id||'';setBoundProjectId(targetProjId);setScopes([...FOUNDER_PROJECT_SCOPES]);const p=projects.find(x=>x.id===targetProjId)||selectedProject;setName(p?`${p.name} Founder Agent`:'Project Founder Agent');
     } else if (nextPreset === 'workspace-tools') {
       // Guardrail: Force empty project binding on tool tokens to prevent accidental project binding
       setBoundProjectId('');
@@ -115,7 +118,7 @@ export function AgentTokensCard({
     if (scopes.some(scope=>['project:experiments:read','project:experiments:draft','project:experiments:results','project:campaigns:read','project:tables:read','project:tables:write','project:campaigns:edit','project:campaigns:draft','project:assets:read','project:assets:write','project:research:read','project:research:search','project:inventory:read'].includes(scope))&&!boundProjectId) {
       setFieldErrors({projectId:'Select the project this credential may access'});return;
     }
-    if (preset === 'project-context' && !boundProjectId) {
+    if ((preset === 'project-context'||preset === 'project-founder') && !boundProjectId) {
       setFieldErrors({
         projectId: 'Project context token must be bound to a canonical project',
       });
@@ -126,10 +129,11 @@ export function AgentTokensCard({
     const effectiveProjectId =
       preset === 'workspace-tools' ? undefined : boundProjectId || undefined;
 
+    const effectiveScopes=preset==='project-founder'?[...FOUNDER_PROJECT_SCOPES]:preset==='project-context'?['context:read','context:write']:scopes;
     const payload = {
       name: trimmedName,
       projectId: effectiveProjectId,
-      scopes,
+      scopes:effectiveScopes,
       expiresInDays: expiryDays,
     };
 
@@ -325,6 +329,7 @@ export function AgentTokensCard({
 
       {selectedProject && <p className="text-[11px] text-text-secondary">Newest 100 credential records only. Scope metadata is not a live connection test. Not found here does not mean no credential exists.</p>}
       {/* Issue Token Form with Presets */}
+      {selectedProject&&!isIssuing&&<p className="text-[11px] text-text-secondary">Founder plans, saved review reports and synthetic stress need the explicit Project Founder preset (context + private project assets). Workspace tools are not required for those paths. Scope records above are not live connection tests.</p>}
       {isIssuing && (
         <form
           onSubmit={handleIssue}
@@ -342,11 +347,15 @@ export function AgentTokensCard({
             <label className="block text-xs font-medium text-text-secondary">
               Credential Preset & Target Environment Variable
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button type="button" data-testid="founder-credential-preset" aria-pressed={preset==='project-founder'} onClick={()=>handleSelectPreset('project-founder')} className={`p-3 rounded-lg border text-left space-y-1 ${preset==='project-founder'?'border-brand-loom bg-brand-loom/10':'border-border-subtle bg-canvas hover:border-brand-loom/40'}`}>
+               <span className="text-xs font-semibold text-text-primary">Project Founder</span><code className="text-[11px] font-mono text-brand-loom block">LEADLOOM_AGENT_TOKEN</code><p className="text-[11px] text-text-secondary leading-snug">Opt in to context + private project assets for founder plans, review reports and synthetic stress. No sends, models, paid calls or deployment.</p>
+              </button>
               {/* Preset 1: Project Context */}
               <button
                 type="button"
                 onClick={() => handleSelectPreset('project-context')}
+                aria-pressed={preset==='project-context'}
                 className={`p-3 rounded-lg border text-left transition-all space-y-1 ${
                   preset === 'project-context'
                     ? 'border-brand-loom bg-brand-loom/10 shadow-sm'
@@ -476,7 +485,7 @@ export function AgentTokensCard({
                   disabled={isSubmitting}
                   className="w-full px-3 py-1.5 text-xs bg-canvas border border-border-subtle rounded-md text-text-primary focus:outline-none focus:border-brand-loom"
                 >
-                  {preset !== 'project-context' && (
+                  {preset !== 'project-context'&&preset !== 'project-founder' && (
                     <option value="">No Project (Workspace-wide)</option>
                   )}
                   {projects.map((proj) => (
@@ -506,6 +515,7 @@ export function AgentTokensCard({
                     </Badge>
                   </>
                 )}
+                {preset==='project-founder'&&FOUNDER_PROJECT_SCOPES.map(s=><Badge key={s} variant="loom" className="text-xs font-mono px-2 py-0.5">{s}</Badge>)}
                 {preset === 'workspace-tools' && (
                   <>
                     <Badge variant="verified" className="text-xs font-mono px-2 py-0.5">
@@ -597,6 +607,7 @@ export function AgentTokensCard({
                 )}
               </div>
               <p className="text-[11px] text-text-muted">
+                {preset==='project-founder'&&'Explicit project-only context and asset reads/writes. This can edit saved private plans/reports, not verify them or execute workers. Default context-only permissions are unchanged.'}
                 {preset === 'project-context' &&
                   'Enforces least privileges required for reading and persisting canonical project context memory.'}
                 {preset === 'workspace-tools' &&
@@ -650,6 +661,8 @@ export function AgentTokensCard({
             >
               {isSubmitting
                 ? 'Issuing...'
+                : preset === 'project-founder'
+                ? 'Issue Founder Credential'
                 : preset === 'project-context'
                 ? 'Issue Context Credential'
                 : preset === 'workspace-tools'
@@ -672,7 +685,7 @@ export function AgentTokensCard({
               ? `No tokens issued for ${selectedProject.name}`
               : 'No agent tokens issued yet'
           }
-          description="Issue both project-context (LEADLOOM_AGENT_TOKEN) and workspace-tools (LEADLOOM_TOOL_TOKEN) credentials to empower your customer coding agent."
+          description="Start with a project-bound context credential. Opt in to Project Founder for private asset workflows; workspace-wide tools are separate and not needed for founder plans, review intake or synthetic stress."
           action={
             <Button
               variant="primary"
