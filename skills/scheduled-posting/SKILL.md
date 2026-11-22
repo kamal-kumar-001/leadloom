@@ -32,6 +32,10 @@ Saved campaigns and local social drafts do not constitute enforced per-project i
 
 `GET /agent/context`, `POST /agent/context`, `GET /agent/context/entries`, `GET /agent/context/entries/brief`, `GET /agent/context/entries/:id`, `POST /agent/context/entries`. Use the project token and the downloaded CLI's configured gateway. The human workbench remains necessary for the communication operations above.
 
+## Channel rule boundary
+
+Hacker News guidelines checked2026-11-22 prohibit generated or AI-edited posts/comments and automated posting: https://news.ycombinator.com/newsguidelines.html . HN signals remain research evidence, not generated-reply destinations. The matcher withholds suggested text and the session draft composer refuses HN sources or HN destination URLs, including manual imports. A private asset or another caller-supplied destination is not a policy or authorship certification. Other channels still require current rule review and the caller's separate approval.
+
 ## Gaps
 
 No social API publishing, X/LinkedIn DM automation, recurring cron manager, editorial-calendar endpoint or automatic external reminder from a work-record entry. Missing capabilities are not made real by a successful context save. Do not invent routes or imply that a future job will definitely run.

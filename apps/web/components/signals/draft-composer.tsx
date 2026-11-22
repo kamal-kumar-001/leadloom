@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button } from '@leadloom/ui';
+import {generatedReplyPolicy} from '@leadloom/contracts';
 import { PenLine } from 'lucide-react';
 import type { SignalRowView } from '../../lib/signals-view-model';
 import { DraftCard, type DraftView } from './draft-card';
@@ -12,6 +13,8 @@ export function DraftComposerButton({ row }: { row: SignalRowView }) {
   const [busy, setBusy] = useState(false);
 
   if (!row.match) return null;
+  const policy=generatedReplyPolicy(row);
+  if(policy.generation==='withheld')return <p role="note" className="text-xs text-text-secondary">{policy.reason} <a href={policy.sourceUrl!} target="_blank" rel="noreferrer" className="text-brand-loom underline">HN rules</a></p>;
 
   async function createDraft() {
     setBusy(true);
@@ -44,6 +47,7 @@ export function DraftComposerButton({ row }: { row: SignalRowView }) {
 
   return (
     <div className="pt-1 space-y-2">
+      <p role="note" className="text-xs text-text-secondary">{policy.reason}</p>
       {!draft && (
         <Button onClick={createDraft} disabled={busy}>
           <PenLine className="h-3.5 w-3.5 mr-1.5" />

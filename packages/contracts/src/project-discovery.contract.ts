@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import type {GeneratedReplyPolicy} from './channel-reply-policy';
 const https=z.string().url().max(2000).refine(value=>{try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password;}catch{return false;}},'Use an HTTPS URL without credentials');
 const terms=(max:number,length:number)=>z.array(z.string().trim().min(1).max(length)).max(max).refine(values=>new Set(values.map(v=>v.toLowerCase())).size===values.length,'Duplicate terms are not allowed');
 /** Caller-authored structured private brief, not independently verified product claims. */
@@ -7,4 +8,4 @@ export const ProjectDiscoveryPostSchema=z.object({source:z.enum(['manual','hacke
 export const ProjectDiscoveryMatchSchema=z.object({profileAssetId:z.string().uuid(),profileVersion:z.number().int().min(1).max(1000000),posts:z.array(ProjectDiscoveryPostSchema).min(1).max(20)}).strict().refine(p=>new Set(p.posts.map(post=>post.source+':'+post.externalId)).size===p.posts.length,'Duplicate source post IDs are not allowed');
 export type ProjectDiscoveryProfile=z.infer<typeof ProjectDiscoveryProfileSchema>;
 export type ProjectDiscoveryMatch=z.infer<typeof ProjectDiscoveryMatchSchema>;
-export interface ProjectDiscoveryResult{projectId:string;profile:{assetId:string;version:number;currentVersion:number;displayName:string;productUrl:string};considered:number;matches:Array<{post:z.infer<typeof ProjectDiscoveryPostSchema>;score:number;matchedTerms:string[];suggestedReply:string}>;note:string}
+export interface ProjectDiscoveryResult{projectId:string;profile:{assetId:string;version:number;currentVersion:number;displayName:string;productUrl:string};considered:number;matches:Array<{post:z.infer<typeof ProjectDiscoveryPostSchema>;score:number;matchedTerms:string[];suggestedReply:string;replyPolicy:GeneratedReplyPolicy}>;note:string}

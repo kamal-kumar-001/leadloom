@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { IncomingPost, ProductProfile } from './types';
+import {assertGeneratedReplyAvailable} from '@leadloom/contracts';
 
 /**
  * Reply-draft composer: turns a matched signal into an exact, reviewable
@@ -108,6 +109,7 @@ function fingerprint(body: string, destinationUrl: string, identity: string | nu
 }
 
 export function composeReplyBody(post: IncomingPost, facts: ProductFacts, maxClaims = 3): { body: string; claimsUsed: string[] } {
+  assertGeneratedReplyAvailable(post);
   const problem = (post.title || post.text).replace(/\s+/g, ' ').trim().slice(0, 140);
   const picked = facts.claims.slice(0, maxClaims);
   const claimLines = picked.map((c) => `- ${c.text}`);
@@ -135,6 +137,7 @@ export class ReplyDraftStore {
   private fingerprints = new Map<string, string>();
 
   create(post: IncomingPost, profile: ProductProfile): ReplyDraft {
+    assertGeneratedReplyAvailable(post);
     const facts = SOURCED_PRODUCT_CLAIMS[profile.productId];
     if (!facts) throw new Error(`No sourced claims on file for ${profile.productId}; refusing to draft.`);
     const signalKey = `${post.source}:${post.externalId}:${profile.productId}`;
@@ -178,6 +181,7 @@ export class ReplyDraftStore {
   ): ReplyDraft {
     const draft = this.drafts.get(id);
     if (!draft) throw new Error('Draft not found (session-only store resets on restart).');
+    if (decision === 'approved') assertGeneratedReplyAvailable({source:draft.signalKey.startsWith('hackernews:')?'hackernews':'manual',url:draft.destinationUrl});
     if (draft.status !== 'pending') throw new Error(`Draft already ${draft.status}.`);
     if (fingerprint(reviewed.body, reviewed.destinationUrl, reviewed.identity) !== this.fingerprints.get(id)) {
       throw new Error('Reviewed content does not match the stored draft; refusing decision.');

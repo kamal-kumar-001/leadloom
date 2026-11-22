@@ -11,7 +11,7 @@ domain: Outbound & Conversion Tracking
 
 The customer's coding agent reasons and drafts. The caller approves real recipients, exact words, sender and delivery timing before any send or externally visible action. This document and API capability grant no such authority. Do not infer consent from a captured email address, a prior draft, a token or a campaign's active status.
 
-Project context tokens cannot access workspace experiments/campaigns. Experiment counter updates need a separate workspace tool token with experiments-write scope. The bearer gateway exposes read-only campaign observation with a separate workspace-wide `campaigns:read` token. Existing Workspace Tools presets are not expanded automatically; select Custom / Advanced and No Project, then request only the required read scope. A project-bound credential is denied workspace campaigns even with wildcard scopes. A separately selected `project:campaigns:read` scope permits only its explicitly owned campaigns through the project routes below. Campaign creation, recipients, approval, reply bodies, release and sending remain human-workbench-only. Do not bypass those boundaries.
+Project context tokens cannot access workspace experiments/campaigns. Experiment counter updates need a separate workspace tool token with experiments-write scope. The bearer gateway exposes read-only campaign observation with a separate workspace-wide `campaigns:read` token. Existing Workspace Tools presets are not expanded automatically; select Custom / Advanced and No Project, then request only the required read scope. A project-bound credential is denied workspace campaigns even with wildcard scopes. A separately selected `project:campaigns:read` scope permits only its explicitly owned campaigns through the project routes below. A project-bound credential with the separate `project:campaigns:draft` scope can create unaddressed private campaign drafts. `project:campaigns:read` retrieves private copy and `project:campaigns:edit` revises it through the routes below. Recipients, sender pools, approval, release, reply bodies and sending remain human-workbench-only. A draft scope is not send authority. Do not bypass those boundaries.
 
 New campaigns can have an explicit same-workspace canonical `projectId`, fixed at creation; omitted and older records remain unassigned. Campaign creation plus its initial sender pool commit in one transaction. Workspace access stays broad, so use a project-bound observation credential when the caller should see only one project's campaigns. New experiments may have explicit same-workspace project ownership at creation; existing/unassigned experiments are not auto-assigned. Project experiment observation does not grant outreach-counter updates, lead access or campaign access. Verify exact IDs and the current owner view. `/api/engine` is the human browser-session proxy; it does not authenticate a general Bearer caller.
 
@@ -36,6 +36,13 @@ New campaigns can have an explicit same-workspace canonical `projectId`, fixed a
 - Downloaded CLI: `project-campaigns list` and `project-campaigns jobs <campaign-uuid>` using `LEADLOOM_AGENT_TOKEN`. The gateway maps these to `/project/campaigns` and `/project/campaigns/:id/jobs`.
 - Lists include draft steps and send/reply counts. Jobs include recipient emails, timing/status/attempts, not message bodies or provider IDs. Both are bounded newest-100 observations, not history exports. Neither can create/edit, assign ownership, approve, release, read reply bodies or send.
 - Human create offers an explicit project selector, and the campaign list supports All/Unassigned/project filters. Do not infer ownership from names or assign older records implicitly. No reassignment route exists. Workspace credentials and human workspace permissions retain workspace access.
+
+## Project-bound private campaign copy
+
+- `POST /agent/project/campaign-drafts` creates a draft with no table, recipients, sender bindings or jobs. Use the downloaded CLI `project-campaigns create-draft-file <JSON-file>` and a project-bound token with `project:campaigns:draft`.
+- `GET /agent/project/campaign-drafts/:id` with `project:campaigns:read` and `PUT /agent/project/campaign-drafts/:id` with `project:campaigns:edit` retrieve and revise only private draft copy. CLI: `project-campaigns draft <campaign-uuid>` and `project-campaigns revise-draft-file <campaign-uuid> <JSON-file>`. Preserve the returned `revision` as `expectedRevision` for an edit. A stale differing edit returns409; an already matching retry is a no-op.
+- Copy operations cannot change ownership, lifecycle, recipients, senders or jobs. Drafts already attached to a table, recipients, senders or jobs, or no longer in draft state, are refused. Other-project and unknown IDs return404.
+- Keep a stable UUID `requestId` for a create retry. Stored copy remains private and unaddressed. This scope cannot approve, release, publish or send.
 
 ## Human campaign workflow
 
@@ -63,7 +70,7 @@ The human create form retains an optional UUID requestId while an unchanged save
 
 The receipt commits atomically with the campaign and initial sender pool. It is not approval, release or dispatch. A retry returns the campaign's current state, even if someone renamed, paused or activated it after creation; it never resets lifecycle state, content, sender pool or timestamps. A removed campaign leaves a tombstone, so its old ID cannot recreate it silently. Workspace deletion removes its receipts. These receipts store a request hash and campaign ID, not a content archive.
 
-The form keeps fields and ID on uncertain responses. Changing input starts a new request. Closing/reloading loses the form ID, so inspect saved campaigns before starting again. No customer-agent mutation route or CLI create action was introduced.
+The form keeps fields and ID on uncertain responses. Changing input starts a new request. Closing/reloading loses the form ID, so inspect saved campaigns before starting again. This human-form retry mechanism is distinct from the separately scoped project private-draft routes above.
 
 ## Sender-pool replacement safety
 
@@ -73,7 +80,7 @@ A changed pool atomically returns approved and released-but-unreserved pending j
 
 ## Gaps
 
-No agent-accessible campaign mutation/send gateway, campaign reassignment, CRM two-way sync, individual manual multichannel touchpoint log or official LinkedIn sequenced-message integration. No new spend, live provider call, release or send is authorized by this pack.
+No agent-accessible recipient/sender/lifecycle/approval/release/send gateway, campaign reassignment, CRM two-way sync, individual manual multichannel touchpoint log or official LinkedIn sequenced-message integration. The narrowly scoped private-copy routes above are not sending capability. No new spend, live provider call, release or send is authorized by this pack.
 
 ## Project-only aggregate validation results
 
