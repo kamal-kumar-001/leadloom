@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {FounderImplementationSchema} from './founder-implementation.contract';
 import {FounderReportLinkSchema} from './founder-reports.contract';
 const text=(n:number)=>z.string().trim().min(1).max(n);
 const terms=(n:number,len:number)=>z.array(text(len)).max(n);
@@ -8,7 +9,7 @@ export const FounderBriefSchema=z.object({name:text(100),idea:text(2000),custome
 export const FounderCreateSchema=z.object({requestId:z.string().uuid(),brief:FounderBriefSchema}).strict();
 export const FounderTaskIds=['research','validation','stress','scope','repo','foundation','backend','frontend','integration','launch','funding'] as const;
 export const FounderTaskSchema=z.object({id:z.enum(FounderTaskIds),title:text(180),dependsOn:z.array(z.enum(FounderTaskIds)).max(5),state:z.enum(['pending','in_progress','blocked','reported_done']),workerId:text(80).nullable(),claimId:z.string().uuid().nullable(),summary:z.string().max(700),artifacts:terms(6,200)}).strict();
-export const FounderWorkspaceSchema=z.object({schema:z.literal('leadloom-founder-workspace-v1'),brief:FounderBriefSchema,reports:z.array(FounderReportLinkSchema).max(6).optional(),tasks:z.array(FounderTaskSchema).length(FounderTaskIds.length),events:z.array(z.object({requestId:z.string().uuid(),taskId:z.enum(FounderTaskIds),action:z.enum(['claim','report','block','release']),workerId:text(80),summary:z.string().max(700)}).strict()).max(60)}).strict();
+export const FounderWorkspaceSchema=z.object({schema:z.literal('leadloom-founder-workspace-v1'),brief:FounderBriefSchema,implementation:FounderImplementationSchema.optional(),reports:z.array(FounderReportLinkSchema).max(6).optional(),tasks:z.array(FounderTaskSchema).length(FounderTaskIds.length),events:z.array(z.object({requestId:z.string().uuid(),taskId:z.enum(FounderTaskIds),action:z.enum(['claim','report','block','release']),workerId:text(80),summary:z.string().max(700)}).strict()).max(60)}).strict();
 export const FounderTaskActionSchema=z.object({requestId:z.string().uuid(),expectedVersion:z.number().int().min(1).max(1000000),taskId:z.enum(FounderTaskIds),action:z.enum(['claim','report','block','release']),workerId:text(80),claimId:z.string().uuid().optional(),summary:z.string().trim().max(700).default(''),artifacts:terms(6,200).default([])}).strict();
 export type FounderBrief=z.infer<typeof FounderBriefSchema>;
 export type FounderWorkspace=z.infer<typeof FounderWorkspaceSchema>;

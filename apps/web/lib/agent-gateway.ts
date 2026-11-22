@@ -19,7 +19,7 @@ export function resolveEnginePath(method: string, segments: string[]): string | 
     if(segments.length===2)return m==='POST'?'/agent/project/founder':null;
     if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(segments[2]??''))return null;
     const prefix='/agent/project/founder/'+segments[2];if(segments.length===3)return m==='GET'?prefix:null;
-    if(segments.length===4&&['tasks','reports'].includes(segments[3]))return m==='POST'?prefix+'/'+segments[3]:null;
+    if(segments.length===4&&['tasks','reports','implementation'].includes(segments[3]))return m==='POST'?prefix+'/'+segments[3]:null;
     if(segments.length===4&&segments[3]==='export')return m==='GET'?prefix+'/export':null;return null;
   }
   if(segments.length===3&&segments[0]==='project'&&segments[1]==='posts'&&['prepare','record-preview'].includes(segments[2]))return m==='POST'?'/agent/project/posts/'+segments[2]:null;

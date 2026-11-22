@@ -37,3 +37,4 @@ export * from './founder-workspace.contract';
 export * from './review-intake.contract';
 export * from './synthetic-stress.contract';
 export * from './founder-reports.contract';
+export * from './founder-implementation.contract';
