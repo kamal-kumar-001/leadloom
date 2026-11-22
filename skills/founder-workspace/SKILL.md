@@ -69,3 +69,27 @@ The handoff includes proposed PRD/acceptance checks, design decision record, evi
 ## Effects remain separate
 
 No push, deployment, store submission, purchase, account change, public post, investor contact or other send follows from a plan or reported completion. Recover owner authority, recipient/words/account/cost and current service conditions before such actions. Freestyle and new agent features are leads to verify, not assumed supported dependencies. Do not call the pack best-in-industry or promise a running-cost reduction without evidence.
+
+## Synthetic stress matrices and caller result aggregation
+
+This is an opt-in gap-finding tool, not a thousand independent users. The engine deterministically generates Cartesian case descriptions from caller-selected personas, situations and challenges. It does not create responses, call models, start agents or incur model costs. The customer's coding agent evaluates the cases using only its genuinely available capabilities and an approved cost budget. Never present generated responses as real customers, prevalence, conversion or demand. Keep real public evidence in review intake, not in this synthetic ledger.
+
+With explicitly selected project:assets:read/write, save a strict plan file:
+
+```json
+{"requestId":"replace with stable UUID","title":"short idea stress plan","assumptions":["all cases are hypothetical"],"personas":[{"id":"p1","label":"fictional target role"}],"situations":[{"id":"s1","label":"hypothetical workflow"}],"challenges":[{"id":"c1","label":"adversarial condition"}]}
+```
+
+Run `node cli.mjs stress plan-file plan.json`. Each axis has1-10 entries, distinct IDs within its own axis, labels up to180 characters. Ten entries in each axis produce1000 combinations, not statistically independent observations. The returned compact receipt shows case count, assumptions and three examples, with resultsGenerated:false. `stress plan <UUID> [version]` is compact. `stress cases <UUID> <exact version>` explicitly returns all bounded generated descriptions when needed. IDs c0001 onward are stable only within that exact immutable plan version. Do not generate 1000 response calls blindly: evaluate useful subsets/batches first, preserve each exact plan/version, choose low-cost available execution deliberately, and report missing coverage honestly.
+
+Record results with `node cli.mjs stress report-file results.json`:
+
+```json
+{"requestId":"replace with stable UUID","planAssetId":"exact saved plan UUID","planVersion":1,"generator":"actual model/version or manual method, if known","limitations":["synthetic and not independent people"],"issues":[{"id":"offline","summary":"untested offline gap","severity":"high"}],"results":[{"caseId":"c0001","outcome":"gap","issueIds":["offline"],"note":"short caller-reported synthetic evaluation"}]}
+```
+
+Up to1000 distinct existing plan cases per report, within the unchanged256KB request limit. Keep notes short, at most300 characters; largest legal per-field maxima may not fit1000 records in one request. Shorten or submit fewer cases with explicit missing coverage, never silently truncate. Outcomes: pass, gap, blocked, not_evaluated. Gap needs at least one valid issue ID, pass cannot have issues, references cannot repeat, issue severities low/medium/high/critical. Up to30 issues, five issue references per case. The caller selects severity and decides meaning. Results sort by case ID for stable retries; other input ordering remains part of the exact digest. Reports are independent snapshots, not automatically merged cumulatively across batches.
+
+A pending immutable reservation binds the whole input hash; bounded raw-result chunks follow; final version2 alone marks completion. Interrupted writes can leave pending assets. Retry the same exact input/request ID to resume. Changed content with that ID conflicts; new ID intentionally creates another report. No cleanup is automatic. Full raw results stay in exact source-chunk versions, linked from the report.
+
+`stress report <UUID> [version]` verifies exact plan and result digests, then returns planned/submitted/evaluated/missing/not_evaluated separately, pass/gap/blocked counts, top ten caller issues by reported case-reference count and three bounded examples. There is no demand score, independent-user count, statistical confidence or recommendation engine. Counts refer only to this caller report. Current generic asset edits that break digests are refused; selected immutable historical versions remain available and disclose newer currentVersion. Projects shows the same checked summary or a refusal. Save exact plan/report IDs as artifacts on the founder stress task, not all1000 cases in every context read. Caller-reported completion remains unverified execution and grants no external effects.

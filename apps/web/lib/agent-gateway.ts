@@ -7,6 +7,10 @@ export const MAX_BODY_BYTES = 262_144; // 256KB hard limit
 
 export function resolveEnginePath(method: string, segments: string[]): string | null {
   const m = method.toUpperCase();
+  if(segments[0]==='project'&&segments[1]==='stress'&&['plans','reports'].includes(segments[2])){
+    const prefix='/agent/project/stress/'+segments[2];if(segments.length===3)return m==='POST'?prefix:null;
+    if(segments.length===4&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(segments[3]))return m==='GET'?prefix+'/'+segments[3]:null;return null;
+  }
   if(segments[0]==='project'&&segments[1]==='reviews'){
     if(segments.length===3&&segments[2]==='intake')return m==='POST'?'/agent/project/reviews/intake':null;
     if(segments.length===3&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(segments[2]))return m==='GET'?'/agent/project/reviews/'+segments[2]:null;return null;

@@ -35,3 +35,4 @@ export * from './project-hn-search.contract';
 
 export * from './founder-workspace.contract';
 export * from './review-intake.contract';
+export * from './synthetic-stress.contract';

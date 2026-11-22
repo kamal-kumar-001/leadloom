@@ -1,3 +1,5 @@
+import {StressPlanInputSchema,StressResultsInputSchema} from '@leadloom/contracts';
+import {SyntheticStressService,StressConflict} from './modules/project-context/synthetic-stress.service';
 import {ReviewIntakeSchema} from '@leadloom/contracts';
 import {ReviewIntakeService,ReviewIntakeConflict} from './modules/project-context/review-intake.service';
 import {FounderCreateSchema,FounderTaskActionSchema} from '@leadloom/contracts';
@@ -716,6 +718,12 @@ export async function createApplication(services?:RuntimeServices) {
       if(!body.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Supply exact supported DMPilot handoff or reported-preview input only. No keys, approval or publication controls.'});
       try{const service=new DmpilotPostHandoffService(services.projectAssets!);const saved=action==='prepare'?await service.prepare(r.s.workspaceId,r.project.id,r.s.sub,body.data as any):await service.recordPreview(r.s.workspaceId,r.project.id,r.s.sub,body.data as any);if(!saved)return reply.code(404).send({error:'Project asset/version not found'});return reply.code(saved.replayed?200:201).send(saved);}catch(e){if(e instanceof DmpilotHandoffConflict)return reply.code(409).send({error:e.message});return failed(reply,e);}
      });
+    }
+    const stressPrefix=agentMode?'/agent/project/stress':'/projects/:projectId/stress';
+    const stressError=(reply:any,e:unknown)=>e instanceof StressConflict?reply.code(409).send({error:e.message}):failed(reply,e);
+    for(const kind of ['plans','reports'] as const){
+     fastify.post(stressPrefix+'/'+kind,{bodyLimit:262144},async(request:any,reply:any)=>{const r=await resolve(request,reply,true);if(!r)return;reply.header('Cache-Control','no-store');const input=(kind==='plans'?StressPlanInputSchema:StressResultsInputSchema).safeParse(request.body);if(!input.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Supply bounded synthetic axes or exact-plan caller results only; no identity, model or effect overrides'});try{const service=new SyntheticStressService(services.projectAssets!),result=kind==='plans'?await service.plan(r.s.workspaceId,r.project.id,r.s.sub,input.data as any):await service.record(r.s.workspaceId,r.project.id,r.s.sub,input.data as any);return result?reply.code(result.replayed?200:201).send(result):reply.code(404).send({error:'Project/plan not found'});}catch(e){return stressError(reply,e);}});
+     fastify.get(stressPrefix+'/'+kind+'/:assetId',async(request:any,reply:any)=>{const r=await resolve(request,reply);if(!r)return;reply.header('Cache-Control','no-store');const id=z.string().uuid().safeParse(request.params.assetId),q=z.object({version:z.coerce.number().int().min(1).max(1000000).optional(),...(kind==='plans'?{view:z.enum(['summary','cases']).default('summary')}:{})}).strict().safeParse(request.query??{});if(!id.success||!q.success)return reply.code(400).send({error:'Supply exact synthetic asset UUID and supported immutable version/view only'});try{const service=new SyntheticStressService(services.projectAssets!),result=kind==='plans'?await service.getPlan(r.s.workspaceId,r.project.id,id.data,q.data.version,(q.data as any).view==='cases'):await service.getReport(r.s.workspaceId,r.project.id,id.data,q.data.version);return result??reply.code(404).send({error:'Synthetic asset/version not found'});}catch(e){return stressError(reply,e);}});
     }
     const reviewsPrefix=agentMode?'/agent/project/reviews':'/projects/:projectId/reviews';
     const reviewError=(reply:any,e:unknown)=>e instanceof ReviewIntakeConflict?reply.code(409).send({error:e.message}):failed(reply,e);

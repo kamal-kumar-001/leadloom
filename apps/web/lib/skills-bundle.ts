@@ -195,6 +195,11 @@ Usage:
   node cli.mjs project-experiments create-draft-file <JSON-file>
     Project-bound LEADLOOM_AGENT_TOKEN with project:experiments:read scope for list/page.
     create-draft-file <JSON-file> separately needs project:experiments:draft. Keep requestId UUID unchanged for retries; supply rawHypothesis, preferredSlug, complete pageCopy and surveyQuestions (possibly []). Private storage only, never publication or lead capture.
+  node cli.mjs stress plan-file <JSON-file>
+  node cli.mjs stress plan <plan UUID> [version]
+  node cli.mjs stress cases <plan UUID> <version>
+  node cli.mjs stress report-file <JSON-file>
+  node cli.mjs stress report <report UUID> [version]
   node cli.mjs reviews intake-file <JSON-file>
   node cli.mjs reviews get <report UUID> [version]
   node cli.mjs founder init-file <JSON-file>
@@ -344,6 +349,16 @@ Environment (.env.local):
     process.exit(res.ok?0:1);
   }
 
+  if(domain==='stress'){
+    ensureConfiguredApiUrl();if(!AGENT_TOKEN||AGENT_TOKEN.includes('YOUR_')||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(PROJECT_ID||''))throw new Error('Canonical project and explicitly selected project:assets:read/write scopes required');
+    const report=action==='report'||action==='report-file';let url=API_URL+(API_URL.endsWith('/api/agent')?'/project/stress/':'/agent/project/stress/')+(report?'reports':'plans'),method='GET',body;
+    if(['plan-file','report-file'].includes(action)&&args.length===1){body=fs.readFileSync(args[0],'utf8');JSON.parse(body);if(Buffer.byteLength(body)>262144)throw new Error('Synthetic input exceeds 256KB; shorten result notes or submit fewer cases with explicit missing coverage');method='POST';}
+    else if(['plan','cases','report'].includes(action)&&args.length>=1&&args.length<=2&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(args[0])&&(!args[1]||/^[1-9][0-9]{0,6}$/.test(args[1]))&&(action!=='cases'||args.length===2)){url+='/'+args[0];const q=new URLSearchParams();if(args[1])q.set('version',args[1]);if(action==='cases')q.set('view','cases');if(q.size)url+='?'+q;}
+    else throw new Error('Use stress plan-file/report-file <JSON-file>, plan/report <UUID> [version], or cases <UUID> <exact version>');
+    const r=await fetch(url,{method,headers:{Authorization:'Bearer '+AGENT_TOKEN,...body?{'Content-Type':'application/json'}:{}},body,redirect:'error',signal:AbortSignal.timeout(30000)}),data=await r.json();
+    if(r.ok&&(data.projectId!==PROJECT_ID||data.kind!==(report?'synthetic_report':'synthetic_plan')||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(data.assetId||'')||!Number.isSafeInteger(data.version)||data.version<(report?2:1)||!Number.isSafeInteger(data.currentVersion)||data.currentVersion<data.version||data.historicalSnapshot!==(data.version!==data.currentVersion)||method==='GET'&&(data.assetId!==args[0]||args[1]&&data.version!==Number(args[1]))||action==='cases'&&(!Array.isArray(data.cases)||data.cases.length!==data.totalCases||data.cases.length>1000)))throw new Error('Synthetic response identity/version/coverage does not match request');
+    fs.writeFileSync(1,JSON.stringify(data,null,2)+'\\n');process.exit(r.ok?0:1);
+  }
   if(domain==='reviews'){
     ensureConfiguredApiUrl();if(!AGENT_TOKEN||AGENT_TOKEN.includes('YOUR_')||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(PROJECT_ID||''))throw new Error('Canonical project UUID and explicitly selected project:assets:read/write scopes required');
     let url=API_URL+(API_URL.endsWith('/api/agent')?'/project/reviews':'/agent/project/reviews'),method='GET',body;
