@@ -93,3 +93,15 @@ Up to1000 distinct existing plan cases per report, within the unchanged256KB req
 A pending immutable reservation binds the whole input hash; bounded raw-result chunks follow; final version2 alone marks completion. Interrupted writes can leave pending assets. Retry the same exact input/request ID to resume. Changed content with that ID conflicts; new ID intentionally creates another report. No cleanup is automatic. Full raw results stay in exact source-chunk versions, linked from the report.
 
 `stress report <UUID> [version]` verifies exact plan and result digests, then returns planned/submitted/evaluated/missing/not_evaluated separately, pass/gap/blocked counts, top ten caller issues by reported case-reference count and three bounded examples. There is no demand score, independent-user count, statistical confidence or recommendation engine. Counts refer only to this caller report. Current generic asset edits that break digests are refused; selected immutable historical versions remain available and disclose newer currentVersion. Projects shows the same checked summary or a refusal. Save exact plan/report IDs as artifacts on the founder stress task, not all1000 cases in every context read. Caller-reported completion remains unverified execution and grants no external effects.
+
+## Link completed reports before repo handoff
+
+To carry saved validation and synthetic results into the repository rather than exporting empty templates, use `node cli.mjs founder link-reports-file <workspace UUID> refs.json` with:
+
+```json
+{"requestId":"new stable UUID","expectedVersion":1,"reports":[{"kind":"review","assetId":"exact saved report UUID","version":2},{"kind":"synthetic_stress","assetId":"exact saved report UUID","version":2}]}
+```
+
+This replaces the workspace's link list, up to six distinct refs, not an append-only merge. Reconcile latest workspace first. Each exact report must belong to the credential's project and have valid source/plan/result digests. Incorrect/pending/foreign reports are refused. Immutable historical versions are allowed intentionally and their currentVersion/historicalSnapshot remains visible in export. Total linked compact summaries must fit24KB. Choose fewer needed reports rather than flooding handoff context; all originals remain saved.
+
+Linking creates one versioned workspace revision with normal exact expectedVersion/requestId replay semantics. It does not mark any founder task done or establish source authenticity, permission, demand or real execution. The coordination UI only shows link identities; it does not silently fetch all reports. Exact-version export rechecks digests and includes the compact report content in docs/VALIDATION.md and docs/SYNTHETIC-STRESS.md, replacing the empty placeholder only when that report kind is linked. Full raw chunks are not copied. The workspace manifest lists exact references. Unlinked old workspaces and their13-file export manifest remain compatible.
