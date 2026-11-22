@@ -386,3 +386,6 @@ describe('/api/agent Gateway Ingress Contract & Path Allowlist', () => {
 });
 
 it('project discovery only exposes bounded read-derived matching POST, never arbitrary discovery operations',()=>{expect(resolveEnginePath('POST',['project','discovery','match'])).toBe('/agent/project/discovery/match');for(const method of ['GET','PUT','PATCH','DELETE'])expect(resolveEnginePath(method,['project','discovery','match'])).toBeNull();for(const action of ['send','publish','schedule','approve','profile'])expect(resolveEnginePath('POST',['project','discovery',action])).toBeNull();expect(resolveEnginePath('POST',['project','discovery','match','extra'])).toBeNull();});
+
+
+it('project post handoffs expose only private prepare and reported-preview POST operations',()=>{for(const action of ['prepare','record-preview']){expect(resolveEnginePath('POST',['project','posts',action])).toBe('/agent/project/posts/'+action);for(const method of ['GET','PUT','PATCH','DELETE'])expect(resolveEnginePath(method,['project','posts',action])).toBeNull();expect(resolveEnginePath('POST',['project','posts',action,'extra'])).toBeNull();}for(const action of ['publish','approve','schedule','upload','release','delete'])expect(resolveEnginePath('POST',['project','posts',action])).toBeNull();});

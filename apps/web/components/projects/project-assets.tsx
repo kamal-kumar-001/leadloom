@@ -1,4 +1,5 @@
 'use client';
+import {DmpilotHandoffPreview} from './dmpilot-handoff-preview';
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Card} from '@leadloom/ui';
 import type {ProjectResponse,ProjectAssetDetail,ProjectAssetSummary,ProjectAssetPage} from '@leadloom/contracts';
@@ -46,6 +47,7 @@ function ProjectAssetsEditor({project}:{project:ProjectResponse}){
  const download=()=>{if(!active)return;const link=document.createElement('a'),url=URL.createObjectURL(new Blob([active.body],{type:'text/plain;charset=utf-8'}));link.href=url;link.download='project-draft-'+active.id+'-v'+active.version+'.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  return <Card className="p-5 sm:p-6 space-y-4" data-testid="project-assets">
   <div><h2 className="text-base font-semibold text-text-primary">Project drafts and pitch materials</h2><p className="text-xs text-text-secondary mt-1">{project.name}: store caller-written product briefs, research, launch copy, outreach drafts and investor pitches. Visible to authorized workspace members and this project's asset credentials. No AI, send, sharing link or publishing runs here. Do not store secrets.</p></div>
+  <DmpilotHandoffPreview asset={active}/>
   <form onSubmit={save} className="space-y-2">
    <p aria-label="Draft editor target" className="text-xs text-text-muted break-words">{active?'Editing saved draft: '+active.title+' · version '+active.version:'New unsaved draft. No saved target selected.'}</p>
    {(active?(title!==active.title||body!==active.body):(!!title||!!body))&&<p aria-label="Draft local edit status" className="text-xs text-text-secondary">Local editor changes are not confirmed saved. List reloads keep these words; page reload or project switching loses local edits.</p>}

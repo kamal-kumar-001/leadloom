@@ -194,6 +194,8 @@ Usage:
   node cli.mjs project-experiments create-draft-file <JSON-file>
     Project-bound LEADLOOM_AGENT_TOKEN with project:experiments:read scope for list/page.
     create-draft-file <JSON-file> separately needs project:experiments:draft. Keep requestId UUID unchanged for retries; supply rawHypothesis, preferredSlug, complete pageCopy and surveyQuestions (possibly []). Private storage only, never publication or lead capture.
+  node cli.mjs project-posts prepare-file <JSON-file>
+  node cli.mjs project-posts record-preview-file <JSON-file>
   node cli.mjs project-discovery match-file <JSON-file>
   node cli.mjs project-inventory get
   node cli.mjs project-research list <website|intent-fixture>
@@ -332,6 +334,15 @@ Environment (.env.local):
     const res=await fetch(url,{method,headers:{Authorization:'Bearer '+AGENT_TOKEN,...(body?{'Content-Type':'application/json'}:{})},body});
     console.log(JSON.stringify(await res.json(),null,2));
     process.exit(res.ok?0:1);
+  }
+
+  if(domain==='project-posts'){
+    ensureConfiguredApiUrl();if(!AGENT_TOKEN||AGENT_TOKEN.includes('YOUR_'))throw new Error('Project-bound assets-write credential required');
+    const actions={'prepare-file':'prepare','record-preview-file':'record-preview'};
+    if(!actions[action]||args.length!==1)throw new Error('Use project-posts prepare-file or record-preview-file <JSON-file>');
+    const input=JSON.parse(fs.readFileSync(args[0],'utf8'));if(!input.requestId)throw new Error('Keep a stable requestId UUID for a private save retry');
+    const endpoint=API_URL+(API_URL.endsWith('/api/agent')?'/project/posts/':'/agent/project/posts/')+actions[action];
+    const res=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+AGENT_TOKEN,'Content-Type':'application/json'},body:JSON.stringify(input)});console.log(JSON.stringify(await res.json(),null,2));process.exit(res.ok?0:1);
   }
 
   if(domain==='project-discovery'){

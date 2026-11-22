@@ -28,3 +28,5 @@ export * from './project-growth-watch.contract';
 export * from './platform-overview.contract';
 
 export * from './channel-reply-policy';
+
+export * from './dmpilot-post-handoff.contract';

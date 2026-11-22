@@ -17,7 +17,7 @@ The customer's coding agent prepares the plan. The caller separately authorizes 
 
 Project-bound context tokens can read/write their context and work records. The bearer gateway does not expose social draft web routes, outbound job queues, approvals or release. Those are human browser-session workbench operations, not available simply because a tool token exists. Never fall back to another account or widen a token to make a plan happen.
 
-Saved campaigns and local social drafts do not constitute enforced per-project isolation. New experiments can carry explicit same-workspace project ownership at creation; existing/unassigned experiments are not auto-assigned. That experiment boundary does not partition campaign execution or social drafts. Recover exact IDs from the selected project and verify the current owner view before using them. Local draft/run files are not a durable cross-container project database.
+Legacy session-only social-signal drafts do not have a per-project partition. Explicitly project-owned private campaign drafts and the DMPilot handoffs below use canonical project ownership; older/unassigned records are not auto-assigned. Recover exact IDs and versions, never ownership from a name. Local files are not a durable cross-container project database.
 
 ## Workflow
 
@@ -35,6 +35,18 @@ Saved campaigns and local social drafts do not constitute enforced per-project i
 ## Channel rule boundary
 
 Hacker News guidelines checked2026-11-22 prohibit generated or AI-edited posts/comments and automated posting: https://news.ycombinator.com/newsguidelines.html . HN signals remain research evidence, not generated-reply destinations. The matcher withholds suggested text and the session draft composer refuses HN sources or HN destination URLs, including manual imports. A private asset or another caller-supplied destination is not a policy or authorship certification. Other channels still require current rule review and the caller's separate approval.
+
+## Project-bound DMPilot posting handoff
+
+Leadloom reuses DMPilot rather than creating another Meta app, login or token store. The inspected DMPilot main at b4dce1b44d633b0ce08ec37bbc1c22b1578bf3f6 has immediate and scheduled publishing, but its API-key and MCP publish operations are deliberately preview-only. Actual publishing remains in DMPilot's separately reviewed human dashboard. A preview must never be reported as a published or scheduled post.
+
+1. With explicit project `project:assets:write`, use downloaded CLI `project-posts prepare-file <JSON-file>`. The strict input is `requestId` UUID, `title`, exact `productBriefId`/`productBriefVersion`, `instagramAccountId`, public HTTPS `mediaUrl`, `mediaType` IMAGE/REEL/VIDEO, exact `caption` and `scheduledAt` as null or an offset-bearing ISO timestamp. CAROUSEL, credentials, approval controls and silent caption-edge trimming are refused. The media URL is not fetched or certified; format, bytes, public access, account and schedule checks remain unresolved.
+2. The returned private launch-copy asset contains `dmpilotRequest` with `dryRun:true`. Use that exact request through the caller's existing DMPilot connector, under its account/scoped-key/tester restrictions. No DMPilot credential goes into a Leadloom asset or context. Do not replace its connector with another identity or bypass its preview-only key boundary.
+3. `project-posts record-preview-file <JSON-file>` accepts `requestId`, `draftAssetId`, exact `draftVersion` and `preview`. The reported data must have `dryRun:true`, `draftOnly:true` and `wouldPublish` matching the saved account, URL, media type, words and time exactly. The server saves a project research asset only. The receipt is explicitly unverified caller-supplied preview data, not authenticated provider execution, human approval or a publish receipt. Its username is reported text, not an identity binding.
+4. Read the exact asset/version with `assets get <id> [version]` and its immutable history before a deliberate human handoff. The routes are POST `/agent/project/posts/prepare` and `/agent/project/posts/record-preview` through the configured gateway. They make no external call and expose no approve, schedule, upload, publish, release or delete operation. Stable unchanged request IDs recover uncertain private saves.
+5. Actual DMPilot dashboard publication still requires the selected account, media, exact words and timing to be approved. A media ID with a provider configuration issue can be partial publication, not a safe-to-retry failure. Do not infer publication from this handoff or relabel an unknown/partial result as a preview.
+
+DMPilot source: https://github.com/kamal-kumar-001/DMPilot . Current provider requirements and failure semantics: https://developers.facebook.com/documentation/instagram-platform/content-publishing and https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/media_publish . No actual account eligibility or live connector was checked by this source work.
 
 ## Gaps
 

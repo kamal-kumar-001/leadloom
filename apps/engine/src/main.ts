@@ -1,3 +1,5 @@
+import {PrepareDmpilotPostSchema,RecordDmpilotPreviewSchema} from '@leadloom/contracts';
+import {DmpilotPostHandoffService,DmpilotHandoffConflict} from './modules/project-context/dmpilot-post-handoff.service';
 import {PlatformOverviewService,InvalidPlatformCursor} from './modules/platform-admin/platform-overview.service';
 import {PlatformOverviewQuerySchema} from '@leadloom/contracts';
 import {ProjectGrowthWatchService,ProjectGrowthWatchWorker,GrowthWatchConflict,GrowthWatchInvalid,GrowthWatchAccess,GrowthWatchUnavailable} from './modules/growth-watches/project-growth-watch.service';
@@ -701,6 +703,14 @@ export async function createApplication(services?:RuntimeServices) {
      if(!body.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Supply one saved profile asset/version and up to20 distinct selected posts only'});
      try{const result=await new ProjectDiscoveryService(services.projectAssets!).match(r.s.workspaceId,r.project.id,body.data);return result??reply.code(404).send({error:'Profile asset/version not found'});}catch(e){if(e instanceof DiscoveryProfileInvalid)return reply.code(409).send({error:e.message});return reply.code(503).send({error:'Project discovery unavailable. No match or draft was confirmed.'});}
     });
+    for(const action of ['prepare','record-preview'] as const){
+     fastify.post((agentMode?'/agent/project/posts/':'/projects/:projectId/posts/')+action,{bodyLimit:262144},async(request:any,reply:any)=>{
+      const r=await resolve(request,reply,true);if(!r)return;reply.header('Cache-Control','no-store');
+      const schema=action==='prepare'?PrepareDmpilotPostSchema:RecordDmpilotPreviewSchema,body=schema.safeParse(request.body);
+      if(!body.success||Object.keys(request.query??{}).length)return reply.code(400).send({error:'Supply exact supported DMPilot handoff or reported-preview input only. No keys, approval or publication controls.'});
+      try{const service=new DmpilotPostHandoffService(services.projectAssets!);const saved=action==='prepare'?await service.prepare(r.s.workspaceId,r.project.id,r.s.sub,body.data as any):await service.recordPreview(r.s.workspaceId,r.project.id,r.s.sub,body.data as any);if(!saved)return reply.code(404).send({error:'Project asset/version not found'});return reply.code(saved.replayed?200:201).send(saved);}catch(e){if(e instanceof DmpilotHandoffConflict)return reply.code(409).send({error:e.message});return failed(reply,e);}
+     });
+    }
     fastify.get(prefix,async(request:any,reply:any)=>{
      const r=await resolve(request,reply);if(!r)return;const q=ProjectAssetQuerySchema.safeParse(request.query??{});if(!q.success)return reply.code(400).send({error:'Invalid asset query'});
      try{return await services.projectAssets!.list(r.s.workspaceId,r.project.id,q.data);}catch(e){return failed(reply,e);}
