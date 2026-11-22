@@ -42,13 +42,14 @@ describe('skills-bundle', () => {
     });
 
     expect(filename).toBe('leadloom-agent-skills-logistics-ai.tar.gz');
-    expect(fileCount).toBe(11); // 8 skills + .env.local + README.md + cli.mjs
+    expect(fileCount).toBe(12); // 9 skills + .env.local + README.md + cli.mjs
     expect(archive).toBeInstanceOf(Buffer);
     expect(archive.length).toBeGreaterThan(500);
 
     const decompressed = zlib.gunzipSync(archive);
     const tarString = decompressed.toString('utf-8');
 
+    expect(tarString).toContain('skills/founder-workspace/SKILL.md');
     expect(tarString).toContain('skills/idea-feasibility/SKILL.md');
     expect(tarString).toContain('skills/competitor-review-mining/SKILL.md');
     expect(tarString).toContain('skills/landing-publish/SKILL.md');

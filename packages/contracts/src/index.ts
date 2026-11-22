@@ -32,3 +32,5 @@ export * from './channel-reply-policy';
 export * from './dmpilot-post-handoff.contract';
 
 export * from './project-hn-search.contract';
+
+export * from './founder-workspace.contract';

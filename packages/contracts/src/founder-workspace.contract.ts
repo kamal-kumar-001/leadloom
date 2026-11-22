@@ -1,0 +1,15 @@
+import {z} from 'zod';
+const text=(n:number)=>z.string().trim().min(1).max(n);
+const terms=(n:number,len:number)=>z.array(text(len)).max(n);
+const url=z.string().url().max(2000).refine(s=>{const u=new URL(s);return u.protocol==='https:'&&!u.username&&!u.password;});
+export const FounderEvidenceSchema=z.object({id:text(60),platform:z.enum(['app_store','play_store','reddit','x','website','other']),url,observation:text(600),provenance:z.enum(['caller_reported_public','caller_report','synthetic']),observedAt:z.string().datetime({offset:true}).optional()}).strict();
+export const FounderBriefSchema=z.object({name:text(100),idea:text(2000),customer:text(600),problem:text(1000),requirements:terms(15,300).min(1),nonGoals:terms(12,200).default([]),acceptanceChecks:terms(15,300).min(1),constraints:terms(12,200).default([]),design:text(5000).optional(),evidence:z.array(FounderEvidenceSchema).max(20).default([])}).strict().refine(b=>new Set(b.evidence.map(e=>e.id)).size===b.evidence.length,'Evidence IDs must be distinct');
+export const FounderCreateSchema=z.object({requestId:z.string().uuid(),brief:FounderBriefSchema}).strict();
+export const FounderTaskIds=['research','validation','stress','scope','repo','foundation','backend','frontend','integration','launch','funding'] as const;
+export const FounderTaskSchema=z.object({id:z.enum(FounderTaskIds),title:text(180),dependsOn:z.array(z.enum(FounderTaskIds)).max(5),state:z.enum(['pending','in_progress','blocked','reported_done']),workerId:text(80).nullable(),claimId:z.string().uuid().nullable(),summary:z.string().max(700),artifacts:terms(6,200)}).strict();
+export const FounderWorkspaceSchema=z.object({schema:z.literal('leadloom-founder-workspace-v1'),brief:FounderBriefSchema,tasks:z.array(FounderTaskSchema).length(FounderTaskIds.length),events:z.array(z.object({requestId:z.string().uuid(),taskId:z.enum(FounderTaskIds),action:z.enum(['claim','report','block','release']),workerId:text(80),summary:z.string().max(700)}).strict()).max(60)}).strict();
+export const FounderTaskActionSchema=z.object({requestId:z.string().uuid(),expectedVersion:z.number().int().min(1).max(1000000),taskId:z.enum(FounderTaskIds),action:z.enum(['claim','report','block','release']),workerId:text(80),claimId:z.string().uuid().optional(),summary:z.string().trim().max(700).default(''),artifacts:terms(6,200).default([])}).strict();
+export type FounderBrief=z.infer<typeof FounderBriefSchema>;
+export type FounderWorkspace=z.infer<typeof FounderWorkspaceSchema>;
+export type FounderTaskAction=z.infer<typeof FounderTaskActionSchema>;
+export type FounderCreate=z.infer<typeof FounderCreateSchema>;

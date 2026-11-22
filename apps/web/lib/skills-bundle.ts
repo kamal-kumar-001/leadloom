@@ -9,6 +9,7 @@ export interface BundleFile {
 }
 
 const SKILL_NAMES = [
+  'founder-workspace',
   'competitor-review-mining',
   'idea-feasibility',
   'landing-publish',
@@ -194,6 +195,10 @@ Usage:
   node cli.mjs project-experiments create-draft-file <JSON-file>
     Project-bound LEADLOOM_AGENT_TOKEN with project:experiments:read scope for list/page.
     create-draft-file <JSON-file> separately needs project:experiments:draft. Keep requestId UUID unchanged for retries; supply rawHypothesis, preferredSlug, complete pageCopy and surveyQuestions (possibly []). Private storage only, never publication or lead capture.
+  node cli.mjs founder init-file <JSON-file>
+  node cli.mjs founder get <workspace UUID>
+  node cli.mjs founder task-file <workspace UUID> <JSON-file>
+  node cli.mjs founder export <workspace UUID> <version> <new-directory>
   node cli.mjs project-posts prepare-file <JSON-file>
   node cli.mjs project-posts record-preview-file <JSON-file>
   node cli.mjs project-discovery match-file <JSON-file>
@@ -337,6 +342,24 @@ Environment (.env.local):
     process.exit(res.ok?0:1);
   }
 
+  if(domain==='founder'){
+    ensureConfiguredApiUrl();if(!AGENT_TOKEN||AGENT_TOKEN.includes('YOUR_')||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(PROJECT_ID||''))throw new Error('Canonical project UUID and project:assets:read/write credential required');
+    const prefix=API_URL+(API_URL.endsWith('/api/agent')?'/project/founder':'/agent/project/founder');let endpoint=prefix,method='GET',input;
+    if(action==='init-file'){if(args.length!==1)throw new Error('Use founder init-file <brief JSON-file>');input=JSON.parse(fs.readFileSync(args[0],'utf8'));method='POST';}
+    else{if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(args[0]||''))throw new Error('Exact founder workspace UUID required');endpoint+='/'+args[0];if(['get','detail'].includes(action)&&args.length===1){if(action==='detail')endpoint+='?view=detail';}else if(action==='task-file'&&args.length===2){endpoint+='/tasks';input=JSON.parse(fs.readFileSync(args[1],'utf8'));method='POST';}else if(action==='export'&&args.length===3&&/^[1-9][0-9]{0,6}$/.test(args[1]))endpoint+='/export?version='+encodeURIComponent(args[1]);else throw new Error('Use founder get/detail <id>, task-file <id> <JSON-file>, or export <id> <version> <new-directory>');}
+    const res=await fetch(endpoint,{method,headers:{Authorization:'Bearer '+AGENT_TOKEN,...input?{'Content-Type':'application/json'}:{}},body:input?JSON.stringify(input):undefined});const data=await res.json();if(!res.ok){console.log(JSON.stringify(data,null,2));process.exit(1);}if(data.projectId!==PROJECT_ID||typeof data.assetId!=='string'||!Number.isInteger(data.version)||data.version<1||action!=='init-file'&&data.assetId!==args[0])throw new Error('Response does not confirm this project/workspace/version');
+    if(action!=='export'){console.log(JSON.stringify(data,null,2));process.exit(0);}
+    const names=['README.md','AGENTS.md','PERMISSIONS.md','docs/PRD.md','docs/DESIGN.md','docs/VALIDATION.md','docs/EVIDENCE.json','docs/SYNTHETIC-STRESS.md','docs/BUILD-PLAN.md','docs/LAUNCH-FUNDING.md','docs/CAPABILITIES.json','.leadloom/workspace.json','.gitignore'];
+    if(data.version!==Number(args[1])||!data.files||Array.isArray(data.files)||Object.keys(data.files).length!==names.length||!names.every(name=>typeof data.files[name]==='string'&&data.files[name].length<=40000)||JSON.stringify(data.files).length>200000)throw new Error('Export does not confirm the exact version and fixed safe file manifest');
+    const target=path.resolve(args[2]);if(fs.existsSync(target))throw new Error('Export directory must not already exist; no files overwritten');fs.mkdirSync(target,{mode:0o700});const written=[];const write=(name,content)=>{const dest=path.join(target,name);fs.mkdirSync(path.dirname(dest),{recursive:true,mode:0o700});fs.writeFileSync(dest,content,{flag:'wx',mode:0o600});written.push(name);};
+    try{for(const name of names)write(name,data.files[name]);write('tools/leadloom.mjs',fs.readFileSync(new URL(import.meta.url),'utf8'));
+      write('.env.example','# Configure privately in .env.local, never commit credentials.\\nLEADLOOM_PROJECT_ID='+PROJECT_ID+'\\nLEADLOOM_API_URL='+API_URL+'\\nLEADLOOM_AGENT_TOKEN=YOUR_PROJECT_BOUND_TOKEN\\n');
+      write('LEADLOOM-SETUP.md','# Local setup\\n\\nThis is a document scaffold, not an app implementation or grant. Copy .env.example to a private .env.local and supply the same project-bound credential with only needed scopes. No token was exported. Run the customer agent from this repository.\\n\\nnode tools/leadloom.mjs founder get '+data.assetId+'\\n\\nUse exact current versions/request IDs for task claims and reports. Check existing claims before assigning independent workers. Leadloom does not start workers or install dependencies. Inspect skills/ for packs actually copied from your downloaded bundle. Missing packs are listed in the export receipt.\\n');
+      const packs=['founder-workspace','competitor-review-mining','idea-feasibility','landing-publish','lead-capture','outreach-recording','scheduled-posting','project-drafts','investor-support'],copied=[],missing=[];
+      for(const pack of packs){const candidates=[new URL('skills/'+pack+'/SKILL.md',import.meta.url),new URL('../skills/'+pack+'/SKILL.md',import.meta.url)],source=candidates.find(url=>fs.existsSync(url));if(source){write('skills/'+pack+'/SKILL.md',fs.readFileSync(source,'utf8'));copied.push(pack);}else missing.push(pack);}
+      const {createHash}=await import('node:crypto');const receipt={schema:'leadloom-local-repo-handoff-v1',projectId:PROJECT_ID,assetId:data.assetId,version:data.version,currentVersion:data.currentVersion,files:written.map(name=>({name,sha256:createHash('sha256').update(fs.readFileSync(path.join(target,name))).digest('hex')})),skillsCopied:copied,skillsMissing:missing,credentialsExported:false,gitInitialized:false,appBuilt:false,externalEffects:false};write('.leadloom/export-receipt.json',JSON.stringify(receipt,null,2)+'\\n');console.log(JSON.stringify({directory:target,...receipt},null,2));
+    }catch(error){throw new Error('Partial export retained at '+target+'. Inspect it; do not assume completion. '+error.message);}process.exit(0);
+  }
   if(domain==='project-posts'){
     ensureConfiguredApiUrl();if(!AGENT_TOKEN||AGENT_TOKEN.includes('YOUR_'))throw new Error('Project-bound assets-write credential required');
     const actions={'prepare-file':'prepare','record-preview-file':'record-preview'};
@@ -689,6 +712,9 @@ This bundle equips your local coding agent (Cursor, Claude Code, Cline, etc.) wi
 ## Architectural Model
 - **Your Coding Agent is the Brain:** The agent evaluates ideas, drives development, and formulates GTM outreach.
 - **LeadLoom is the Persistent State & Execution Engine:** Provides Postgres-backed context persistence (\`/agent/context\`), unpublished experiment storage, and deliverability infrastructure.
+
+## New-Idea Founder Workspace
+Read \`skills/founder-workspace/SKILL.md\` first for a new idea. With explicitly selected \`project:assets:read\` and \`project:assets:write\`, use \`founder init-file\`, compact \`founder get\`, explicit \`founder detail\`, conflict-checked \`founder task-file\`, and exact-version \`founder export\` to a new directory. This persists a dependency graph and caller-worker receipts and exports a private repo scaffold, not a built app, independent simulation, agent control or launch grant. The export copies no credential. Default state reads omit full source/event bodies to keep context small.
 
 ## Project-First Credentials
 Start with one project-bound credential in \`LEADLOOM_AGENT_TOKEN\`, with \`context:read\` and \`context:write\`. Separately selected project scopes support assets, stored research, tables, private experiment/campaign drafts, aggregate results and inventory. Existing presets do not add those optional scopes. Grant only the scopes needed for the intended workflow.

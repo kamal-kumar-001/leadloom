@@ -8,11 +8,17 @@ Leadloom stores project context, work history and private assets, supplies scope
 
 1. Sign in through a configured, verified authentication path, then create a project in Projects & Tokens.
 2. Save the project brief, decisions, progress and work records. Read bounded indexes first, then retrieve only the needed record, asset version or research receipt.
-3. Download the eight customer instruction packs from the product. They cover idea feasibility, competitor review mining, private drafts, landing pages, lead capture, outreach recording, scheduled-work preparation and investor support.
+3. Download the nine customer instruction packs from the product. They cover the founder workspace, idea feasibility, competitor review mining, private drafts, landing pages, lead capture, outreach recording, scheduled-work preparation and investor support.
 4. Keep source ledgers, landing copy, pitches and outreach drafts private until a person deliberately chooses an external action. Stored words and sources are not proof of verification or permission to send.
 5. Review experiment counters separately from owner-entered outcomes. Save a frozen historical review before changing the next test. An optional private growth watch records changed aggregate counters only, not conclusions, contacts, campaigns, notifications or sends.
 
 Project-bound API credentials remain scoped to the selected project and granted capabilities. Do not replace them with a workspace-wide tool credential. Human workspace tables and some workspace operations are intentionally broader than project-bound retrieval; this is not blanket project isolation.
+
+## New-idea founder workspace
+
+Use a canonical project and explicitly selected `project:assets:read` / `project:assets:write` scopes. The downloaded CLI supports `founder init-file`, compact `founder get`, explicit full `founder detail`, conflict-checked `founder task-file`, and exact-version `founder export` to a new local directory. This persists an eleven-task dependency plan, caller-worker claims/results and private repo handoff files. It does not spawn agents or certify reported completion. The export supplies proposed PRD/acceptance checks, design record, untrusted evidence data, permissions, agent instructions, phased plan, launch/funding preparation, a credential-free env example, the CLI and packs actually present in the bundle. It never overwrites an existing directory, copies no token and does not run git/install/build/deploy.
+
+This is not automatic App Store/Play Store/Reddit/X scraping or a thousand independent simulated people. Source collection is still caller-driven; synthetic stress cases are not demand. Read `skills/founder-workspace/SKILL.md` for exact commands and remaining boundaries.
 
 ## Build prerequisites
 
