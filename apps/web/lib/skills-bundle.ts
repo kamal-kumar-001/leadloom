@@ -151,6 +151,39 @@ function ensureConfiguredApiUrl() {
   }
 }
 
+// Opt-in, per-command transport observations only. Never logs bodies, tokens, URLs or headers.
+const debugUsage = process.env.LEADLOOM_DEBUG_USAGE === '1';
+const nativeFetch = globalThis.fetch.bind(globalThis);
+const usage = { requests: 0, failures: 0, requestBodyUtf8Bytes: 0, responseJsonUtf8Bytes: 0, responseJsonCharacters: 0, jsonResponsesRead: 0 };
+function usageIndicator() {
+  if (!debugUsage || !usage.requests) return;
+  fs.writeSync(2, '[Leadloom debug usage] ' + JSON.stringify({
+    scope: 'this CLI invocation only, JSON bodies read through this CLI',
+    measured: usage,
+    estimated: { responseContextTokens: Math.ceil(usage.responseJsonCharacters / 4), method: 'Unicode code points divided by4, rounded up; rough heuristic, not model tokenizer' },
+    antigravityProviderTokens: null,
+    note: 'Antigravity prompts, history, reasoning, output, cache and billing are not observable here. Response size is not proof the agent consumed it. No provider usage or savings measured. Excludes headers, TLS and pretty-print expansion. No persistent telemetry.'
+  }) + '\\n');
+}
+process.once('exit', usageIndicator);
+async function fetch(input, init) {
+  if (!debugUsage) return nativeFetch(input, init);
+  usage.requests++;
+  if (typeof init?.body === 'string') usage.requestBodyUtf8Bytes += Buffer.byteLength(init.body, 'utf8');
+  try {
+    const response = await nativeFetch(input, init);
+    response.json = async () => {
+      // Read once, like Response.json, without an extra fetch or retaining a duplicate body.
+      const text = await response.text();
+      usage.responseJsonUtf8Bytes += Buffer.byteLength(text, 'utf8');
+      usage.responseJsonCharacters += Array.from(text).length;
+      usage.jsonResponsesRead++;
+      return JSON.parse(text);
+    };
+    return response;
+  } catch (error) { usage.failures++; throw error; }
+}
+
 async function main() {
   const [,, domain, action, ...args] = process.argv;
 
@@ -168,6 +201,9 @@ async function main() {
     console.log(\`LeadLoom Customer Agent CLI (dependency-free)
 
 Usage:
+  LEADLOOM_DEBUG_USAGE=1 node cli.mjs entries brief
+    Opt-in per-command debug indicator on stderr: measured JSON bytes plus rough context-token estimate.
+    Not Antigravity provider usage, billed tokens, full conversation or measured savings. No telemetry saved.
   node cli.mjs context get
   node cli.mjs context save-file <JSON-file>
   node cli.mjs context set '<json-string-or-file>'
